@@ -1,0 +1,221 @@
+﻿grammar SICXE;
+
+// ===================== PARSER RULES =====================
+
+program
+    : line* EOF
+    ;
+
+line
+    : statement NEWLINE
+    | statement EOF
+    | comment NEWLINE
+    | comment EOF
+    | NEWLINE
+    ;
+
+statement
+    : label? operation operand? comment?
+    ;
+
+label
+    : IDENT
+    ;
+
+operation
+    : FORMAT4_PREFIX? instruction
+    | directive
+    ;
+
+// Instrucciones de formato 1 (sin operandos)
+format1Instruction
+    : FIX | FLOAT | HIO | NORM | SIO | TIO
+    ;
+
+// Instrucciones de formato 2 (registros)
+format2Instruction
+    : ADDR | CLEAR | COMPR | DIVR | MULR | RMO | SHIFTL | SHIFTR | SUBR | SVC | TIXR
+    ;
+
+// Instrucciones de formato 3/4 (memoria)
+format34Instruction
+    : ADD | ADDF | AND | COMP | COMPF | DIV | DIVF | J | JEQ | JGT | JLT
+    | JSUB | LDA | LDB | LDCH | LDF | LDL | LDS | LDT | LDX | LPS
+    | MUL | MULF | OR | RD | RSUB | SSK | STA | STB | STCH | STF
+    | STI | STL | STS | STSW | STT | STX | SUB | SUBF | TD | TIX | WD
+    ;
+
+instruction
+    : format1Instruction
+    | format2Instruction
+    | format34Instruction
+    ;
+
+directive
+    : START | END | BYTE | WORD | RESB | RESW | BASE | NOBASE
+    | EQU | ORG | LTORG | USE | EXTDEF | EXTREF | CSECT
+    ;
+
+operand
+    : operandExpr (COMMA operandExpr)*
+    ;
+
+operandExpr
+    : PREFIX_INDIRECT operandValue indexing?
+    | PREFIX_IMMEDIATE operandValue
+    | operandValue indexing?
+    | literal
+    ;
+
+indexing
+    : COMMA IDENT
+    ;
+
+operandValue
+    : IDENT
+    | NUMBER
+    | HEXCONST
+    | CHARCONST
+    | STAR
+    ;
+
+literal
+    : LITERAL_HEX
+    | LITERAL_CHAR
+    | LITERAL_NUM
+    ;
+
+comment
+    : COMMENT
+    ;
+
+// ===================== LEXER RULES =====================
+
+// --- Instructions (mas largas primero para evitar conflictos) ---
+ADDF    : A D D F ;
+ADDR    : A D D R_ ;
+ADD     : A D D ;
+AND     : A N D ;
+CLEAR   : C L E A R_ ;
+COMPF   : C O M P F ;
+COMPR   : C O M P R_ ;
+COMP    : C O M P ;
+DIVF    : D I V F ;
+DIVR    : D I V R_ ;
+DIV     : D I V ;
+FIX     : F I X ;
+FLOAT   : F L O A T ;
+HIO     : H I O ;
+JEQ     : J_ E Q ;
+JGT     : J_ G T ;
+JLT     : J_ L T ;
+JSUB    : J_ S U B ;
+J       : J_ ;
+LDCH    : L D C H ;
+LDA     : L D A ;
+LDB     : L D B ;
+LDF     : L D F ;
+LDL     : L D L ;
+LDS     : L D S ;
+LDT     : L D T ;
+LDX     : L D X ;
+LPS     : L P S ;
+MULF    : M U L F ;
+MULR    : M U L R_ ;
+MUL     : M U L ;
+NORM    : N O R_ M ;
+OR      : O R_ ;
+RD      : R_ D ;
+RMO     : R_ M O ;
+RSUB    : R_ S U B ;
+SHIFTL  : S H I F T L ;
+SHIFTR  : S H I F T R_ ;
+SIO     : S I O ;
+SSK     : S S K ;
+STCH    : S T C H ;
+STSW    : S T S W ;
+STA     : S T A ;
+STB     : S T B ;
+STF     : S T F ;
+STI     : S T I ;
+STL     : S T L ;
+STS     : S T S ;
+STT     : S T T ;
+STX     : S T X ;
+SUBF    : S U B F ;
+SUBR    : S U B R_ ;
+SUB     : S U B ;
+SVC     : S V C ;
+TD      : T D ;
+TIO     : T I O ;
+TIXR    : T I X R_ ;
+TIX     : T I X ;
+WD      : W D ;
+
+// --- Directives ---
+START   : S T A R_ T ;
+END     : E N D ;
+BYTE    : B Y T E ;
+WORD    : W O R_ D ;
+RESB    : R_ E S B ;
+RESW    : R_ E S W ;
+BASE    : B A S E ;
+NOBASE  : N O B A S E ;
+EQU     : E Q U ;
+ORG     : O R_ G ;
+LTORG   : L T O R_ G ;
+USE     : U S E ;
+EXTDEF  : E X T D E F ;
+EXTREF  : E X T R_ E F ;
+CSECT   : C S E C T ;
+
+// --- Symbols ---
+FORMAT4_PREFIX   : '+' ;
+PREFIX_INDIRECT  : '@' ;
+PREFIX_IMMEDIATE : '#' ;
+COMMA            : ',' ;
+STAR             : '*' ;
+
+// --- Literals and constants ---
+LITERAL_HEX  : '=' X '\'' [0-9A-Fa-f]+ '\'' ;
+LITERAL_CHAR : '=' C '\'' ~[\r\n']+ '\'' ;
+LITERAL_NUM  : '=' [0-9]+ ;
+HEXCONST     : X '\'' [0-9A-Fa-f]+ '\'' ;
+CHARCONST    : C '\'' ~[\r\n']+ '\'' ;
+NUMBER       : [0-9]+ ;
+IDENT        : [A-Za-z][A-Za-z0-9]* ;
+
+// --- Comments (supports both . and ; as comment starters) ---
+COMMENT   : [.;] ~[\r\n]* ;
+
+// --- Whitespace and newlines ---
+NEWLINE   : '\r'? '\n' ;
+WS        : [ \t]+ -> skip ;
+
+// --- Case-insensitive character fragments ---
+fragment A  : [aA] ;
+fragment B  : [bB] ;
+fragment C  : [cC] ;
+fragment D  : [dD] ;
+fragment E  : [eE] ;
+fragment F  : [fF] ;
+fragment G  : [gG] ;
+fragment H  : [hH] ;
+fragment I  : [iI] ;
+fragment J_ : [jJ] ;
+fragment K  : [kK] ;
+fragment L  : [lL] ;
+fragment M  : [mM] ;
+fragment N  : [nN] ;
+fragment O  : [oO] ;
+fragment P  : [pP] ;
+fragment Q  : [qQ] ;
+fragment R_ : [rR] ;
+fragment S  : [sS] ;
+fragment T  : [tT] ;
+fragment U  : [uU] ;
+fragment V  : [vV] ;
+fragment W  : [wW] ;
+fragment X  : [xX] ;
+fragment Y  : [yY] ;
+fragment Z  : [zZ] ;

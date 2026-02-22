@@ -1,0 +1,106 @@
+﻿using Antlr4.Runtime;
+using System.Collections.Generic;
+
+namespace laboratorioPractica3
+{
+    /// <summary>
+    /// Listener personalizado para capturar errores léxicos y sintácticos de ANTLR
+    /// </summary>
+    public class SICXEErrorListener : BaseErrorListener, IAntlrErrorListener<int>
+    {
+        public List<SICXEError> Errors { get; } = new List<SICXEError>();
+
+        /// <summary>
+        /// Captura errores sintácticos del parser
+        /// </summary>
+        public override void SyntaxError(TextWriter output, IRecognizer recognizer, IToken offendingSymbol, 
+            int line, int charPositionInLine, string msg, RecognitionException e)
+        {
+            string errorMsg = TranslateErrorMessage(msg, offendingSymbol);
+            Errors.Add(new SICXEError(line, charPositionInLine, errorMsg, SICXEErrorType.Sintactico));
+        }
+
+        /// <summary>
+        /// Captura errores léxicos del lexer
+        /// </summary>
+        public void SyntaxError(TextWriter output, IRecognizer recognizer, int offendingSymbol, 
+            int line, int charPositionInLine, string msg, RecognitionException e)
+        {
+            string errorMsg = TranslateErrorMessage(msg, null);
+            Errors.Add(new SICXEError(line, charPositionInLine, errorMsg, SICXEErrorType.Lexico));
+        }
+
+        /// <summary>
+        /// Traduce mensajes de error de ANTLR a español
+        /// </summary>
+        private string TranslateErrorMessage(string msg, IToken? offendingSymbol)
+        {
+            if (msg.Contains("token recognition error"))
+            {
+                return $"Carácter no reconocido en la entrada";
+            }
+            if (msg.Contains("no viable alternative"))
+            {
+                return $"Instrucción o directiva no válida";
+            }
+            if (msg.Contains("missing"))
+            {
+                return $"Falta elemento requerido: {ExtractMissing(msg)}";
+            }
+            if (msg.Contains("extraneous input"))
+            {
+                return $"Entrada inesperada: {offendingSymbol?.Text ?? "desconocido"}";
+            }
+            if (msg.Contains("mismatched input"))
+            {
+                return $"Token inesperado: {offendingSymbol?.Text ?? "desconocido"}";
+            }
+            return msg;
+        }
+
+        private string ExtractMissing(string msg)
+        {
+            int start = msg.IndexOf("missing ") + 8;
+            int end = msg.IndexOf(" at");
+            if (start > 7 && end > start)
+            {
+                return msg.Substring(start, end - start);
+            }
+            return msg;
+        }
+    }
+
+    /// <summary>
+    /// Tipos de errores detectados
+    /// </summary>
+    public enum SICXEErrorType
+    {
+        Lexico,
+        Sintactico,
+        Semantico
+    }
+
+    /// <summary>
+    /// Clase que representa un error en el análisis
+    /// </summary>
+    public class SICXEError
+    {
+        public int Line { get; }
+        public int Column { get; }
+        public string Message { get; }
+        public SICXEErrorType Type { get; }
+
+        public SICXEError(int line, int column, string message, SICXEErrorType type)
+        {
+            Line = line;
+            Column = column;
+            Message = message;
+            Type = type;
+        }
+
+        public override string ToString()
+        {
+            return $"Línea {Line}, Columna {Column}: [{Type}] {Message}";
+        }
+    }
+}

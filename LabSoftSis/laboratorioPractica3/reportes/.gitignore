@@ -1,0 +1,6 @@
+# Ignorar todos los archivos de reporte generados
+*_reporte_*.txt
+
+# Pero mantener este archivo para que la carpeta se incluya en git
+!.gitkeep
+!.gitignore

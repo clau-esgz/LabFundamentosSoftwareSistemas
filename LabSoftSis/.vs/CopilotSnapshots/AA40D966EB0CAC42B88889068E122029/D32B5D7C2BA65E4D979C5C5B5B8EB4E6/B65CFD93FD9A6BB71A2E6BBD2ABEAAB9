@@ -1,0 +1,124 @@
+﻿using Antlr4.Runtime;
+using System.Collections.Generic;
+
+namespace laboratorioPractica3
+{
+    /// <summary>
+    /// Listener personalizado para capturar errores léxicos y sintácticos de ANTLR
+    /// </summary>
+    public class SICXEErrorListener : BaseErrorListener, IAntlrErrorListener<int>
+    {
+        public List<SICXEError> Errors { get; } = new List<SICXEError>();
+
+        /// <summary>
+        /// Captura errores sintácticos del parser
+        /// </summary>
+        public override void SyntaxError(TextWriter output, IRecognizer recognizer, IToken offendingSymbol, 
+            int line, int charPositionInLine, string msg, RecognitionException e)
+        {
+            string errorMsg = TranslateErrorMessage(msg, offendingSymbol);
+            Errors.Add(new SICXEError(line, charPositionInLine, errorMsg, SICXEErrorType.Sintactico));
+        }
+
+        /// <summary>
+        /// Captura errores léxicos del lexer
+        /// </summary>
+        public void SyntaxError(TextWriter output, IRecognizer recognizer, int offendingSymbol, 
+            int line, int charPositionInLine, string msg, RecognitionException e)
+        {
+            string errorMsg = TranslateErrorMessage(msg, null);
+            Errors.Add(new SICXEError(line, charPositionInLine, errorMsg, SICXEErrorType.Lexico));
+        }
+
+        /// <summary>
+        /// Traduce mensajes de error de ANTLR a español
+        /// </summary>
+        private string TranslateErrorMessage(string msg, IToken? offendingSymbol)
+        {
+            if (msg.Contains("token recognition error"))
+            {
+                // Extraer el carácter problemático
+                var match = System.Text.RegularExpressions.Regex.Match(msg, @"token recognition error at: '([^']*)'");
+                if (match.Success)
+                {
+                    string badChar = match.Groups[1].Value;
+                    return $"Caracter no reconocido: '{badChar}'. Este caracter no es valido en el lenguaje SIC/XE.";
+                }
+                return $"Caracter no reconocido en la entrada. Verifique que todos los caracteres sean validos.";
+            }
+            if (msg.Contains("no viable alternative"))
+            {
+                string context = offendingSymbol != null ? $" cerca de '{offendingSymbol.Text}'" : "";
+                return $"Instruccion o directiva no valida{context}. Verifique la sintaxis de la linea.";
+            }
+            if (msg.Contains("missing"))
+            {
+                string missing = ExtractMissing(msg);
+                return $"Falta elemento requerido: {missing}. Complete la instruccion correctamente.";
+            }
+            if (msg.Contains("extraneous input"))
+            {
+                string extra = offendingSymbol?.Text ?? "desconocido";
+                return $"Entrada inesperada: '{extra}'. Este token no deberia estar aqui.";
+            }
+            if (msg.Contains("mismatched input"))
+            {
+                string token = offendingSymbol?.Text ?? "desconocido";
+                return $"Token inesperado: '{token}'. Se esperaba otro tipo de token en esta posicion.";
+            }
+            return $"Error de sintaxis: {msg}";
+        }
+
+        private string ExtractMissing(string msg)
+        {
+            int start = msg.IndexOf("missing ") + 8;
+            int end = msg.IndexOf(" at");
+            if (start > 7 && end > start)
+            {
+                return msg.Substring(start, end - start);
+            }
+            return msg;
+        }
+    }
+
+    /// <summary>
+    /// Tipos de errores detectados
+    /// </summary>
+    public enum SICXEErrorType
+    {
+        Lexico,
+        Sintactico,
+        Semantico
+    }
+
+    /// <summary>
+    /// Clase que representa un error en el análisis
+    /// </summary>
+    public class SICXEError
+    {
+        public int Line { get; }
+        public int Column { get; }
+        public string Message { get; }
+        public SICXEErrorType Type { get; }
+
+        public SICXEError(int line, int column, string message, SICXEErrorType type)
+        {
+            Line = line;
+            Column = column;
+            Message = message;
+            Type = type;
+        }
+
+        public override string ToString()
+        {
+            string typeStr = Type switch
+            {
+                SICXEErrorType.Lexico => "ERROR LEXICO",
+                SICXEErrorType.Sintactico => "ERROR SINTACTICO",
+                SICXEErrorType.Semantico => "ERROR SEMANTICO",
+                _ => "ERROR"
+            };
+            return $"Linea {Line}, Columna {Column} - [{typeStr}]: {Message}";
+        }
+    }
+}

@@ -1,0 +1,238 @@
+﻿
+//define la gramatica para el lenguaje ensamblador SIC/XE,
+//incluyendo instrucciones, directivas, operandos, comentarios y reglas de formato.
+grammar SICXE;
+
+
+
+program
+    : line* EOF
+    ;
+
+line
+    : statement NEWLINE
+    | statement EOF
+    | comment NEWLINE
+    | comment EOF
+    | NEWLINE
+    ;
+
+statement
+    : label? operation operand? comment?
+    ;
+
+label
+    : IDENT
+    ;
+
+operation
+    : FORMAT4_PREFIX? instruction
+    | directive
+    ;
+
+// Instrucciones de formato 1 (sin operandos)
+format1Instruction
+    : FIX | FLOAT | HIO | NORM | SIO | TIO
+    ;
+
+// Instrucciones de formato 2 (registros)
+format2Instruction
+    : ADDR | CLEAR | COMPR | DIVR | MULR | RMO | SHIFTL | SHIFTR | SUBR | SVC | TIXR
+    ;
+
+// Instrucciones de formato 3/4 (memoria)
+format34Instruction
+    : ADD | ADDF | AND | COMP | COMPF | DIV | DIVF | J | JEQ | JGT | JLT
+    | JSUB | LDA | LDB | LDCH | LDF | LDL | LDS | LDT | LDX | LPS
+    | MUL | MULF | OR | RD | RSUB | SSK | STA | STB | STCH | STF
+    | STI | STL | STS | STSW | STT | STX | SUB | SUBF | TD | TIX | WD
+    ;
+
+instruction
+    : format1Instruction
+    | format2Instruction
+    | format34Instruction
+    ;
+
+directive
+    : START | END | BYTE | WORD | RESB | RESW | BASE | NOBASE
+    | EQU | ORG | LTORG | USE | EXTDEF | EXTREF | CSECT
+    ;
+
+// Reglas para operandos, incluyendo formatos de direccionamiento y literales
+//por ejemplo LDA #3 (inmediato), JEQ @ENDFIL (indirecto), STA BUFFER,X (indexado)
+operand
+    : operandExpr (COMMA operandExpr)*
+    ;
+
+operandExpr 
+    : PREFIX_INDIRECT operandValue indexing? // Indirecto
+    | PREFIX_IMMEDIATE operandValue // Inmediato
+    | operandValue indexing? // Directo o indexado
+    | literal
+    ;
+
+indexing
+    : COMMA IDENT // Solo se permite ",X" para indexado
+    ;
+
+operandValue // Puede ser un identificador, número, constante hexadecimal o carácter, o un literal
+    : IDENT
+    | NUMBER
+    | HEXCONST
+    | CHARCONST
+    | STAR
+    ;
+
+literal // Puede ser un literal hexadecimal, de carácter o numérico
+    : LITERAL_HEX 
+    | LITERAL_CHAR
+    | LITERAL_NUM
+    ;
+
+comment
+    : COMMENT
+    ;
+
+// ===================== LEXER RULES =====================
+//las reglas lexicas definen los tokens para instrucciones,
+//directivas, operandos, comentarios y otros elementos del lenguaje ensamblador SIC/XE.
+// tienen este formato porque de esta forma se pueden escribir las instrucciones 
+//y directivas de forma case-insensitive (por ejemplo, "LDA", "lda" o "LdA" serán reconocidos como la misma instrucción).
+//y tienen un guion bajo al final de algunas instrucciones para evitar conflictos con palabras reservadas 
+//o tokens similares (por ejemplo, "ADD" vs "ADDR").
+ADDF    : A D D F ;
+ADDR    : A D D R_ ;
+ADD     : A D D ;
+AND     : A N D ;
+CLEAR   : C L E A R_ ;
+COMPF   : C O M P F ;
+COMPR   : C O M P R_ ;
+COMP    : C O M P ;
+DIVF    : D I V F ;
+DIVR    : D I V R_ ;
+DIV     : D I V ;
+FIX     : F I X ;
+FLOAT   : F L O A T ;
+HIO     : H I O ;
+JEQ     : J_ E Q ;
+JGT     : J_ G T ;
+JLT     : J_ L T ;
+JSUB    : J_ S U B ;
+J       : J_ ;
+LDCH    : L D C H ;
+LDA     : L D A ;
+LDB     : L D B ;
+LDF     : L D F ;
+LDL     : L D L ;
+LDS     : L D S ;
+LDT     : L D T ;
+LDX     : L D X ;
+LPS     : L P S ;
+MULF    : M U L F ;
+MULR    : M U L R_ ;
+MUL     : M U L ;
+NORM    : N O R_ M ;
+OR      : O R_ ;
+RD      : R_ D ;
+RMO     : R_ M O ;
+RSUB    : R_ S U B ;
+SHIFTL  : S H I F T L ;
+SHIFTR  : S H I F T R_ ;
+SIO     : S I O ;
+SSK     : S S K ;
+STCH    : S T C H ;
+STSW    : S T S W ;
+STA     : S T A ;
+STB     : S T B ;
+STF     : S T F ;
+STI     : S T I ;
+STL     : S T L ;
+STS     : S T S ;
+STT     : S T T ;
+STX     : S T X ;
+SUBF    : S U B F ;
+SUBR    : S U B R_ ;
+SUB     : S U B ;
+SVC     : S V C ;
+TD      : T D ;
+TIO     : T I O ;
+TIXR    : T I X R_ ;
+TIX     : T I X ;
+WD      : W D ;
+
+// --- Directives ---
+START   : S T A R_ T ;
+END     : E N D ;
+BYTE    : B Y T E ;
+WORD    : W O R_ D ;
+RESB    : R_ E S B ;
+RESW    : R_ E S W ;
+BASE    : B A S E ;
+NOBASE  : N O B A S E ;
+EQU     : E Q U ;
+ORG     : O R_ G ;
+LTORG   : L T O R_ G ;
+USE     : U S E ;
+EXTDEF  : E X T D E F ;
+EXTREF  : E X T R_ E F ;
+CSECT   : C S E C T ;
+
+// --- Symbols ---
+FORMAT4_PREFIX   : '+' ;
+PREFIX_INDIRECT  : '@' ;
+PREFIX_IMMEDIATE : '#' ;
+COMMA            : ',' ;
+STAR             : '*' ;
+
+//aqui establecemos los tokens para literales y constantes,
+//incluyendo formatos para literales hexadecimales, de caracteres y numéricos,
+//así como constantes hexadecimales, de caracteres y números.
+// --- Literals and constants ---
+LITERAL_HEX  : '=' X '\'' [0-9A-Fa-f]+ '\'' ;
+LITERAL_CHAR : '=' C '\'' ~[\r\n']+ '\'' ;
+LITERAL_NUM  : '=' [0-9]+ ;
+HEXCONST     : X '\'' [0-9A-Fa-f]+ '\'' ;
+CHARCONST    : C '\'' ~[\r\n']+ '\'' ;
+NUMBER       : [0-9]+ ;
+IDENT        : [A-Za-z][A-Za-z0-9]* ;
+
+//aqui establecemos el token para comentarios,
+//que comienza con un punto o punto y coma y continúa hasta el final de la línea.
+COMMENT   : [.;] ~[\r\n]* ;
+
+//y aqui establecemos los tokens para espacios en blanco y saltos de línea,
+NEWLINE   : '\r'? '\n' ;
+WS        : [ \t]+ -> skip ;
+
+// con estas reglas fragmentarias, definimos los tokens para letras mayúsculas y minúsculas,
+//fragment es una forma de reutilizar partes de tokens sin generar tokens separados para cada letra,
+//por ejemplo con fragment A  : [aA]; estamos diciendo que tanto 'a' como 'A'
+//serán reconocidos como parte de los tokens que utilizan la letra A, permitiendo así que las instrucciones y directivas sean case-insensitive.
+
+fragment A  : [aA] ;
+fragment B  : [bB] ;
+fragment C  : [cC] ;
+fragment D  : [dD] ;
+fragment E  : [eE] ;
+fragment F  : [fF] ;
+fragment G  : [gG] ;
+fragment H  : [hH] ;
+fragment I  : [iI] ;
+fragment J_ : [jJ] ;
+fragment K  : [kK] ;
+fragment L  : [lL] ;
+fragment M  : [mM] ;
+fragment N  : [nN] ;
+fragment O  : [oO] ;
+fragment P  : [pP] ;
+fragment Q  : [qQ] ;
+fragment R_ : [rR] ;
+fragment S  : [sS] ;
+fragment T  : [tT] ;
+fragment U  : [uU] ;
+fragment V  : [vV] ;
+fragment W  : [wW] ;
+fragment X  : [xX] ;
+fragment Y  : [yY] ;
+fragment Z  : [zZ] ;

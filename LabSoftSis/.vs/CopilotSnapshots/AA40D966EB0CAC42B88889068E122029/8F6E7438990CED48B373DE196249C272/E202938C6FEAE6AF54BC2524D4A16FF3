@@ -1,0 +1,192 @@
+﻿grammar SICXE;
+
+// ===================== PARSER RULES =====================
+
+program
+    : line* EOF
+    ;
+
+line
+    : statement NEWLINE
+    | comment NEWLINE
+    | NEWLINE
+    ;
+
+statement
+    : label? operation operand?
+    ;
+
+label
+    : IDENT
+    ;
+
+operation
+    : instruction
+    | directive
+    | FORMAT4_PREFIX instruction
+    ;
+
+instruction
+    : ADD | ADDF | ADDR | AND | CLEAR | COMP | COMPF | COMPR
+    | DIV | DIVF | DIVR | FIX | FLOAT | HIO | J | JEQ | JGT | JLT
+    | JSUB | LDA | LDB | LDCH | LDF | LDL | LDS | LDT | LDX
+    | LPS | MUL | MULF | MULR | NORM | OR | RD | RMO | RSUB
+    | SHIFTL | SHIFTR | SIO | SSK | STA | STB | STCH | STF
+    | STI | STL | STS | STSW | STT | STX | SUB | SUBF | SUBR
+    | SVC | TD | TIO | TIX | TIXR | WD
+    ;
+
+directive
+    : START | END | BYTE | WORD | RESB | RESW | BASE | NOBASE
+    | EQU | ORG | LTORG | USE | EXTDEF | EXTREF | CSECT
+    ;
+
+operand
+    : operandExpr (COMMA operandExpr)*
+    ;
+
+operandExpr
+    : PREFIX_INDIRECT operandValue
+    | PREFIX_IMMEDIATE operandValue
+    | operandValue
+    ;
+
+operandValue
+    : IDENT
+    | NUMBER
+    | HEXCONST
+    | CHARCONST
+    | STAR
+    ;
+
+comment
+    : COMMENT
+    ;
+
+// ===================== LEXER RULES =====================
+
+// --- Instructions ---
+ADD     : A D D ;
+ADDF    : A D D F ;
+ADDR    : A D D R_ ;
+AND     : A N D ;
+CLEAR   : C L E A R_ ;
+COMP    : C O M P ;
+COMPF   : C O M P F ;
+COMPR   : C O M P R_ ;
+DIV     : D I V ;
+DIVF    : D I V F ;
+DIVR    : D I V R_ ;
+FIX     : F I X ;
+FLOAT   : F L O A T ;
+HIO     : H I O ;
+J       : J_ ;
+JEQ     : J_ E Q ;
+JGT     : J_ G T ;
+JLT     : J_ L T ;
+JSUB    : J_ S U B ;
+LDA     : L D A ;
+LDB     : L D B ;
+LDCH    : L D C H ;
+LDF     : L D F ;
+LDL     : L D L ;
+LDS     : L D S ;
+LDT     : L D T ;
+LDX     : L D X ;
+LPS     : L P S ;
+MUL     : M U L ;
+MULF    : M U L F ;
+MULR    : M U L R_ ;
+NORM    : N O R_ M ;
+OR      : O R_ ;
+RD      : R_ D ;
+RMO     : R_ M O ;
+RSUB    : R_ S U B ;
+SHIFTL  : S H I F T L ;
+SHIFTR  : S H I F T R_ ;
+SIO     : S I O ;
+SSK     : S S K ;
+STA     : S T A ;
+STB     : S T B ;
+STCH    : S T C H ;
+STF     : S T F ;
+STI     : S T I ;
+STL     : S T L ;
+STS     : S T S ;
+STSW    : S T S W ;
+STT     : S T T ;
+STX     : S T X ;
+SUB     : S U B ;
+SUBF    : S U B F ;
+SUBR    : S U B R_ ;
+SVC     : S V C ;
+TD      : T D ;
+TIO     : T I O ;
+TIX     : T I X ;
+TIXR    : T I X R_ ;
+WD      : W D ;
+
+// --- Directives ---
+START   : S T A R_ T ;
+END     : E N D ;
+BYTE    : B Y T E ;
+WORD    : W O R_ D ;
+RESB    : R_ E S B ;
+RESW    : R_ E S W ;
+BASE    : B A S E ;
+NOBASE  : N O B A S E ;
+EQU     : E Q U ;
+ORG     : O R_ G ;
+LTORG   : L T O R_ G ;
+USE     : U S E ;
+EXTDEF  : E X T D E F ;
+EXTREF  : E X T R_ E F ;
+CSECT   : C S E C T ;
+
+// --- Symbols ---
+FORMAT4_PREFIX   : '+' ;
+PREFIX_INDIRECT  : '@' ;
+PREFIX_IMMEDIATE : '#' ;
+COMMA            : ',' ;
+STAR             : '*' ;
+
+// --- Literals and constants ---
+HEXCONST  : X '\'' [0-9A-Fa-f]+ '\'' ;
+CHARCONST : C '\'' ~[\r\n']+ '\'' ;
+NUMBER    : [0-9]+ ;
+IDENT     : [A-Za-z][A-Za-z0-9]* ;
+
+// --- Comments ---
+COMMENT   : '.' ~[\r\n]* ;
+
+// --- Whitespace and newlines ---
+NEWLINE   : '\r'? '\n' ;
+WS        : [ \t]+ -> skip ;
+
+// --- Case-insensitive character fragments ---
+fragment A  : [aA] ;
+fragment B  : [bB] ;
+fragment C  : [cC] ;
+fragment D  : [dD] ;
+fragment E  : [eE] ;
+fragment F  : [fF] ;
+fragment G  : [gG] ;
+fragment H  : [hH] ;
+fragment I  : [iI] ;
+fragment J_ : [jJ] ;
+fragment K  : [kK] ;
+fragment L  : [lL] ;
+fragment M  : [mM] ;
+fragment N  : [nN] ;
+fragment O  : [oO] ;
+fragment P  : [pP] ;
+fragment Q  : [qQ] ;
+fragment R_ : [rR] ;
+fragment S  : [sS] ;
+fragment T  : [tT] ;
+fragment U  : [uU] ;
+fragment V  : [vV] ;
+fragment W  : [wW] ;
+fragment X  : [xX] ;
+fragment Y  : [yY] ;
+fragment Z  : [zZ] ;

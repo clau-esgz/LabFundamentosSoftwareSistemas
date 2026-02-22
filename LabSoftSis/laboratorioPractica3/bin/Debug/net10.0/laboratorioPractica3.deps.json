@@ -1,0 +1,176 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "laboratorioPractica3/1.0.0": {
+        "dependencies": {
+          "Antlr4.Runtime.Standard": "4.13.1",
+          "Antlr4BuildTasks": "12.14.0"
+        },
+        "runtime": {
+          "laboratorioPractica3.dll": {}
+        }
+      },
+      "Antlr4.Runtime.Standard/4.13.1": {
+        "runtime": {
+          "lib/netstandard2.0/Antlr4.Runtime.Standard.dll": {
+            "assemblyVersion": "4.13.1.0",
+            "fileVersion": "4.13.1.0"
+          }
+        }
+      },
+      "Antlr4BuildTasks/12.14.0": {
+        "dependencies": {
+          "Microsoft.Build.Framework": "18.0.2",
+          "Microsoft.Build.Utilities.Core": "18.0.2"
+        },
+        "runtime": {
+          "lib/netstandard2.0/Antlr4BuildTasks.dll": {
+            "assemblyVersion": "12.14.0.0",
+            "fileVersion": "12.14.0.0"
+          }
+        }
+      },
+      "Microsoft.Build.Framework/18.0.2": {
+        "runtime": {
+          "lib/net10.0/Microsoft.Build.Framework.dll": {
+            "assemblyVersion": "15.1.0.0",
+            "fileVersion": "18.0.2.52102"
+          }
+        }
+      },
+      "Microsoft.Build.Utilities.Core/18.0.2": {
+        "dependencies": {
+          "Microsoft.Build.Framework": "18.0.2",
+          "Microsoft.NET.StringTools": "18.0.2",
+          "System.Configuration.ConfigurationManager": "9.0.0",
+          "System.Diagnostics.EventLog": "9.0.0",
+          "System.Security.Cryptography.ProtectedData": "9.0.6"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Build.Utilities.Core.dll": {
+            "assemblyVersion": "15.1.0.0",
+            "fileVersion": "18.0.2.52102"
+          }
+        }
+      },
+      "Microsoft.NET.StringTools/18.0.2": {
+        "runtime": {
+          "lib/net10.0/Microsoft.NET.StringTools.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "18.0.2.52102"
+          }
+        }
+      },
+      "System.Configuration.ConfigurationManager/9.0.0": {
+        "dependencies": {
+          "System.Diagnostics.EventLog": "9.0.0",
+          "System.Security.Cryptography.ProtectedData": "9.0.6"
+        },
+        "runtime": {
+          "lib/net9.0/System.Configuration.ConfigurationManager.dll": {
+            "assemblyVersion": "9.0.0.0",
+            "fileVersion": "9.0.24.52809"
+          }
+        }
+      },
+      "System.Diagnostics.EventLog/9.0.0": {
+        "runtime": {
+          "lib/net9.0/System.Diagnostics.EventLog.dll": {
+            "assemblyVersion": "9.0.0.0",
+            "fileVersion": "9.0.24.52809"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/net9.0/System.Diagnostics.EventLog.Messages.dll": {
+            "rid": "win",
+            "assetType": "runtime",
+            "assemblyVersion": "9.0.0.0",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win/lib/net9.0/System.Diagnostics.EventLog.dll": {
+            "rid": "win",
+            "assetType": "runtime",
+            "assemblyVersion": "9.0.0.0",
+            "fileVersion": "9.0.24.52809"
+          }
+        }
+      },
+      "System.Security.Cryptography.ProtectedData/9.0.6": {
+        "runtime": {
+          "lib/net9.0/System.Security.Cryptography.ProtectedData.dll": {
+            "assemblyVersion": "9.0.0.0",
+            "fileVersion": "9.0.625.26613"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "laboratorioPractica3/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Antlr4.Runtime.Standard/4.13.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-Da5+i4kFHUseJRZGcBG5fmZGpA/Ns180ibrQMxgZzjpQOnENVvSL5gi5HZ8Ncz8/AR2WsKbOg2lMBzjz0HUQcA==",
+      "path": "antlr4.runtime.standard/4.13.1",
+      "hashPath": "antlr4.runtime.standard.4.13.1.nupkg.sha512"
+    },
+    "Antlr4BuildTasks/12.14.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-ZL7dXisnqvlmXv0BZkSf4yYXHD5XsYmrubgHC8L7kqsrrTaej0q+VQLF8SmFyrnwisiN6ys9p8mZzEoCp0R+Fw==",
+      "path": "antlr4buildtasks/12.14.0",
+      "hashPath": "antlr4buildtasks.12.14.0.nupkg.sha512"
+    },
+    "Microsoft.Build.Framework/18.0.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-sOSb+0J4G/jCBW/YqmRuL0eOMXgfw1KQLdC9TkbvfA5xs7uNm+PBQXJCOzSJGXtZcZrtXozcwxPmUiRUbmd7FA==",
+      "path": "microsoft.build.framework/18.0.2",
+      "hashPath": "microsoft.build.framework.18.0.2.nupkg.sha512"
+    },
+    "Microsoft.Build.Utilities.Core/18.0.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-qsI2Mc8tbJEyg5m4oTvxlu5wY8te0TIVxObxILvrrPdeFUwH5V5UXUT2RV054b3S9msIR+7zViTWp4nRp0YGbQ==",
+      "path": "microsoft.build.utilities.core/18.0.2",
+      "hashPath": "microsoft.build.utilities.core.18.0.2.nupkg.sha512"
+    },
+    "Microsoft.NET.StringTools/18.0.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-cTZw3GHkAlqZACYGeQT3niS3UfVQ8CH0O5+zUdhxstrg1Z8Q2ViXYFKjSxHmEXTX85mrOT/QnHZOeQhhSsIrkQ==",
+      "path": "microsoft.net.stringtools/18.0.2",
+      "hashPath": "microsoft.net.stringtools.18.0.2.nupkg.sha512"
+    },
+    "System.Configuration.ConfigurationManager/9.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-PdkuMrwDhXoKFo/JxISIi9E8L+QGn9Iquj2OKDWHB6Y/HnUOuBouF7uS3R4Hw3FoNmwwMo6hWgazQdyHIIs27A==",
+      "path": "system.configuration.configurationmanager/9.0.0",
+      "hashPath": "system.configuration.configurationmanager.9.0.0.nupkg.sha512"
+    },
+    "System.Diagnostics.EventLog/9.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-qd01+AqPhbAG14KtdtIqFk+cxHQFZ/oqRSCoxU1F+Q6Kv0cl726sl7RzU9yLFGd4BUOKdN4XojXF0pQf/R6YeA==",
+      "path": "system.diagnostics.eventlog/9.0.0",
+      "hashPath": "system.diagnostics.eventlog.9.0.0.nupkg.sha512"
+    },
+    "System.Security.Cryptography.ProtectedData/9.0.6": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-yErfw/3pZkJE/VKza/Cm5idTpIKOy/vsmVi59Ta5SruPVtubzxb8CtnE8tyUpzs5pr0Y28GUFfSVzAhCLN3F/Q==",
+      "path": "system.security.cryptography.protecteddata/9.0.6",
+      "hashPath": "system.security.cryptography.protecteddata.9.0.6.nupkg.sha512"
+    }
+  }
+}
