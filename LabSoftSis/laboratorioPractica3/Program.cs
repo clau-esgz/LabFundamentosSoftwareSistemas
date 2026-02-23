@@ -15,12 +15,20 @@ class Program
         
         PrintHeader();
 
-        // Determinar archivo de entrada
+        // Determinar archivo de entrada y modo
         string inputFile;
+        string mode = "0"; // 0 = preguntar, 1 = análisis completo, 2 = Paso 1
+        
         if (args.Length > 0)
         {
             // Si se proporciona archivo por línea de comandos
             inputFile = args[0];
+            
+            // Si se proporciona el modo como segundo argumento
+            if (args.Length > 1)
+            {
+                mode = args[1];
+            }
             
             if (!File.Exists(inputFile))
             {
@@ -29,7 +37,7 @@ class Program
             }
             
             // Analizar el archivo proporcionado
-            AnalyzeAndShow(inputFile);
+            AnalyzeAndShow(inputFile, mode);
         }
         else
         {
@@ -127,29 +135,59 @@ class Program
     /// <summary>
     /// Analiza un archivo y muestra el resultado
     /// </summary>
-    static void AnalyzeAndShow(string inputFile)
+    static void AnalyzeAndShow(string inputFile, string mode = "0")
     {
         Console.WriteLine($"Analizando archivo: {Path.GetFileName(inputFile)}");
         Console.WriteLine();
+        
+        string option = mode;
+        
+        if (option == "0")
+        {
+            Console.WriteLine("Seleccione el tipo de análisis:");
+            Console.WriteLine("  1. Análisis completo (análisis semántico actual)");
+            Console.WriteLine("  2. PASO 1 - Ensamblador (tabla de símbolos + direcciones + CSV)");
+            Console.Write("\nOpción (1-2): ");
+            
+            if (Console.IsInputRedirected)
+            {
+                option = Console.ReadLine() ?? "1";
+            }
+            else
+            {
+                option = Console.ReadKey().KeyChar.ToString();
+            }
+            Console.WriteLine();
+            Console.WriteLine();
+        }
+        else
+        {
+            Console.WriteLine($"Modo seleccionado: {(option == "2" ? "PASO 1 - Ensamblador" : "Análisis completo")}");
+            Console.WriteLine();
+        }
 
         try
         {
-            // Analizar el archivo
-            var result = AnalyzeFile(inputFile);
+            if (option == "2")
+            {
+                // Ejecutar Paso 1 del ensamblador
+                AnalyzePaso1(inputFile);
+            }
+            else
+            {
+                // Análisis completo existente
+                var result = AnalyzeFile(inputFile);
 
-            // Mostrar reporte en consola
-            Console.WriteLine(result.Report);
+                Console.WriteLine(result.Report);
 
-            // Mostrar árbol sintáctico en consola
-            Console.WriteLine();
-            Console.WriteLine("ARBOL SINTACTICO:");
-            Console.WriteLine(FormatParseTree(result.ParseTree));
-          
+                Console.WriteLine();
+                Console.WriteLine("ARBOL SINTACTICO:");
+                Console.WriteLine(FormatParseTree(result.ParseTree));
 
-            // Generar archivo de salida con errores
-            string outputFile = GenerateOutputFile(inputFile, result);
-            Console.WriteLine();
-            Console.WriteLine($"Archivo de reporte generado: {outputFile}");
+                string outputFile = GenerateOutputFile(inputFile, result);
+                Console.WriteLine();
+                Console.WriteLine($"Archivo de reporte generado: {outputFile}");
+            }
         }
         catch (Exception ex)
         {
@@ -159,6 +197,180 @@ class Program
                 Console.WriteLine($"  Detalles: {ex.InnerException.Message}");
             }
         }
+    }
+
+    /// <summary>
+    /// Ejecuta el Paso 1 del ensamblador SIC/XE
+    /// </summary>
+    static void AnalyzePaso1(string inputFile)
+    {
+        Console.WriteLine("═══════════════════════════════════════════════════════════════════");
+        Console.WriteLine("               EJECUTANDO PASO 1 DEL ENSAMBLADOR");
+        Console.WriteLine("═══════════════════════════════════════════════════════════════════");
+        Console.WriteLine();
+
+        string input = File.ReadAllText(inputFile);
+        
+        if (!input.EndsWith("\n"))
+            input += "\n";
+
+        var inputStream = new AntlrInputStream(input);
+        var lexer = new SICXELexer(inputStream);
+        
+        // Configurar error listeners para capturar errores léxicos
+        var lexerErrorListener = new SICXEErrorListener();
+        lexer.RemoveErrorListeners();
+        lexer.AddErrorListener(lexerErrorListener);
+        
+        var tokenStream = new CommonTokenStream(lexer);
+        var parser = new SICXEParser(tokenStream);
+        
+        // Configurar error listeners para capturar errores sintácticos
+        var parserErrorListener = new SICXEErrorListener();
+        parser.RemoveErrorListeners();
+        parser.AddErrorListener(parserErrorListener);
+
+        var tree = parser.program();
+
+        // Ejecutar Paso 1 (construcción de TABSIM y cálculo de CONTLOC)
+        var paso1 = new Paso1();
+        var walker = new ParseTreeWalker();
+        walker.Walk(paso1, tree);
+        
+        // TAMBIÉN ejecutar análisis semántico para validar operandos
+        var semanticAnalyzer = new SICXESemanticAnalyzer();
+        semanticAnalyzer.AddExternalErrors(lexerErrorListener.Errors);
+        semanticAnalyzer.AddExternalErrors(parserErrorListener.Errors);
+        walker.Walk(semanticAnalyzer, tree);
+        
+        // Combinar errores de ambas fuentes
+        var allErrors = paso1.ErrorList
+            .Concat(semanticAnalyzer.Errors)
+            .GroupBy(e => new { e.Line, e.Message })  // Evitar duplicados
+            .Select(g => g.First())
+            .OrderBy(e => e.Line)
+            .ThenBy(e => e.Column)
+            .ToList();
+
+        Console.WriteLine(paso1.GenerateReport());
+        
+        // Mostrar errores semánticos adicionales si los hay
+        var additionalErrors = semanticAnalyzer.Errors
+            .Where(e => !paso1.ErrorList.Any(p => p.Line == e.Line && p.Message == e.Message))
+            .ToList();
+            
+        if (additionalErrors.Count > 0)
+        {
+            Console.WriteLine("═══════════════════ ERRORES DE VALIDACIÓN ADICIONALES ═══════════");
+            foreach (var error in additionalErrors.OrderBy(e => e.Line))
+            {
+                Console.WriteLine($"  • {error}");
+            }
+            Console.WriteLine();
+        }
+
+        string projectDir = GetProjectDirectory();
+        string reportesDir = Path.Combine(projectDir, "reportes_paso1");
+        
+        if (!Directory.Exists(reportesDir))
+            Directory.CreateDirectory(reportesDir);
+
+        string baseName = Path.GetFileNameWithoutExtension(inputFile);
+        string baseOutputPath = Path.Combine(reportesDir, baseName);
+
+        // Exportar con todos los errores combinados
+        ExportPaso1WithValidation(paso1, allErrors, baseOutputPath);
+        
+        Console.WriteLine($"\n📂 Directorio de salida: {reportesDir}");
+        
+        if (allErrors.Count == 0)
+        {
+            Console.WriteLine("\n✅ Paso 1 completado exitosamente sin errores!");
+        }
+        else
+        {
+            Console.WriteLine($"\n⚠️ Paso 1 completado con {allErrors.Count} error(es) detectado(s)");
+        }
+    }
+    
+    /// <summary>
+    /// Exporta archivos CSV del Paso 1 con validaciones integradas
+    /// </summary>
+    static void ExportPaso1WithValidation(Paso1 paso1, List<SICXEError> allErrors, string baseOutputPath)
+    {
+        string directory = Path.GetDirectoryName(baseOutputPath) ?? ".";
+        string baseName = Path.GetFileNameWithoutExtension(baseOutputPath);
+        string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+
+        string symtabPath = Path.Combine(directory, $"{baseName}_SYMTAB_{timestamp}.csv");
+        string intermediatePath = Path.Combine(directory, $"{baseName}_LISTADO_{timestamp}.csv");
+        string summaryPath = Path.Combine(directory, $"{baseName}_RESUMEN_{timestamp}.csv");
+
+        // Exportar SYMTAB
+        paso1.ExportSymbolTableToCSV(symtabPath);
+        
+        // Exportar LISTADO con errores integrados
+        var sb = new StringBuilder();
+        sb.AppendLine("NL,CONTLOC_HEX,CONTLOC_DEC,ETQ,CODOP,OPR,FMT,MOD,ERR,COMENTARIO");
+        
+        foreach (var line in paso1.Lines)
+        {
+            string addressHex = (line.Address >= 0) ? $"{line.Address:X4}" : "";
+            string addressDec = (line.Address >= 0) ? $"{line.Address}" : "";
+            string fmt = (line.Format > 0) ? $"{line.Format}" : "";
+            
+            // Buscar TODOS los errores para esta línea
+            var lineErrors = allErrors.Where(e => e.Line == line.LineNumber);
+            string errorMsg = "";
+            
+            if (lineErrors.Any())
+            {
+                errorMsg = string.Join("; ", lineErrors.Select(e => e.Message));
+            }
+            else if (!string.IsNullOrEmpty(line.Error))
+            {
+                errorMsg = line.Error;
+            }
+            
+            sb.AppendLine($"{line.LineNumber},{addressHex},{addressDec},{EscapeCSV(line.Label)},{EscapeCSV(line.Operation)},{EscapeCSV(line.Operand)},{fmt},{EscapeCSV(line.AddressingMode)},{EscapeCSV(errorMsg)},{EscapeCSV(line.Comment)}");
+        }
+        
+        File.WriteAllText(intermediatePath, sb.ToString(), Encoding.UTF8);
+        
+        // Exportar RESUMEN con conteo de errores completo
+        var sbSummary = new StringBuilder();
+        sbSummary.AppendLine("PROPIEDAD,VALOR_HEX,VALOR_DEC");
+        sbSummary.AppendLine($"NOMBRE_PROGRAMA,{paso1.ProgramName},{paso1.ProgramName}");
+        sbSummary.AppendLine($"DIRECCION_INICIO,{paso1.ProgramStartAddress:X4},{paso1.ProgramStartAddress}");
+        sbSummary.AppendLine($"LONGITUD_PROGRAMA,{paso1.ProgramSize:X4},{paso1.ProgramSize}");
+        sbSummary.AppendLine($"TOTAL_SIMBOLOS,,{paso1.SymbolTable.Count}");
+        sbSummary.AppendLine($"TOTAL_LINEAS,,{paso1.Lines.Count}");
+        sbSummary.AppendLine($"TOTAL_ERRORES,,{allErrors.Count}");
+        if (paso1.BaseValue.HasValue)
+            sbSummary.AppendLine($"VALOR_BASE,{paso1.BaseValue.Value:X4},{paso1.BaseValue.Value}");
+        
+        File.WriteAllText(summaryPath, sbSummary.ToString(), Encoding.UTF8);
+
+        Console.WriteLine("📁 Archivos CSV generados:");
+        Console.WriteLine($"  ✓ Tabla de símbolos: {Path.GetFileName(symtabPath)}");
+        Console.WriteLine($"  ✓ Listado intermedio: {Path.GetFileName(intermediatePath)}");
+        Console.WriteLine($"  ✓ Resumen: {Path.GetFileName(summaryPath)}");
+    }
+    
+    /// <summary>
+    /// Escapa valores para formato CSV
+    /// </summary>
+    static string EscapeCSV(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "";
+
+        if (value.Contains(",") || value.Contains("\"") || value.Contains("\n"))
+        {
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
+        }
+
+        return value;
     }
 
     /// <summary>

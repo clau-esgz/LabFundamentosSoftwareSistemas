@@ -39,3 +39,43 @@ Thumbs.db
 *.tmp
 *.bak
 *.swp
+
+# Archivos y artefactos adicionales recomendados para proyectos .NET/IDE
+# Binarios y símbolos
+*.pdb
+*.dll
+*.exe
+
+# Publicados / paquetes
+*.nupkg
+publish/
+
+# NuGet
+/packages/
+
+# Rider / IntelliJ
+.idea/
+*.iml
+
+# VSCode settings (local)
+.vscode/
+
+# User-specific / IDE caches
+*.user
+*.suo
+*.userosscache
+*.VC.db
+
+# Build/runtime generated files
+*.deps.json
+*.runtimeconfig.json
+runtimes/
+
+# Antlr intermediate/generated artifacts (if outside obj/)
+*.interp
+*.tokens
+
+# Logs and temporary DBs
+*.log
+*.db
+*.db-journal

@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-// Generated from C:/Users/espin/OneDrive/Desktop/Fundamentos software de sistemas/Labo/laboratorioPractica3/laboratorioPractica3/grammar/SICXE.g4 by ANTLR 4.13.1
+// Generated from C:/Users/aleja/OneDrive/Escritorio/fundamentos ss/LabFundamentosSoftwareSistemas/LabSoftSis/laboratorioPractica3/grammar/SICXE.g4 by ANTLR 4.13.1
 
 // Unreachable code detected
 #pragma warning disable 0162

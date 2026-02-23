@@ -26,3 +26,40 @@ C:\Users\espin\OneDrive\Desktop\Fundamentos software de sistemas\Labo\laboratori
 C:\Users\espin\OneDrive\Desktop\Fundamentos software de sistemas\Labo\laboratorioPractica3\laboratorioPractica3\obj\Debug\net8.0\laboratorioPractica3.pdb
 C:\Users\espin\OneDrive\Desktop\Fundamentos software de sistemas\Labo\laboratorioPractica3\laboratorioPractica3\obj\Debug\net8.0\laboratorioPractica3.genruntimeconfig.cache
 C:\Users\espin\OneDrive\Desktop\Fundamentos software de sistemas\Labo\laboratorioPractica3\laboratorioPractica3\obj\Debug\net8.0\ref\laboratorioPractica3.dll
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\01.asm
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\02.asm
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\03.asm
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\copy1.xe.txt
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\programa_err.asm
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\programa_ok.asm
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\prog_err.asm
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\prog_ok.asm
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\laboratorioPractica3.exe
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\laboratorioPractica3.deps.json
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\laboratorioPractica3.runtimeconfig.json
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\laboratorioPractica3.dll
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\laboratorioPractica3.pdb
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\Antlr4.Runtime.Standard.dll
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\Antlr4BuildTasks.dll
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\ClosedXML.dll
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\ClosedXML.Parser.dll
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\DocumentFormat.OpenXml.dll
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\DocumentFormat.OpenXml.Framework.dll
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\ExcelNumberFormat.dll
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\RBush.dll
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\SixLabors.Fonts.dll
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\System.IO.Packaging.dll
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\System.Text.Encoding.CodePages.dll
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\runtimes\win\lib\net8.0\System.Text.Encoding.CodePages.dll
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\obj\Debug\net8.0\laboratorioPractica3.csproj.AssemblyReference.cache
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\obj\Debug\net8.0\laboratorioPractica3.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\obj\Debug\net8.0\laboratorioPractica3.AssemblyInfoInputs.cache
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\obj\Debug\net8.0\laboratorioPractica3.AssemblyInfo.cs
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\obj\Debug\net8.0\laboratorioPractica3.csproj.CoreCompileInputs.cache
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\obj\Debug\net8.0\laboratorioPractica3.sourcelink.json
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\obj\Debug\net8.0\laborato.BF13E7A4.Up2Date
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\obj\Debug\net8.0\laboratorioPractica3.dll
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\obj\Debug\net8.0\refint\laboratorioPractica3.dll
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\obj\Debug\net8.0\laboratorioPractica3.pdb
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\obj\Debug\net8.0\laboratorioPractica3.genruntimeconfig.cache
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\obj\Debug\net8.0\ref\laboratorioPractica3.dll
