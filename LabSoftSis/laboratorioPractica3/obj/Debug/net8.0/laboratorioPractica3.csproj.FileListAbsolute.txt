@@ -30,6 +30,9 @@ C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas
 C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\02.asm
 C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\03.asm
 C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\copy1.xe.txt
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\copy2_xe 1.txt
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\EJER1-Paso1.txt
+C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\EJER2-Paso1.txt
 C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\programa_err.asm
 C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\programa_ok.asm
 C:\Users\aleja\OneDrive\Escritorio\fundamentos ss\LabFundamentosSoftwareSistemas\LabSoftSis\laboratorioPractica3\bin\Debug\net8.0\prog_err.asm

@@ -48,7 +48,13 @@ namespace laboratorioPractica3
         // Directivas que requieren operando
         private static readonly HashSet<string> RequiredOperandDirectives = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "START", "END", "BYTE", "WORD", "RESB", "RESW", "BASE", "EQU", "ORG", "USE", "EXTDEF", "EXTREF"
+            "START", "BYTE", "WORD", "RESB", "RESW", "BASE", "EQU", "ORG", "USE", "EXTDEF", "EXTREF"
+        };
+
+        // Directivas con operando opcional
+        private static readonly HashSet<string> OptionalOperandDirectives = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "END"  // END puede tener o no operando: END [Símbolo]
         };
 
         // Directivas que no requieren operando
@@ -57,10 +63,23 @@ namespace laboratorioPractica3
             "NOBASE", "LTORG", "CSECT"
         };
 
-        //Estos son registros válidos de SIC/XE
+        // ═══════════════════ REGISTROS VÁLIDOS SIC/XE ═══════════════════
+        // Ocho registros de 24 bits cada uno y uno de 48 bits (F)
+        // Cada registro tiene un nemónico (nombre), número y uso especial:
+        // A(0)=Acumulador, X(1)=Índice, L(2)=Enlace, B(3)=Base, S(4)=General,
+        // T(5)=General, F(6)=Punto flotante 48 bits, PC/CP(8)=Contador de programa, SW(9)=Palabra de estado
         private static readonly HashSet<string> ValidRegisters = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "A", "X", "L", "B", "S", "T", "F", "PC", "SW"
+            "A",    // Registro 0: Acumulador para operaciones aritméticas y lógicas
+            "X",    // Registro 1: Registro índice para direccionar
+            "L",    // Registro 2: Registro de enlace, para regreso de subrutinas
+            "B",    // Registro 3: Registro base, para direccionamiento
+            "S",    // Registro 4: Registro de aplicación general
+            "T",    // Registro 5: Registro de aplicación general
+            "F",    // Registro 6: Acumulador de punto flotante (48 bits)
+            "PC",   // Registro 8: Contador de programa - dirección de siguiente instrucción
+            "CP",   // Registro 8: Alias de PC (Counter Program = Program Counter)
+            "SW"    // Registro 9: Palabra de estado, información de banderas
         };
 
         
@@ -225,6 +244,14 @@ namespace laboratorioPractica3
                 if (operandContext != null)
                     ValidateDirectiveOperands(operation, operandContext, line, column);
             }
+            // Verificar directivas con operando opcional (no generar error si falta)
+            else if (OptionalOperandDirectives.Contains(operation))
+            {
+                // END puede tener o no operando, ambos son válidos
+                // Si tiene operando, validarlo
+                if (operandContext != null && operandCount > 0)
+                    ValidateDirectiveOperands(operation, operandContext, line, column);
+            }
             // Verificar directivas sin operando
             else if (NoOperandDirectives.Contains(operation))
             {
@@ -294,7 +321,7 @@ namespace laboratorioPractica3
                     if (!ValidRegisters.Contains(text))
                     {
                         _errors.Add(new SICXEError(operand.Start.Line, operand.Start.Column,
-                            $"'{text}' no es un registro valido para la instruccion '{operation}'. Registros validos: A, X, L, B, S, T, F, PC, SW.",
+                            $"'{text}' no es un registro valido para la instruccion '{operation}'. Registros validos: A, X, L, B, S, T, F, PC (o CP), SW.",
                             SICXEErrorType.Semantico));
                     }
                 }

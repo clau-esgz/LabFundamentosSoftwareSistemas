@@ -6,6 +6,23 @@ using System.Text;
 /// <summary>
 /// Analizador de Lenguaje Ensamblador SIC/XE
 /// Laboratorio Práctica 3 - Fundamentos de Software de Sistemas
+/// 
+/// DESCRIPCIÓN GENERAL:
+/// Este programa implementa un ensamblador SIC/XE de dos pasadas.
+/// 
+/// PASO 1 (IMPLEMENTADO):
+/// - Asigna direcciones a todas las instrucciones mediante el CONTLOC
+/// - Construye la TABSIM (Tabla de Símbolos) con etiquetas y direcciones
+/// - Calcula valores semánticos de directivas (BYTE, WORD, RESB, RESW)
+/// - Determina formato y modo de direccionamiento de cada instrucción
+/// - Genera archivo intermedio para el Paso 2
+/// - Almacena valor de BASE para uso en Paso 2
+/// - Calcula longitud del programa (CONTLOC_final - START)
+/// - Detecta errores semánticos
+/// 
+/// SALIDA DEL PASO 1:
+/// - Archivo CSV con TABSIM + Archivo Intermedio
+/// - Reporte en consola con resumen y errores
 /// </summary>
 class Program
 {
@@ -200,7 +217,23 @@ class Program
     }
 
     /// <summary>
-    /// Ejecuta el Paso 1 del ensamblador SIC/XE
+    /// EJECUTA EL PASO 1 DEL ENSAMBLADOR SIC/XE
+    /// 
+    /// PROCESO:
+    /// 1. Lee el archivo fuente (.asm)
+    /// 2. Ejecuta análisis léxico y sintáctico con ANTLR
+    /// 3. Ejecuta el Paso 1 del ensamblador:
+    ///    - Construye TABSIM (Tabla de Símbolos)
+    ///    - Calcula CONTLOC (Contador de Localidades)
+    ///    - Genera archivo intermedio
+    ///    - Almacena valor de BASE
+    ///    - Calcula longitud del programa
+    /// 4. Ejecuta análisis semántico para validar:
+    ///    - Operandos válidos
+    ///    - Registros válidos
+    ///    - Formatos de constantes correctos
+    /// 5. Combina y reporta todos los errores
+    /// 6. Exporta resultados a CSV
     /// </summary>
     static void AnalyzePaso1(string inputFile)
     {
@@ -281,20 +314,20 @@ class Program
         // Exportar con todos los errores combinados
         ExportPaso1WithValidation(paso1, allErrors, baseOutputPath);
         
-        Console.WriteLine($"\n📂 Directorio de salida: {reportesDir}");
+        Console.WriteLine($"\nDirectorio de salida: {reportesDir}");
         
         if (allErrors.Count == 0)
         {
-            Console.WriteLine("\n✅ Paso 1 completado exitosamente sin errores!");
+            Console.WriteLine("\nPaso 1 completado exitosamente sin errores!");
         }
         else
         {
-            Console.WriteLine($"\n⚠️ Paso 1 completado con {allErrors.Count} error(es) detectado(s)");
+            Console.WriteLine($"\nPaso 1 completado con {allErrors.Count} error(es) detectado(s)");
         }
     }
     
     /// <summary>
-    /// Exporta archivos CSV del Paso 1 con validaciones integradas
+    /// Exporta archivo CSV del Paso 1 con validaciones integradas
     /// </summary>
     static void ExportPaso1WithValidation(Paso1 paso1, List<SICXEError> allErrors, string baseOutputPath)
     {
@@ -303,11 +336,11 @@ class Program
         string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
 
         // Generar UN SOLO archivo CSV con TABSIM + Archivo Intermedio
-        string singleFilePath = Path.Combine(directory, $"{baseName}_PASO1_{timestamp}.csv");
-        paso1.ExportToSingleCSV(singleFilePath, allErrors);
+        string csvPath = Path.Combine(directory, $"{baseName}_PASO1_{timestamp}.csv");
+        paso1.ExportToSingleCSV(csvPath, allErrors);
 
-        Console.WriteLine("Archivo CSV generado:");
-        Console.WriteLine($"  - {Path.GetFileName(singleFilePath)}");
+        Console.WriteLine("Archivo generado:");
+        Console.WriteLine($"  - CSV: {Path.GetFileName(csvPath)}");
     }
     
     /// <summary>

@@ -1,81 +1,116 @@
-# Ignorar todos los archivos de reporte generados
-*_reporte_*.txt
-
-# Pero mantener este archivo para que la carpeta se incluya en git
-!.gitkeep
-!.gitignore
-
-# .NET build outputs
+﻿# =============================================================================
+# COMPILACIÓN Y CONSTRUCCIÓN - .NET
+# =============================================================================
 /bin/
 /obj/
-
-# Visual Studio / IDE
-.vs/
-*.suo
-*.user
-*.userosscache
-*.VC.db
-.vscode/
-
-# Antlr / generated code (obj covers it, pero por si hay otros)
-**/obj/
 **/bin/
+**/obj/
+*.csproj.Backup.tmp
 
-# Reportes y salidas generadas por la herramienta
-/reportes/
-/reportes_paso1/
-/*.csv
-/*.txt
-/*.log
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# NuGet packages restored locally (si las tienes)
-/packages/
-
-# Otros temporales
-*.tmp
-*.bak
-*.swp
-
-# Archivos y artefactos adicionales recomendados para proyectos .NET/IDE
-# Binarios y símbolos
+# Build artifacts
 *.pdb
 *.dll
 *.exe
-
-# Publicados / paquetes
-*.nupkg
-publish/
-
-# NuGet
-/packages/
-
-# Rider / IntelliJ
-.idea/
-*.iml
-
-# VSCode settings (local)
-.vscode/
-
-# User-specific / IDE caches
-*.user
-*.suo
-*.userosscache
-*.VC.db
-
-# Build/runtime generated files
 *.deps.json
 *.runtimeconfig.json
 runtimes/
 
-# Antlr intermediate/generated artifacts (if outside obj/)
+# NuGet packages
+/packages/
+*.nupkg
+
+# Publishing
+publish/
+
+
+# =============================================================================
+# IDE Y EDITORES - VISUAL STUDIO / VSCODE
+# =============================================================================
+
+# Visual Studio cache/options folder
+.vs/
+.vscode/
+
+# Visual Studio 2024 single file solution
+*.slnx/
+
+# Visual Studio files and caches
+*.suo
+*.user
+*.userosscache
+*.VC.db
+*.dtbcache.v2
+*.futdcache.v2
+*.metadata.v*.bin
+*.projects.v*.bin
+*.strings.v*.bin
+DocumentLayout.json
+DocumentLayout.backup.json
+
+
+# =============================================================================
+# IDE - RIDER / INTELLIJ
+# =============================================================================
+.idea/
+*.iml
+
+
+# =============================================================================
+# ARCHIVOS TEMPORALES Y DE RESPALDO
+# =============================================================================
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+*.backup
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+
+# =============================================================================
+# GENERADOS POR HERRAMIENTAS (ANTLR, etc.)
+# =============================================================================
 *.interp
 *.tokens
 
-# Logs and temporary DBs
+
+# =============================================================================
+# REPORTES, LOGS Y ARCHIVOS DE SALIDA GENERADOS
+# =============================================================================
+
+# Reportes generados
+/reportes/
+/reportes_paso1/
+*_reporte_*.txt
+*_reporte_*.csv
+
+# Logs
 *.log
+
+# Archivos temporales de salida
+script_output.txt
+output.csv
+
+# Bases de datos temporales
 *.db
 *.db-journal
+
+
+# =============================================================================
+# EXCEPCIONES - ARCHIVOS QUE SÍ QUEREMOS INCLUIR EN GIT
+# =============================================================================
+!.gitkeep
+!.gitignore
+!README_PASO1.md
+!programa_ok.asm
+!programa_err.asm
+!prog_ok.asm
+!prog_err.asm
+!01.asm
+!02.asm
+!03.asm
+!EJER1-Paso1.txt
+!EJER2-Paso1.txt
