@@ -76,12 +76,13 @@ indexing
     : COMMA IDENT // Solo se permite ",X" para indexado
     ;
 
-operandValue // Puede ser un identificador, número, constante hexadecimal o carácter, o un literal
+operandValue // Puede ser un identificador, número (decimal o hex con H), constante hexadecimal o carácter
     : IDENT
-    | NUMBER
-    | HEXCONST
-    | CHARCONST
-    | STAR
+    | HEXNUMBER    // Número hexadecimal con sufijo H (ej: 12H, 100H)
+    | NUMBER       // Número decimal
+    | HEXCONST     // Constante hexadecimal X'...'
+    | CHARCONST    // Constante de caracteres C'...'
+    | STAR         // Asterisco para dirección actual
     ;
 
 literal // Puede ser un literal hexadecimal, de carácter o numérico
@@ -194,7 +195,14 @@ LITERAL_CHAR : '=' C '\'' ~[\r\n']+ '\'' ;
 LITERAL_NUM  : '=' [0-9]+ ;
 HEXCONST     : X '\'' [0-9A-Fa-f]+ '\'' ;
 CHARCONST    : C '\'' ~[\r\n']+ '\'' ;
+
+// Número hexadecimal con sufijo H (ej: 12H, 0ABCh, 100H)
+// IMPORTANTE: Debe estar ANTES de NUMBER para tener prioridad
+HEXNUMBER    : [0-9][0-9A-Fa-f]* H ;
+
+// Número decimal
 NUMBER       : [0-9]+ ;
+
 IDENT        : [A-Za-z][A-Za-z0-9]* ;
 
 //aqui establecemos el token para comentarios,

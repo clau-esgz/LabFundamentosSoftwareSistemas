@@ -7,90 +7,23 @@ namespace laboratorioPractica3
 {
     /// <summary>
     /// Analizador semántico para programas SIC/XE
-    /// Verifica reglas semánticas más allá de la sintaxis
+    /// UTILIZA LA GRAMÁTICA ANTLR para determinar tipos de instrucciones
     /// </summary>
     public class SICXESemanticAnalyzer : SICXEBaseListener
     {
         private readonly HashSet<string> _definedLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private readonly List<SICXEError> _errors = new List<SICXEError>();//necesitamos una lista de errores para almacenar
-                                                                           //los errores encontrados durante el análisis semántico
-        private readonly List<TokenInfo> _tokens = new List<TokenInfo>(); //y una lista de tokens para almacenar los tokens reconocidos por el lexer,
-                                                                          //lo que nos permitirá generar un reporte detallado de los tokens procesados durante el análisis.
-
-        // Instrucciones que no requieren operandos
-        //un hashset es una estructura de datos que almacena elementos únicos
-        //y permite búsquedas rápidas. En este caso, se utiliza para almacenar las
-        //instrucciones que no requieren operandos, lo que facilita la verificación de
-        //si una instrucción pertenece a esta categoría durante el análisis semántico.
-        private static readonly HashSet<string> NoOperandInstructions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "FIX", "FLOAT", "HIO", "NORM", "SIO", "TIO", "RSUB"
-        };
-
-        // Instrucciones que requieren exactamente 2 registros
-        private static readonly HashSet<string> TwoRegisterInstructions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "ADDR", "COMPR", "DIVR", "MULR", "RMO", "SUBR"
-        };
-
-        // Instrucciones que requieren 1 registro
-        private static readonly HashSet<string> OneRegisterInstructions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "CLEAR", "TIXR"
-        };
-
-        // Instrucciones que requieren registro y número
-        private static readonly HashSet<string> RegisterNumberInstructions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "SHIFTL", "SHIFTR", "SVC"
-        };
-
-        // Directivas que requieren operando
-        private static readonly HashSet<string> RequiredOperandDirectives = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "START", "BYTE", "WORD", "RESB", "RESW", "BASE", "EQU", "ORG", "USE", "EXTDEF", "EXTREF"
-        };
-
-        // Directivas con operando opcional
-        private static readonly HashSet<string> OptionalOperandDirectives = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "END"  // END puede tener o no operando: END [Símbolo]
-        };
-
-        // Directivas que no requieren operando
-        private static readonly HashSet<string> NoOperandDirectives = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "NOBASE", "LTORG", "CSECT"
-        };
+        private readonly List<SICXEError> _errors = new List<SICXEError>();
+        private readonly List<TokenInfo> _tokens = new List<TokenInfo>();
 
         // ═══════════════════ REGISTROS VÁLIDOS SIC/XE ═══════════════════
-        // Ocho registros de 24 bits cada uno y uno de 48 bits (F)
-        // Cada registro tiene un nemónico (nombre), número y uso especial:
-        // A(0)=Acumulador, X(1)=Índice, L(2)=Enlace, B(3)=Base, S(4)=General,
-        // T(5)=General, F(6)=Punto flotante 48 bits, PC/CP(8)=Contador de programa, SW(9)=Palabra de estado
+        // Solo mantenemos esto porque los registros no son tokens individuales en la gramática
         private static readonly HashSet<string> ValidRegisters = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "A",    // Registro 0: Acumulador para operaciones aritméticas y lógicas
-            "X",    // Registro 1: Registro índice para direccionar
-            "L",    // Registro 2: Registro de enlace, para regreso de subrutinas
-            "B",    // Registro 3: Registro base, para direccionamiento
-            "S",    // Registro 4: Registro de aplicación general
-            "T",    // Registro 5: Registro de aplicación general
-            "F",    // Registro 6: Acumulador de punto flotante (48 bits)
-            "PC",   // Registro 8: Contador de programa - dirección de siguiente instrucción
-            "CP",   // Registro 8: Alias de PC (Counter Program = Program Counter)
-            "SW"    // Registro 9: Palabra de estado, información de banderas
+            "A", "X", "L", "B", "S", "T", "F", "PC", "CP", "SW"
         };
 
-        
-        public IReadOnlyList<SICXEError> Errors => _errors; //Exponer la lista de errores como una propiedad de solo lectura
-                                                            //para que otras partes del programa puedan acceder a los errores
-                                                            //encontrados durante el análisis semántico sin permitir modificaciones
-                                                            //externas a la lista.
-        public IReadOnlyList<TokenInfo> Tokens => _tokens;//Exponer la lista de tokens como una propiedad de solo lectura para
-                                                          //que otras partes del programa puedan acceder a los tokens
-                                                          //reconocidos durante el análisis sin permitir modificaciones externas
-                                                          //a la lista.
+        public IReadOnlyList<SICXEError> Errors => _errors;
+        public IReadOnlyList<TokenInfo> Tokens => _tokens;
 
 
         /// <summary>
@@ -169,7 +102,7 @@ namespace laboratorioPractica3
         }
 
         /// <summary>
-        /// Verifica la operación y sus operandos
+        /// Verifica la operación y sus operandos USANDO LA GRAMÁTICA ANTLR
         /// </summary>
         public override void ExitStatement(SICXEParser.StatementContext context)
         {
@@ -177,130 +110,118 @@ namespace laboratorioPractica3
             if (operationContext == null) return;
 
             var operandContext = context.operand();
-            string operation = GetOperationName(operationContext);
             int line = operationContext.Start.Line;
             int column = operationContext.Start.Column;
             int operandCount = operandContext != null ? operandContext.operandExpr().Length : 0;
+            
+            var instruction = operationContext.instruction();
+            var directive = operationContext.directive();
 
-            // Verificar instrucciones sin operandos
-            if (NoOperandInstructions.Contains(operation))
+            // Usar la gramática para determinar el tipo de instrucción
+            if (instruction != null)
             {
-                if (operandCount > 0)
+                // Formato 1: FIX, FLOAT, HIO, NORM, SIO, TIO (sin operandos)
+                if (instruction.format1Instruction() != null)
                 {
-                    _errors.Add(new SICXEError(line, column,
-                        $"La instruccion '{operation}' no requiere operandos, pero se encontraron {operandCount}. Esta instruccion debe usarse sin parametros.",
-                        SICXEErrorType.Semantico));
+                    if (operandCount > 0)
+                    {
+                        string op = instruction.GetText();
+                        _errors.Add(new SICXEError(line, column,
+                            $"La instruccion '{op}' (formato 1) no requiere operandos, pero se encontraron {operandCount}.",
+                            SICXEErrorType.Semantico));
+                    }
+                }
+                // Formato 2: ADDR, CLEAR, COMPR, etc. (registros)
+                else if (instruction.format2Instruction() != null)
+                {
+                    var f2 = instruction.format2Instruction();
+                    string op = instruction.GetText();
+                    
+                    // CLEAR, TIXR requieren 1 registro
+                    if (f2.CLEAR() != null || f2.TIXR() != null)
+                    {
+                        if (operandCount != 1)
+                        {
+                            _errors.Add(new SICXEError(line, column,
+                                $"La instruccion '{op}' requiere exactamente 1 registro.",
+                                SICXEErrorType.Semantico));
+                        }
+                        else if (operandContext != null)
+                        {
+                            ValidateRegisterOperands(operandContext, op, 1);
+                        }
+                    }
+                    // SHIFTL, SHIFTR, SVC requieren registro y número
+                    else if (f2.SHIFTL() != null || f2.SHIFTR() != null || f2.SVC() != null)
+                    {
+                        if (operandCount != 2)
+                        {
+                            _errors.Add(new SICXEError(line, column,
+                                $"La instruccion '{op}' requiere un registro y un numero (formato: REG,n).",
+                                SICXEErrorType.Semantico));
+                        }
+                    }
+                    // ADDR, COMPR, DIVR, MULR, RMO, SUBR requieren 2 registros
+                    else
+                    {
+                        if (operandCount != 2)
+                        {
+                            _errors.Add(new SICXEError(line, column,
+                                $"La instruccion '{op}' requiere exactamente 2 registros (formato: REG1,REG2).",
+                                SICXEErrorType.Semantico));
+                        }
+                        else if (operandContext != null)
+                        {
+                            ValidateRegisterOperands(operandContext, op, 2);
+                        }
+                    }
+                }
+                // Formato 3/4: LDA, STA, JSUB, etc. (memoria)
+                else if (instruction.format34Instruction() != null)
+                {
+                    var f34 = instruction.format34Instruction();
+                    // RSUB no requiere operando
+                    if (f34.RSUB() == null && operandCount == 0)
+                    {
+                        // Generalmente requieren operando pero no es error crítico
+                    }
                 }
             }
-            // Verificar instrucciones que requieren 2 registros
-            else if (TwoRegisterInstructions.Contains(operation))
+            else if (directive != null)
             {
-                if (operandCount != 2)
+                string op = directive.GetText();
+                
+                // Directivas que requieren operando
+                if (directive.START() != null || directive.BYTE() != null || 
+                    directive.WORD() != null || directive.RESB() != null || 
+                    directive.RESW() != null || directive.BASE() != null)
                 {
-                    _errors.Add(new SICXEError(line, column,
-                        $"La instruccion '{operation}' requiere exactamente 2 registros separados por coma (formato: REG1,REG2), pero se encontraron {operandCount} operando(s).",
-                        SICXEErrorType.Semantico));
+                    if (operandCount == 0)
+                    {
+                        _errors.Add(new SICXEError(line, column,
+                            $"La directiva '{op}' requiere al menos un operando.",
+                            SICXEErrorType.Semantico));
+                    }
+                    if (operandContext != null)
+                        ValidateDirectiveOperands(op, operandContext, line, column);
                 }
-                else if (operandContext != null)
+                // END es opcional
+                else if (directive.END() != null)
                 {
-                    ValidateRegisterOperands(operandContext, operation, 2);
+                    if (operandContext != null && operandCount > 0)
+                        ValidateDirectiveOperands(op, operandContext, line, column);
                 }
-            }
-            // Verificar instrucciones que requieren 1 registro
-            else if (OneRegisterInstructions.Contains(operation))
-            {
-                if (operandCount != 1)
+                // Directivas sin operando
+                else if (directive.NOBASE() != null || directive.LTORG() != null || directive.CSECT() != null)
                 {
-                    _errors.Add(new SICXEError(line, column,
-                        $"La instruccion '{operation}' requiere exactamente 1 registro (formato: REG), pero se encontraron {operandCount} operando(s).",
-                        SICXEErrorType.Semantico));
-                }
-                else if (operandContext != null)
-                {
-                    ValidateRegisterOperands(operandContext, operation, 1);
-                }
-            }
-            // Verificar instrucciones registro + número
-            else if (RegisterNumberInstructions.Contains(operation))
-            {
-                if (operandCount != 2)
-                {
-                    _errors.Add(new SICXEError(line, column,
-                        $"La instruccion '{operation}' requiere un registro y un numero separados por coma (formato: REG,n), pero se encontraron {operandCount} operando(s).",
-                        SICXEErrorType.Semantico));
+                    if (operandCount > 0)
+                    {
+                        _errors.Add(new SICXEError(line, column,
+                            $"La directiva '{op}' no debe tener operandos.",
+                            SICXEErrorType.Semantico));
+                    }
                 }
             }
-            // Verificar directivas que requieren operando
-            else if (RequiredOperandDirectives.Contains(operation))
-            {
-                if (operandCount == 0)
-                {
-                    _errors.Add(new SICXEError(line, column,
-                        $"La directiva '{operation}' requiere al menos un operando. Esta directiva no puede usarse sin parametros.",
-                        SICXEErrorType.Semantico));
-                }
-
-                // Validaciones específicas por directiva
-                if (operandContext != null)
-                    ValidateDirectiveOperands(operation, operandContext, line, column);
-            }
-            // Verificar directivas con operando opcional (no generar error si falta)
-            else if (OptionalOperandDirectives.Contains(operation))
-            {
-                // END puede tener o no operando, ambos son válidos
-                // Si tiene operando, validarlo
-                if (operandContext != null && operandCount > 0)
-                    ValidateDirectiveOperands(operation, operandContext, line, column);
-            }
-            // Verificar directivas sin operando
-            else if (NoOperandDirectives.Contains(operation))
-            {
-                if (operandCount > 0)
-                {
-                    _errors.Add(new SICXEError(line, column,
-                        $"La directiva '{operation}' no debe tener operandos. Se encontraron {operandCount} operando(s) cuando no se esperaba ninguno.",
-                        SICXEErrorType.Semantico));
-                }
-            }
-            // Instrucciones de formato 3/4 que requieren dirección/operando
-            else
-            {
-                // La mayoría de instrucciones formato 3/4 requieren operando
-                if (operandCount == 0 && !operation.Equals("RSUB", StringComparison.OrdinalIgnoreCase))
-                {
-                    // Algunas instrucciones pueden omitir operando en ciertos casos
-                    // pero generalmente requieren uno
-                }
-            }
-        }
-
-        /// <summary>
-        /// Obtiene el nombre de la operación desde el contexto
-        /// </summary>
-        /// //este metodo sirve para extraer el nombre de la operación (instrucción o directiva)
-        /// a partir del contexto de la operación en el árbol de análisis sintáctico. y funcona de manera que 
-        /// si la operación es una instrucción, devuelve el texto de la instrucción en mayúsculas,
-        /// si es una directiva, devuelve el texto de la directiva en mayúsculas,
-        /// y si no se encuentra ni instrucción ni directiva, devuelve el texto del contexto de la operación 
-        /// (que podría ser un formato 4) sin el prefijo '+' y en mayúsculas. Esto facilita las comparaciones posteriores 
-        /// durante el análisis semántico 
-        /// al tener un formato uniforme para los nombres de las operaciones.
-        private string GetOperationName(SICXEParser.OperationContext operationContext) //recibe como parametro el contexto de la operación,
-                                                                                       //que puede ser una instrucción o una directiva,
-                                                                                       //y devuelve el nombre de la operación en mayúsculas
-                                                                                       //para facilitar las comparaciones posteriores durante el análisis semántico.
-        {
-            var instructionContext = operationContext.instruction();
-            if (instructionContext != null)
-            {
-                return instructionContext.GetText().ToUpper();
-            }
-            var directiveContext = operationContext.directive();
-            if (directiveContext != null)
-            {
-                return directiveContext.GetText().ToUpper();
-            }
-            return operationContext.GetText().TrimStart('+').ToUpper();
         }
 
         /// <summary>

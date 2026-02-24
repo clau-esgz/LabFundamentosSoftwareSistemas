@@ -234,6 +234,11 @@ class Program
     ///    - Formatos de constantes correctos
     /// 5. Combina y reporta todos los errores
     /// 6. Exporta resultados a CSV
+    /// 
+    /// MANEJO DE ERRORES:
+    /// - Error de sintaxis: Se marca error, NO incrementa CP, etiqueta NO se inserta en TABSIM
+    /// - Instrucción no existe: Se marca error, NO incrementa CP, etiqueta NO se inserta en TABSIM  
+    /// - Símbolo duplicado: Se marca error, pero la línea puede afectar CP si es correcta
     /// </summary>
     static void AnalyzePaso1(string inputFile)
     {
@@ -243,6 +248,10 @@ class Program
         Console.WriteLine();
 
         string input = File.ReadAllText(inputFile);
+        
+        // Guardar las líneas originales para procesar errores
+        // Usar File.ReadAllLines para obtener las líneas correctamente sin problemas con \r\n
+        string[] sourceLines = File.ReadAllLines(inputFile);
         
         if (!input.EndsWith("\n"))
             input += "\n";
@@ -264,9 +273,17 @@ class Program
         parser.AddErrorListener(parserErrorListener);
 
         var tree = parser.program();
+        
+        // Combinar errores léxicos y sintácticos
+        var allExternalErrors = lexerErrorListener.Errors.Concat(parserErrorListener.Errors).ToList();
 
         // Ejecutar Paso 1 (construcción de TABSIM y cálculo de CONTLOC)
         var paso1 = new Paso1();
+        
+        // Pasar errores externos y líneas del código fuente al Paso 1
+        paso1.AddExternalErrors(allExternalErrors);
+        paso1.SetSourceLines(sourceLines);
+        
         var walker = new ParseTreeWalker();
         walker.Walk(paso1, tree);
         

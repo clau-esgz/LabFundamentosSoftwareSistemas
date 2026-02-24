@@ -10,75 +10,49 @@ using System.Threading.Tasks;
 namespace laboratorioPractica3
 {
     /// <summary>
-    /// Implementa el Paso 1 del ensamblador SIC/XE de dos pasadas:
+    /// Implementa el Paso 1 del ensamblador SIC/XE de dos pasadas.
+    /// 
+    /// UTILIZA LA GRAMÁTICA ANTLR EXISTENTE para determinar formatos de instrucciones:
+    /// - format1Instruction (gramática): FIX, FLOAT, HIO, NORM, SIO, TIO -> 1 byte
+    /// - format2Instruction (gramática): ADDR, CLEAR, COMPR, etc. -> 2 bytes
+    /// - format34Instruction (gramática): LDA, STA, JSUB, etc. -> 3 bytes (o 4 con +)
+    /// - directive (gramática): START, END, BYTE, WORD, RESB, RESW, BASE, etc.
     /// 
     /// OBJETIVO DEL PASO 1:
-    /// - Asignar direcciones a todas las instrucciones mediante el CONTLOC (Contador de Localidades)
-    /// - Construir la tabla de símbolos (TABSIM) asociando etiquetas con sus direcciones
-    /// - Generar el archivo intermedio con formato y modo de direccionamiento para el Paso 2
-    /// - Detectar errores semánticos: etiquetas duplicadas, símbolos no definidos, operandos inválidos
-    /// 
-    /// CONCEPTOS CLAVE:
-    /// 
-    /// 1. CONTLOC (Contador de Localidades):
-    ///    - Rastrea la dirección de memoria de cada instrucción
-    ///    - Se inicializa con el valor de la directiva START (o 0 si no existe)
-    ///    - Se incrementa según la longitud de cada instrucción
-    ///    - Formato 1: +1 byte, Formato 2: +2 bytes, Formato 3: +3 bytes, Formato 4: +4 bytes
-    /// 
-    /// 2. TABSIM (Tabla de Símbolos):
-    ///    - Estructura: Dictionary<string, int> donde la clave es el símbolo y el valor es su dirección
-    ///    - Se inserta cuando una etiqueta aparece en el campo de etiqueta de una línea
-    ///    - El valor semántico es el CONTLOC actual (dirección donde está definido el símbolo)
-    /// 
-    /// 3. Valores Semánticos de Directivas:
-    ///    - BYTE C'texto': longitud = número de caracteres (ej: C'EOF' = 3 bytes)
-    ///    - BYTE X'hex': longitud = (número de dígitos hex + 1) / 2 (ej: X'F1' = 1 byte, X'C1C2' = 2 bytes)
-    ///    - WORD: longitud = 3 bytes (1 palabra en SIC/XE)
-    ///    - RESB n: reserva n bytes, longitud = n
-    ///    - RESW n: reserva n palabras, longitud = n * 3
-    /// 
-    /// 4. Longitud del Programa:
-    ///    - Se calcula al finalizar el programa (directiva END)
-    ///    - Fórmula: Longitud = CONTLOC_final - Operando_de_START
-    /// 
-    /// 5. Directiva BASE:
-    ///    - Su valor de operando se almacena para usarlo en el Paso 2
-    ///    - Se utiliza para calcular desplazamientos relativos a la base en formato 3
-    /// 
-    /// 6. Archivo Intermedio:
-    ///    - Contiene: Número de línea, CONTLOC, Etiqueta, Operación, Operando, Formato, Modo de direccionamiento
-    ///    - Sirve como entrada para el Paso 2 del ensamblador
+    /// - Asignar direcciones a todas las instrucciones mediante el CONTLOC
+    /// - Construir la tabla de símbolos (TABSIM)
+    /// - Generar el archivo intermedio para el Paso 2
+    /// - Detectar errores semánticos
     /// </summary>
     public class Paso1 : SICXEBaseListener
     {
         // ═══════════════════ VARIABLES DEL PASO 1 ═══════════════════
         
-        private int CONTLOC = 0;  // Contador de localidades - rastrea la dirección actual
-        private int START_ADDRESS = 0;  // Dirección de inicio del programa (operando de START)
-        private string PROGRAM_NAME = "";  // Nombre del programa (etiqueta de START)
-        private int PROGRAM_LENGTH = 0;  // Longitud total del programa = CONTLOC_final - START_ADDRESS
-        private int? BASE_VALUE = null;  // Valor de la directiva BASE para usar en Paso 2
+        private int CONTLOC = 0;
+        private int START_ADDRESS = 0;
+        private string PROGRAM_NAME = "";
+        private int PROGRAM_LENGTH = 0;
+        private int? BASE_VALUE = null;
         
-        private Dictionary<string, int> TABSIM = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);  // Tabla de símbolos: símbolo -> dirección
-        private List<IntermediateLine> IntermediateLines = new List<IntermediateLine>();  // Archivo intermedio línea por línea
-        private List<SICXEError> Errors = new List<SICXEError>();  // Lista de errores detectados
-        private HashSet<string> ReferencedSymbols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);  // Símbolos usados en operandos
+        private Dictionary<string, int> TABSIM = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        private List<IntermediateLine> IntermediateLines = new List<IntermediateLine>();
+        private List<SICXEError> Errors = new List<SICXEError>();
+        private HashSet<string> ReferencedSymbols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         
-        private int CurrentLine = 0;  // Número de línea actual del archivo fuente
-        private bool ProgramStarted = false;  // Flag para saber si ya se procesó START
+        // Diccionario para rastrear en qué línea se usa cada símbolo (para reportar errores correctamente)
+        private Dictionary<string, List<int>> SymbolUsageLines = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
         
+        private int CurrentLine = 0;
+        private bool ProgramStarted = false;
         
         // ═══════════════════ TABLA DE CÓDIGOS DE OPERACIÓN (OPTAB) ═══════════════════
-        // Contiene todas las instrucciones válidas de SIC/XE con su código de operación y formato
-        // Formato 1: 1 byte (sin operandos)
-        // Formato 2: 2 bytes (operan con registros)
-        // Formato 3: 3 bytes (direccionamiento de memoria)
-        // Formato 4: 4 bytes (direccionamiento extendido, prefijo +)
+        // NOTA: Se mantiene para el PASO 2 (generación de código objeto)
+        // En el PASO 1 usamos la gramática ANTLR para determinar formatos
+        // Esta tabla contiene los OpCodes hexadecimales verificados según especificación SIC/XE
         
-        private static readonly Dictionary<string, OpCodeInfo> OPTAB = new Dictionary<string, OpCodeInfo>(StringComparer.OrdinalIgnoreCase)
+        public static readonly Dictionary<string, OpCodeInfo> OPTAB = new Dictionary<string, OpCodeInfo>(StringComparer.OrdinalIgnoreCase)
         {
-            // Formato 1 (1 byte)
+            // Formato 1 (1 byte) - según gramática: format1Instruction
             { "FIX", new OpCodeInfo { Opcode = 0xC4, Format = 1 } },
             { "FLOAT", new OpCodeInfo { Opcode = 0xC0, Format = 1 } },
             { "HIO", new OpCodeInfo { Opcode = 0xF4, Format = 1 } },
@@ -86,7 +60,7 @@ namespace laboratorioPractica3
             { "SIO", new OpCodeInfo { Opcode = 0xF0, Format = 1 } },
             { "TIO", new OpCodeInfo { Opcode = 0xF8, Format = 1 } },
             
-            // Formato 2 (2 bytes)
+            // Formato 2 (2 bytes) - según gramática: format2Instruction
             { "ADDR", new OpCodeInfo { Opcode = 0x90, Format = 2 } },
             { "CLEAR", new OpCodeInfo { Opcode = 0xB4, Format = 2 } },
             { "COMPR", new OpCodeInfo { Opcode = 0xA0, Format = 2 } },
@@ -99,7 +73,7 @@ namespace laboratorioPractica3
             { "SVC", new OpCodeInfo { Opcode = 0xB0, Format = 2 } },
             { "TIXR", new OpCodeInfo { Opcode = 0xB8, Format = 2 } },
             
-            // Formato 3/4 (3 o 4 bytes)
+            // Formato 3/4 (3 o 4 bytes) - según gramática: format34Instruction
             { "ADD", new OpCodeInfo { Opcode = 0x18, Format = 3 } },
             { "ADDF", new OpCodeInfo { Opcode = 0x58, Format = 3 } },
             { "AND", new OpCodeInfo { Opcode = 0x40, Format = 3 } },
@@ -145,137 +119,215 @@ namespace laboratorioPractica3
         };
         
         // ═══════════════════ TABLA DE REGISTROS SIC/XE ═══════════════════
-        // Registros válidos del sistema SIC/XE con sus códigos numéricos
-        // Se usan en instrucciones de formato 2
-        // Cada registro tiene un nemónico (nombre), número y uso especial:
-        // A(0)=Acumulador, X(1)=Índice, L(2)=Enlace, B(3)=Base, S(4)=General,
-        // T(5)=General, F(6)=Punto flotante 48 bits, PC/CP(8)=Contador de programa, SW(9)=Palabra de estado
-        
-        private static readonly Dictionary<string, int> REGISTERS = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        // Solo mantenemos los registros porque no están en la gramática como tokens individuales
+        private static readonly HashSet<string> REGISTERS = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            { "A", 0 },   // Acumulador para operaciones aritméticas y lógicas
-            { "X", 1 },   // Registro índice para direccionar
-            { "L", 2 },   // Registro de enlace, para regreso de subrutinas
-            { "B", 3 },   // Registro base, para direccionamiento
-            { "S", 4 },   // Registro de aplicación general
-            { "T", 5 },   // Registro de aplicación general
-            { "F", 6 },   // Acumulador de punto flotante (48 bits)
-            { "PC", 8 },  // Contador de programa - dirección de siguiente instrucción
-            { "CP", 8 },  // Alias de PC (Contador de Programa)
-            { "SW", 9 }   // Palabra de estado, información de banderas
+            "A", "X", "L", "B", "S", "T", "F", "PC", "CP", "SW"
         };
-
+        
+        // ═══════════════════ ERRORES EXTERNOS (LÉXICOS/SINTÁCTICOS) ═══════════════════
+        // Almacena errores detectados por el lexer/parser para asociarlos con las líneas del archivo intermedio
+        private List<SICXEError> ExternalErrors = new List<SICXEError>();
+        private string[] SourceLines = Array.Empty<string>();  // Líneas originales del código fuente
+        private HashSet<int> ProcessedErrorLines = new HashSet<int>();  // Líneas de error ya procesadas
 
         public IReadOnlyDictionary<string, int> SymbolTable => TABSIM;
         public IReadOnlyList<IntermediateLine> Lines => IntermediateLines;
-        public IReadOnlyList<SICXEError> ErrorList => Errors;  // Retornar SICXEError
+        public IReadOnlyList<SICXEError> ErrorList => Errors;
         public int ProgramStartAddress => START_ADDRESS;
         public int ProgramSize => PROGRAM_LENGTH;
         public string ProgramName => PROGRAM_NAME;
         public int? BaseValue => BASE_VALUE;
 
         /// <summary>
-        /// MÉTODO PRINCIPAL DEL PASO 1: Procesa cada línea del programa ensamblador
+        /// Agrega errores externos (léxicos/sintácticos) para asociarlos con líneas del archivo intermedio
+        /// </summary>
+        public void AddExternalErrors(IEnumerable<SICXEError> errors)
+        {
+            ExternalErrors.AddRange(errors);
+        }
+
+        /// <summary>
+        /// Establece las líneas originales del código fuente para procesar errores
+        /// </summary>
+        public void SetSourceLines(string[] lines)
+        {
+            SourceLines = lines;
+        }
+
+        /// <summary>
+        /// Propaga errores externos (del analizador semántico) a las líneas del archivo intermedio
+        /// usando el número de línea ANTLR (SourceLine) para mapear correctamente.
+        /// </summary>
+        public void MergeErrors(IEnumerable<SICXEError> errors)
+        {
+            foreach (var error in errors)
+            {
+                var line = IntermediateLines.FirstOrDefault(l => l.SourceLine == error.Line);
+                if (line == null) continue;
+
+                if (string.IsNullOrEmpty(line.Error))
+                    line.Error = error.Message;
+                else if (!line.Error.Contains(error.Message))
+                    line.Error += "; " + error.Message;
+            }
+        }
+
+        /// <summary>
+        /// Verifica si hay un error sintáctico/léxico en una línea específica
+        /// </summary>
+        private bool HasSyntaxErrorOnLine(int lineNumber)
+        {
+            return ExternalErrors.Any(e => e.Line == lineNumber && 
+                (e.Type == SICXEErrorType.Sintactico || e.Type == SICXEErrorType.Lexico));
+        }
+
+        /// <summary>
+        /// Obtiene los errores de una línea específica
+        /// </summary>
+        private List<SICXEError> GetErrorsForLine(int lineNumber)
+        {
+            return ExternalErrors.Where(e => e.Line == lineNumber).ToList();
+        }
+
+        /// <summary>
+        /// MÉTODO PRINCIPAL DEL PASO 1: Usa el contexto de la gramática ANTLR para procesar líneas
         /// 
-        /// FLUJO DE PROCESAMIENTO:
-        /// 1. Extraer componentes de la línea (etiqueta, operación, operando, comentario)
-        /// 2. Si hay etiqueta, insertarla en TABSIM con el valor del CONTLOC actual
-        /// 3. Determinar el formato de la instrucción (1, 2, 3, o 4 bytes)
-        /// 4. Determinar el modo de direccionamiento (inmediato, indirecto, indexado, simple)
-        /// 5. Calcular el incremento del CONTLOC según el tipo de instrucción/directiva
-        /// 6. Agregar línea al archivo intermedio
-        /// 7. Actualizar CONTLOC += incremento
-        /// 
-        /// CASOS ESPECIALES:
-        /// - START: Inicializa CONTLOC con el operando de START
-        /// - END: Calcula la longitud del programa y verifica símbolos no definidos
-        /// - BASE: Almacena su valor para el Paso 2
-        /// - Etiquetas duplicadas: Se detectan y reportan como error
+        /// MANEJO DE ERRORES SEGÚN ESPECIFICACIÓN:
+        /// - Error de sintaxis: Se marca error, NO incrementa CP, etiqueta NO se inserta en TABSIM
+        /// - Instrucción no existe: Se marca error, NO incrementa CP, etiqueta NO se inserta en TABSIM
+        /// - Símbolo duplicado: Se marca error, pero puede afectar CP si la línea es correcta
         /// </summary>
         public override void EnterLine([NotNull] SICXEParser.LineContext context)
         {
             CurrentLine++;
             
+            // Obtener la línea real del contexto de ANTLR
+            int antlrLine = context.Start?.Line ?? CurrentLine;
+            
+            // Verificar si hay error sintáctico/léxico en esta línea (usar línea de ANTLR)
+            bool hasSyntaxError = HasSyntaxErrorOnLine(antlrLine);
+            var lineErrors = GetErrorsForLine(antlrLine);
+            
             var statement = context.statement();
             
-            // Ignorar líneas completamente vacías (sin statement ni comment)
+            // Si no hay statement Y no hay comentario, verificar si hay error en la línea
             if (statement == null && context.comment() == null)
             {
+                // Si hay error sintáctico y NO hemos procesado esta línea antes, crear línea de error
+                if (hasSyntaxError && SourceLines.Length >= antlrLine && !ProcessedErrorLines.Contains(antlrLine))
+                {
+                    ProcessedErrorLines.Add(antlrLine);  // Marcar como procesada
+                    string originalLine = SourceLines[antlrLine - 1];
+                    var errorLine = ParseErrorLine(originalLine, lineErrors);
+                    errorLine.SourceLine = antlrLine;
+                    IntermediateLines.Add(errorLine);
+                    // Agregar errores al listado
+                    foreach (var err in lineErrors)
+                        Errors.Add(err);
+                    // NO incrementar CONTLOC para errores sintácticos
+                }
                 return;
             }
             
-            // Ignorar líneas que solo tienen comentario vacío
             if (statement == null)
             {
                 var commentText = context.comment()?.GetText() ?? "";
                 if (string.IsNullOrWhiteSpace(commentText))
-                {
                     return;
-                }
-                // Si hay un comentario real, agregarlo al archivo intermedio
+                    
                 var intermediateLine = new IntermediateLine
                 {
                     LineNumber = IntermediateLines.Count + 1,
+                    SourceLine = antlrLine,
                     Address = -1,
-                    Label = "",
-                    Operation = "",
-                    Operand = "",
-                    Comment = commentText,
-                    Increment = 0
+                    Comment = commentText
                 };
                 IntermediateLines.Add(intermediateLine);
                 return;
             }
 
-            // Extraer componentes de la línea
+            // Extraer componentes usando el contexto de la gramática
             var label = statement.label()?.GetText();
-            var operation = statement.operation()?.GetText();
+            var operationContext = statement.operation();
             var operand = statement.operand()?.GetText();
             var comment = statement.comment()?.GetText();
+            var operation = operationContext?.GetText();
             
-            // Detectar formato 4: instrucciones con prefijo + (ej: +JSUB, +LDA)
-            bool isFormat4 = operation?.StartsWith("+") == true;
-            string baseOperation = isFormat4 ? operation.Substring(1) : operation;
+            // ═══════════════════ MANEJO MEJORADO DE ERRORES SINTÁCTICOS ═══════════════════
+            // Si hay error sintáctico, SIEMPRE usar la línea original para extraer la información
+            // porque ANTLR puede no haber parseado correctamente
+            if (hasSyntaxError && SourceLines.Length >= antlrLine)
+            {
+                string originalLine = SourceLines[antlrLine - 1];
+                var parsedLine = ParseLineManually(originalLine);
+                
+                // Usar los valores de la línea original si están disponibles
+                // Esto asegura que mostremos LDX y ##5 aunque ANTLR no los haya parseado
+                if (!string.IsNullOrEmpty(parsedLine.Operation))
+                    operation = parsedLine.Operation;
+                if (!string.IsNullOrEmpty(parsedLine.Operand))
+                    operand = parsedLine.Operand;
+                if (!string.IsNullOrEmpty(parsedLine.Label))
+                    label = parsedLine.Label;
+                if (!string.IsNullOrEmpty(parsedLine.Comment))
+                    comment = parsedLine.Comment;
+            }
             
-            // Determinar formato (1, 2, 3, 4) y modo de direccionamiento
-            int format = GetInstructionFormat(baseOperation, isFormat4);
-            string addressingMode = DetermineAddressingMode(operand, format);
+            // USAR LA GRAMÁTICA para determinar el formato de instrucción
+            bool isFormat4 = operationContext?.FORMAT4_PREFIX() != null || (operation?.StartsWith("+") == true);
+            int format = GetFormatFromGrammar(operationContext, isFormat4);
+            // El modo de direccionamiento solo aplica a instrucciones de formato 3 o 4
+            string addressingMode = (format == 3 || format == 4)
+                ? DetermineAddressingModeFromGrammar(statement.operand())
+                : "-";
+            string baseOperation = isFormat4 ? operation?.Substring(1) : operation;
+            
+            // Construir mensaje de error si hay errores en esta línea
+            string errorMsg = "";
+            if (hasSyntaxError)
+            {
+                string errorTypeLabel = GetSyntaxErrorTypeLabel(operation ?? "");
+                errorMsg = $"[{errorTypeLabel}] " + string.Join("; ", lineErrors.Select(e => e.Message));
+            }
 
-            // Crear línea del archivo intermedio con toda la información
             var intermediateLine2 = new IntermediateLine
             {
                 LineNumber = IntermediateLines.Count + 1,
-                Address = CONTLOC,  // Asignar dirección actual
+                SourceLine = antlrLine,
+                Address = CONTLOC,
                 Label = label ?? "",
                 Operation = operation ?? "",
                 Operand = operand ?? "",
                 Comment = comment ?? "",
                 Format = format,
-                AddressingMode = addressingMode
+                AddressingMode = addressingMode,
+                Error = errorMsg
             };
             
-            // Registrar símbolos referenciados en el operando para verificar después
+            // Registrar símbolos referenciados con el número de línea para rastrear errores
             if (!string.IsNullOrEmpty(operand))
-            {
-                RegisterReferencedSymbols(operand);
-            }
+                RegisterReferencedSymbols(operand, IntermediateLines.Count + 1);
 
-            // CASO ESPECIAL: Directiva START
-            // - Marca el inicio del programa
-            // - Define el nombre del programa (etiqueta de START)
-            // - Inicializa el CONTLOC con el operando de START
-            if (operation?.Equals("START", StringComparison.OrdinalIgnoreCase) == true)
+            // Directiva START
+            if (operationContext?.directive()?.START() != null)
             {
                 PROGRAM_NAME = label ?? "NONAME";
                 START_ADDRESS = ParseOperand(operand);
-                CONTLOC = START_ADDRESS;  // Inicializar CONTLOC con la dirección de inicio
+                CONTLOC = START_ADDRESS;
                 intermediateLine2.Address = CONTLOC;
                 ProgramStarted = true;
+                
+                // Para START, insertar etiqueta en TABSIM si existe
+                if (!string.IsNullOrEmpty(label) && !TABSIM.ContainsKey(label))
+                {
+                    TABSIM[label] = CONTLOC;
+                }
+                
                 IntermediateLines.Add(intermediateLine2);
                 return;
             }
 
-            // Si no hay START, inicializar en 0
             if (!ProgramStarted)
             {
                 CONTLOC = 0;
@@ -283,72 +335,399 @@ namespace laboratorioPractica3
                 ProgramStarted = true;
             }
             
-            // CASO ESPECIAL: Directiva BASE
-            // - Almacena el valor de BASE para usarlo en el Paso 2
-            // - Se usa para calcular desplazamientos relativos a la base en formato 3
-            if (operation?.Equals("BASE", StringComparison.OrdinalIgnoreCase) == true)
+            // Directiva BASE
+            if (operationContext?.directive()?.BASE() != null)
             {
-                if (!string.IsNullOrEmpty(operand))
+                if (!string.IsNullOrEmpty(operand) && TABSIM.ContainsKey(operand))
+                    BASE_VALUE = TABSIM[operand];
+            }
+
+            // ═══════════════════ MANEJO DE ERRORES SEGÚN ESPECIFICACIÓN ═══════════════════
+            // Si hay error sintáctico/léxico en esta línea:
+            // - NO insertar etiqueta en TABSIM
+            // - NO incrementar CONTLOC
+            // - Marcar error en archivo intermedio
+            if (hasSyntaxError)
+            {
+                // NO insertar etiqueta en TABSIM cuando hay error sintáctico
+                intermediateLine2.Increment = 0;  // NO incrementar CONTLOC
+                IntermediateLines.Add(intermediateLine2);
+                
+                // Agregar errores a la lista de errores del Paso 1
+                foreach (var err in lineErrors)
                 {
-                    if (TABSIM.ContainsKey(operand))
+                    Errors.Add(err);
+                }
+                
+                
+                // NO incrementar CONTLOC para errores sintácticos
+                return;
+            }
+
+            // ═══════════════════ VALIDACIONES ARQUITECTURALES SIC/XE ═══════════════════
+            // Errores que violan las reglas de formato de la arquitectura SIC/XE.
+            // Al igual que los errores de sintaxis:
+            //   - NO se inserta la etiqueta en TABSIM
+            //   - NO se incrementa CONTLOC
+            {
+                string? architecturalError = null;
+                var instrContext = operationContext?.instruction();
+
+                // Regla 1: El prefijo '+' (formato 4) solo es válido para instrucciones de formato 3
+                if (isFormat4 && instrContext != null)
+                {
+                    if (instrContext.format1Instruction() != null)
                     {
-                        BASE_VALUE = TABSIM[operand];
+                        string opName = (baseOperation ?? "").ToUpper();
+                        architecturalError = $"[Error de sintaxis] El prefijo '+' no es válido para '{opName}' (formato 1) en la arquitectura SIC/XE.";
                     }
-                    else
+                    else if (instrContext.format2Instruction() != null)
                     {
-                        BASE_VALUE = null;
+                        string opName = (baseOperation ?? "").ToUpper();
+                        architecturalError = $"[Error de sintaxis] El prefijo '+' no es válido para '{opName}' (formato 2) en la arquitectura SIC/XE.";
                     }
+                }
+
+                // Regla 2: Instrucciones de formato 1 (FIX, FLOAT, HIO, NORM, SIO, TIO) NO aceptan operandos
+                if (architecturalError == null && format == 1 && !string.IsNullOrEmpty(operand))
+                {
+                    string opName = (baseOperation ?? operation ?? "").ToUpper();
+                    architecturalError = $"[Error de sintaxis] La instrucción '{opName}' (formato 1) no acepta operandos en la arquitectura SIC/XE.";
+                }
+
+                if (architecturalError != null)
+                {
+                    intermediateLine2.Error = string.IsNullOrEmpty(intermediateLine2.Error)
+                        ? architecturalError
+                        : intermediateLine2.Error + "; " + architecturalError;
+                    Errors.Add(new SICXEError(antlrLine, 0, architecturalError, SICXEErrorType.Semantico));
+                    intermediateLine2.Increment = 0;  // NO incrementar CONTLOC
+                    IntermediateLines.Add(intermediateLine2);
+                    // NO insertar etiqueta en TABSIM, NO incrementar CONTLOC
+                    return;
                 }
             }
 
-            // INSERCIÓN EN TABSIM: Si la línea tiene etiqueta, insertarla en la tabla de símbolos
-            // - La clave es el nombre de la etiqueta
-            // - El valor semántico es el CONTLOC actual (dirección donde está definida)
-            // - Se verifica que no exista duplicada
+            // Inserción en TABSIM (solo si NO hay error sintáctico)
             if (!string.IsNullOrEmpty(label))
             {
                 if (TABSIM.ContainsKey(label))
                 {
-                    Errors.Add(new SICXEError(
-                        intermediateLine2.LineNumber,
-                        0,
-                        $"Etiqueta duplicada '{label}'",
-                        SICXEErrorType.Semantico
-                    ));
-                    intermediateLine2.Error = "Etiqueta duplicada";
+                    // Símbolo duplicado: se marca error, pero la línea puede afectar CP si es correcta
+                    string dupError = $"[Símbolo duplicado] La etiqueta '{label}' ya está definida en TABSIM";
+                    Errors.Add(new SICXEError(CurrentLine, 0, dupError, SICXEErrorType.Semantico));
+                    intermediateLine2.Error = dupError;
+                    // NO se inserta en TABSIM
                 }
                 else
                 {
-                    TABSIM[label] = CONTLOC;  // Insertar símbolo con su dirección
+                    TABSIM[label] = CONTLOC;
                 }
             }
 
-            // CÁLCULO DEL INCREMENTO: Determinar cuántos bytes ocupa esta instrucción/directiva
-            // El incremento depende del formato de la instrucción o del tipo de directiva
-            int increment = CalculateIncrement(baseOperation, operand);
+            // Cálculo del incremento usando la gramática
+            int increment = CalculateIncrementFromGrammar(operationContext, operand);
             intermediateLine2.Increment = increment;
             IntermediateLines.Add(intermediateLine2);
 
-            // CASO ESPECIAL: Directiva END
-            // - Marca el fin del programa
-            // - Calcula la longitud total: Longitud = CONTLOC_final - START_ADDRESS
-            // - Verifica que todos los símbolos referenciados estén definidos
-            if (operation?.Equals("END", StringComparison.OrdinalIgnoreCase) == true)
+            // Directiva END
+            if (operationContext?.directive()?.END() != null)
             {
-                PROGRAM_LENGTH = CONTLOC - START_ADDRESS;  // Fórmula de longitud del programa
-                CheckUndefinedSymbols();  // Verificar símbolos no definidos
+                PROGRAM_LENGTH = CONTLOC - START_ADDRESS;
+                CheckUndefinedSymbols();
                 return;
             }
 
-            // ACTUALIZACIÓN DEL CONTLOC: Incrementar según la longitud de la instrucción
-            // Este es el paso crucial del Paso 1: mantener el contador de localidades actualizado
+            // Incrementar CONTLOC (solo si NO hay error sintáctico - ya manejado arriba)
             CONTLOC += increment;
+        }
+
+        /// <summary>
+        /// Crea una línea del archivo intermedio para una línea con error sintáctico
+        /// cuando el parser no pudo generar un contexto válido.
+        /// El CONTLOC NO se incrementa para líneas con error.
+        /// Muestra la información original de la línea del código fuente.
+        /// </summary>
+        private IntermediateLine ParseErrorLine(string originalLine, List<SICXEError> errors)
+        {
+            // Limpiar la línea de comentarios (todo después de . ; o //)
+            string lineWithoutComment = originalLine;
+            string comment = "";
+            
+            // Detectar comentarios estilo //
+            int doubleSlashIndex = originalLine.IndexOf("//");
+            if (doubleSlashIndex >= 0)
+            {
+                comment = originalLine.Substring(doubleSlashIndex);
+                lineWithoutComment = originalLine.Substring(0, doubleSlashIndex);
+            }
+            else
+            {
+                // Detectar comentarios estilo . o ;
+                int commentIndex = originalLine.IndexOfAny(new[] { '.', ';' });
+                if (commentIndex >= 0)
+                {
+                    comment = originalLine.Substring(commentIndex);
+                    lineWithoutComment = originalLine.Substring(0, commentIndex);
+                }
+            }
+            
+            // Separar por espacios y tabs
+            string[] parts = lineWithoutComment.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            
+            string label = "";
+            string operation = "";
+            string operand = "";
+            
+            if (parts.Length > 0)
+            {
+                // Detectar si el primer elemento es una etiqueta o una operación
+                string first = parts[0];
+                
+                // Si comienza con letra y no es una instrucción/directiva conocida, es etiqueta
+                if (char.IsLetter(first[0]) && !IsKnownOperation(first))
+                {
+                    label = first;
+                    if (parts.Length > 1) operation = parts[1];
+                    if (parts.Length > 2) operand = string.Join(" ", parts.Skip(2));
+                }
+                else
+                {
+                    operation = first;
+                    if (parts.Length > 1) operand = string.Join(" ", parts.Skip(1));
+                }
+            }
+            
+            string errorTypeLabel = GetSyntaxErrorTypeLabel(operation);
+            string errorMsg = $"[{errorTypeLabel}] " + string.Join("; ", errors.Select(e => e.Message));
+            
+            return new IntermediateLine
+            {
+                LineNumber = IntermediateLines.Count + 1,
+                Address = CONTLOC,  // Mostrar CP actual (sin incrementar)
+                Label = label,
+                Operation = operation,
+                Operand = operand,
+                Comment = comment,
+                Format = 0,
+                AddressingMode = "-",
+                Increment = 0,  // NO incrementar CONTLOC
+                Error = errorMsg
+            };
+        }
+
+        /// <summary>
+        /// Parsea una línea manualmente para extraer sus componentes
+        /// cuando el parser de ANTLR no pudo hacerlo correctamente debido a errores sintácticos.
+        /// Retorna una tupla con (Label, Operation, Operand, Comment)
+        /// </summary>
+        private (string Label, string Operation, string Operand, string Comment) ParseLineManually(string originalLine)
+        {
+            string label = "";
+            string operation = "";
+            string operand = "";
+            string comment = "";
+            
+            // Limpiar la línea de comentarios (todo después de . ; o //)
+            string lineWithoutComment = originalLine;
+            
+            // Detectar comentarios estilo //
+            int doubleSlashIndex = originalLine.IndexOf("//");
+            if (doubleSlashIndex >= 0)
+            {
+                comment = originalLine.Substring(doubleSlashIndex);
+                lineWithoutComment = originalLine.Substring(0, doubleSlashIndex);
+            }
+            else
+            {
+                // Detectar comentarios estilo . o ;
+                int commentIndex = originalLine.IndexOfAny(new[] { '.', ';' });
+                if (commentIndex >= 0)
+                {
+                    comment = originalLine.Substring(commentIndex);
+                    lineWithoutComment = originalLine.Substring(0, commentIndex);
+                }
+            }
+            
+            // Separar por espacios y tabs
+            string[] parts = lineWithoutComment.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            
+            if (parts.Length > 0)
+            {
+                string first = parts[0];
+                
+                // Si comienza con letra y no es una instrucción/directiva conocida, es etiqueta
+                if (char.IsLetter(first[0]) && !IsKnownOperation(first))
+                {
+                    label = first;
+                    if (parts.Length > 1) operation = parts[1];
+                    if (parts.Length > 2) operand = string.Join(" ", parts.Skip(2));
+                }
+                else
+                {
+                    operation = first;
+                    if (parts.Length > 1) operand = string.Join(" ", parts.Skip(1));
+                }
+            }
+            
+            return (label, operation, operand, comment);
+        }
+
+        /// <summary>
+        /// Determina la etiqueta del tipo de error para la columna ERR del archivo intermedio
+        /// según la especificación del Paso 1:
+        /// - "Instrucción no existe": la operación no pertenece al conjunto de instrucciones SIC/XE
+        /// - "Error de sintaxis": la estructura de la línea es inválida léxica o sintácticamente
+        /// </summary>
+        private string GetSyntaxErrorTypeLabel(string operation)
+        {
+            if (!string.IsNullOrEmpty(operation))
+            {
+                string baseOp = operation.TrimStart('+');
+                if (baseOp.Length > 0 && char.IsLetter(baseOp[0]) && !IsKnownOperation(baseOp))
+                    return "Instrucción no existe";
+            }
+            return "Error de sintaxis";
+        }
+
+        /// <summary>
+        /// Verifica si un texto es una operación conocida (instrucción o directiva)
+        /// </summary>
+        private bool IsKnownOperation(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+            
+            // Remover prefijo + si existe
+            string op = text.TrimStart('+');
+            
+            // Verificar en OPTAB
+            if (OPTAB.ContainsKey(op)) return true;
+            
+            // Verificar directivas
+            var directives = new[] { "START", "END", "BYTE", "WORD", "RESB", "RESW", 
+                                      "BASE", "NOBASE", "EQU", "ORG", "LTORG", "USE",
+                                      "EXTDEF", "EXTREF", "CSECT" };
+            return directives.Contains(op, StringComparer.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// OBTIENE EL FORMATO USANDO EL CONTEXTO DE LA GRAMÁTICA
+        /// En lugar de duplicar listas, usa las reglas definidas en SICXE.g4
+        /// </summary>
+        private int GetFormatFromGrammar(SICXEParser.OperationContext operationContext, bool isFormat4)
+        {
+            if (operationContext == null)
+                return 0;
+                
+            // Si es directiva, no tiene formato
+            if (operationContext.directive() != null)
+                return 0;
+            
+            var instruction = operationContext.instruction();
+            if (instruction == null)
+                return 0;
+
+            // Si tiene prefijo +, es formato 4
+            if (isFormat4)
+                return 4;
+            
+            // Usar las reglas de la gramática para determinar formato
+            if (instruction.format1Instruction() != null)
+                return 1;  // FIX, FLOAT, HIO, NORM, SIO, TIO
+            
+            if (instruction.format2Instruction() != null)
+                return 2;  // ADDR, CLEAR, COMPR, DIVR, MULR, RMO, SHIFTL, SHIFTR, SUBR, SVC, TIXR
+            
+            if (instruction.format34Instruction() != null)
+                return 3;  // ADD, ADDF, AND, COMP, etc.
+            
+            return 0;
+        }
+
+        /// <summary>
+        /// DETERMINA EL MODO DE DIRECCIONAMIENTO USANDO LA GRAMÁTICA
+        /// </summary>
+        private string DetermineAddressingModeFromGrammar(SICXEParser.OperandContext operandContext)
+        {
+            if (operandContext == null)
+                return "-";
+            
+            var operandExprs = operandContext.operandExpr();
+            if (operandExprs == null || operandExprs.Length == 0)
+                return "-";
+            
+            var firstOperand = operandExprs[0];
+            
+            // Usar las reglas de la gramática para detectar modo
+            if (firstOperand.PREFIX_IMMEDIATE() != null)
+                return "Inmediato";  // #valor
+            
+            if (firstOperand.PREFIX_INDIRECT() != null)
+                return "Indirecto";  // @valor
+            
+            // Verificar si tiene indexación
+            if (firstOperand.indexing() != null)
+                return "Indexado";  // valor,X
+            
+            return "Simple";
+        }
+
+        /// <summary>
+        /// CALCULA EL INCREMENTO USANDO LA GRAMÁTICA
+        /// </summary>
+        private int CalculateIncrementFromGrammar(SICXEParser.OperationContext operationContext, string operand)
+        {
+            if (operationContext == null)
+                return 0;
+            
+            var directive = operationContext.directive();
+            if (directive != null)
+            {
+                // Directivas usando la gramática
+                if (directive.END() != null || directive.BASE() != null || 
+                    directive.NOBASE() != null || directive.LTORG() != null)
+                    return 0;
+                
+                if (directive.BYTE() != null)
+                    return CalculateByteSize(operand);
+                
+                if (directive.WORD() != null)
+                    return 3;
+                
+                if (directive.RESB() != null)
+                    return ParseOperand(operand);
+                
+                if (directive.RESW() != null)
+                    return ParseOperand(operand) * 3;
+                
+                return 0;
+            }
+            
+            var instruction = operationContext.instruction();
+            if (instruction != null)
+            {
+                // Formato 4 tiene prefijo +
+                if (operationContext.FORMAT4_PREFIX() != null)
+                    return 4;
+                
+                // Usar las reglas de la gramática
+                if (instruction.format1Instruction() != null)
+                    return 1;
+                
+                if (instruction.format2Instruction() != null)
+                    return 2;
+                
+                if (instruction.format34Instruction() != null)
+                    return 3;
+            }
+            
+            return 0;
         }
         
         /// <summary>
-        /// Registra los símbolos referenciados en un operando
+        /// Registra los símbolos referenciados en un operando y la línea donde se usan
         /// </summary>
-        private void RegisterReferencedSymbols(string operand)
+        private void RegisterReferencedSymbols(string operand, int lineNumber)
         {
             if (string.IsNullOrEmpty(operand))
                 return;
@@ -360,152 +739,46 @@ namespace laboratorioPractica3
             if (!string.IsNullOrEmpty(cleanOperand) && 
                 !char.IsDigit(cleanOperand[0]) && 
                 !cleanOperand.StartsWith("C'") &&
-                !cleanOperand.StartsWith("X'"))
+                !cleanOperand.StartsWith("X'") &&
+                !cleanOperand.EndsWith("H", StringComparison.OrdinalIgnoreCase))
             {
                 ReferencedSymbols.Add(cleanOperand);
+                
+                // Rastrear en qué líneas se usa este símbolo
+                if (!SymbolUsageLines.ContainsKey(cleanOperand))
+                {
+                    SymbolUsageLines[cleanOperand] = new List<int>();
+                }
+                SymbolUsageLines[cleanOperand].Add(lineNumber);
             }
         }
         
         /// <summary>
         /// Verifica símbolos referenciados pero no definidos
+        /// Agrega el error a las líneas correspondientes del archivo intermedio
         /// </summary>
         private void CheckUndefinedSymbols()
         {
             foreach (var symbol in ReferencedSymbols)
             {
-                if (!TABSIM.ContainsKey(symbol) && !REGISTERS.ContainsKey(symbol))
+                if (!TABSIM.ContainsKey(symbol) && !REGISTERS.Contains(symbol))
                 {
-                    Errors.Add(new SICXEError(
-                        0,
-                        0,
-                        $"Símbolo no definido: '{symbol}'",
-                        SICXEErrorType.Semantico
-                    ));
+                    // Obtener las líneas donde se usa este símbolo
+                    if (SymbolUsageLines.ContainsKey(symbol))
+                    {
+                        foreach (var lineNum in SymbolUsageLines[symbol])
+                        {
+                            string errorMsg = $"[Símbolo no definido] La etiqueta '{symbol}' no está definida en TABSIM";
+                            Errors.Add(new SICXEError(lineNum, 0, errorMsg, SICXEErrorType.Semantico));
+                        }
+                    }
+                    else
+                    {
+                        // Si no tenemos la línea específica, reportar en línea 0
+                        Errors.Add(new SICXEError(0, 0, $"Símbolo no definido: '{symbol}'", SICXEErrorType.Semantico));
+                    }
                 }
             }
-        }
-        
-        /// <summary>
-        /// Obtiene el formato de una instrucción
-        /// </summary>
-        private int GetInstructionFormat(string operation, bool isFormat4)
-        {
-            if (string.IsNullOrEmpty(operation))
-                return 0;
-                
-            // Directivas no tienen formato
-            if (IsDirective(operation))
-                return 0;
-            
-            // Si tiene prefijo +, es formato 4
-            if (isFormat4)
-                return 4;
-                
-            // Buscar en OPTAB
-            if (OPTAB.TryGetValue(operation, out var opInfo))
-            {
-                return opInfo.Format;
-            }
-            
-            return 0;
-        }
-        
-        /// <summary>
-        /// DETERMINA EL MODO DE DIRECCIONAMIENTO para instrucciones de formato 3/4
-        /// 
-        /// MODOS DE DIRECCIONAMIENTO EN SIC/XE:
-        /// - Inmediato (#): El operando es el valor a usar (ej: LDA #3)
-        /// - Indirecto (@): El operando es la dirección de la dirección del valor (ej: LDA @POINTER)
-        /// - Indexado (,X): Usa el registro X como índice (ej: LDA BUFFER,X)
-        /// - Simple: Direccionamiento directo estándar (ej: LDA VALUE)
-        /// </summary>
-        private string DetermineAddressingMode(string operand, int format)
-        {
-            if (string.IsNullOrEmpty(operand) || format == 0)
-                return "-";
-            
-            // Formato 1: sin modo de direccionamiento
-            if (format == 1)
-                return "-";
-            
-            // Formato 2: registros, sin modo de direccionamiento
-            if (format == 2)
-                return "-";
-            
-            // Formato 3/4: detectar modo según prefijos y sufijos
-            if (operand.StartsWith("#"))
-                return "Inmediato";  // #3, #LENGTH
-            else if (operand.StartsWith("@"))
-                return "Indirecto";  // @POINTER
-            else if (operand.Contains(",X") || operand.Contains(", X"))
-                return "Indexado";   // BUFFER,X
-            else
-                return "Simple";     // VALUE
-        }
-
-        /// <summary>
-        /// CÁLCULO DEL INCREMENTO DEL CONTLOC: Determina cuántos bytes ocupa una instrucción/directiva
-        /// 
-        /// REGLAS DE CÁLCULO:
-        /// 
-        /// INSTRUCCIONES:
-        /// - Formato 1: 1 byte (FIX, FLOAT, HIO, NORM, SIO, TIO)
-        /// - Formato 2: 2 bytes (ADDR, CLEAR, COMPR, RMO, etc.)
-        /// - Formato 3: 3 bytes (LDA, STA, COMP, JSUB, etc.)
-        /// - Formato 4: 4 bytes (instrucciones con prefijo +, ej: +JSUB, +LDA)
-        /// 
-        /// DIRECTIVAS:
-        /// - BYTE C'texto': longitud = número de caracteres (ej: C'EOF' = 3 bytes)
-        /// - BYTE X'hexadecimal': longitud = (dígitos hex + 1) / 2 (ej: X'F1' = 1 byte, X'05' = 1 byte)
-        /// - WORD: 3 bytes (1 palabra = 3 bytes en SIC/XE)
-        /// - RESB n: n bytes (reserva n bytes)
-        /// - RESW n: n * 3 bytes (reserva n palabras)
-        /// - BASE, NOBASE, LTORG, END: 0 bytes (no ocupan espacio)
-        /// </summary>
-        private int CalculateIncrement(string operation, string operand)
-        {
-            if (string.IsNullOrEmpty(operation))
-                return 0;
-
-            if (operation.Equals("END", StringComparison.OrdinalIgnoreCase))
-                return 0;
-            
-            if (operation.Equals("BYTE", StringComparison.OrdinalIgnoreCase))
-                return CalculateByteSize(operand);
-            
-            if (operation.Equals("WORD", StringComparison.OrdinalIgnoreCase))
-                return 3;
-            
-            if (operation.Equals("RESB", StringComparison.OrdinalIgnoreCase))
-                return ParseOperand(operand);
-            
-            if (operation.Equals("RESW", StringComparison.OrdinalIgnoreCase))
-                return ParseOperand(operand) * 3;
-            
-            if (operation.Equals("BASE", StringComparison.OrdinalIgnoreCase) ||
-                operation.Equals("NOBASE", StringComparison.OrdinalIgnoreCase) ||
-                operation.Equals("LTORG", StringComparison.OrdinalIgnoreCase))
-                return 0;
-
-            if (operation.StartsWith("+"))
-                return 4;
-            
-            if (IsFormat1Instruction(operation))
-                return 1;
-            
-            if (IsFormat2Instruction(operation))
-                return 2;
-            
-            if (IsFormat3Instruction(operation))
-                return 3;
-
-            Errors.Add(new SICXEError(
-                CurrentLine,
-                0,
-                $"Instrucción desconocida '{operation}'",
-                SICXEErrorType.Semantico
-            ));
-            return 3;
         }
 
         /// <summary>
@@ -543,61 +816,47 @@ namespace laboratorioPractica3
         }
 
         /// <summary>
-        /// PARSEO DE OPERANDOS NUMÉRICOS
-        /// 
-        /// Convierte operandos a valores enteros:
-        /// - Soporta hexadecimal con prefijo 0x: 0x1000
-        /// - Soporta hexadecimal sin prefijo: 1000 (si tiene más de 3 dígitos hex)
-        /// - Soporta decimal: 4096
-        /// - Remueve prefijos de direccionamiento: #, @, =
+        /// Parseo de operandos numéricos
+        /// Soporta:
+        /// - Decimal: 100, 256
+        /// - Hexadecimal con sufijo H: 12H, 100H, 0ABCh
+        /// - Hexadecimal con prefijo 0x: 0x12, 0x100
+        /// - Constante X'...': X'12', X'ABC'
         /// </summary>
         private int ParseOperand(string operand)
         {
             if (string.IsNullOrEmpty(operand))
                 return 0;
 
-            // Remover prefijos de direccionamiento
-            operand = operand.TrimStart('#', '@', '=');
+            operand = operand.TrimStart('#', '@', '=').Trim();
 
             try
             {
-                // Hexadecimal con prefijo 0x
+                // Hexadecimal con sufijo H o h (ej: 12H, 100h, 0ABCh)
+                if (operand.EndsWith("H", StringComparison.OrdinalIgnoreCase))
+                {
+                    string hexPart = operand.Substring(0, operand.Length - 1);
+                    return Convert.ToInt32(hexPart, 16);
+                }
+                
+                // Hexadecimal con prefijo 0x (ej: 0x12, 0xFF)
                 if (operand.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
                     return Convert.ToInt32(operand, 16);
-                // Hexadecimal sin prefijo (si tiene >3 dígitos hexadecimales)
-                else if (operand.All(c => "0123456789ABCDEFabcdef".Contains(c)) && operand.Length > 3)
-                    return Convert.ToInt32(operand, 16);
-                // Decimal
-                else
-                    return int.Parse(operand);
+                
+                // Constante hexadecimal X'...' (ej: X'12', X'ABC')
+                if (operand.StartsWith("X'", StringComparison.OrdinalIgnoreCase) && operand.EndsWith("'"))
+                {
+                    string hexPart = operand.Substring(2, operand.Length - 3);
+                    return Convert.ToInt32(hexPart, 16);
+                }
+                
+                // Número decimal
+                return int.Parse(operand);
             }
             catch
             {
                 return 0;
             }
-        }
-
-        private bool IsFormat1Instruction(string op)
-        {
-            return OPTAB.TryGetValue(op, out var info) && info.Format == 1;
-        }
-
-        private bool IsFormat2Instruction(string op)
-        {
-            return OPTAB.TryGetValue(op, out var info) && info.Format == 2;
-        }
-
-        private bool IsFormat3Instruction(string op)
-        {
-            return OPTAB.TryGetValue(op, out var info) && info.Format == 3;
-        }
-        
-        private bool IsDirective(string op)
-        {
-            if (string.IsNullOrEmpty(op)) return false;
-            var directives = new[] { "START", "END", "BYTE", "WORD", "RESB", "RESW", 
-                                      "BASE", "NOBASE", "EQU", "ORG", "LTORG" };
-            return directives.Contains(op, StringComparer.OrdinalIgnoreCase);
         }
 
         public string GenerateReport()
@@ -635,14 +894,19 @@ namespace laboratorioPractica3
 
             sb.AppendLine("═══════════════════ ARCHIVO INTERMEDIO ═══════════════════════════");
             sb.AppendLine($"{"#",-4} | {"CONTLOC",-8} | {"ETQ",-10} | {"CODOP",-10} | {"OPR",-15} | {"FMT",-4} | {"MOD",-12} | {"ERR"}");
-            sb.AppendLine(new string('─', 90));
+            sb.AppendLine(new string('─', 110));
             
             foreach (var line in IntermediateLines)
             {
                 string loc = (line.Address >= 0) ? $"{line.Address:X4}h" : "";
                 string fmt = (line.Format > 0) ? $"{line.Format}" : "-";
+                string errorDisplay = line.Error ?? "";
                 
-                sb.AppendLine($"{line.LineNumber,-4} | {loc,-8} | {line.Label,-10} | {line.Operation,-10} | {line.Operand,-15} | {fmt,-4} | {line.AddressingMode,-12} | {line.Error}");
+                // Truncar error si es muy largo para la consola
+                if (errorDisplay.Length > 40)
+                    errorDisplay = errorDisplay.Substring(0, 37) + "...";
+                
+                sb.AppendLine($"{line.LineNumber,-4} | {loc,-8} | {line.Label,-10} | {line.Operation,-10} | {line.Operand,-15} | {fmt,-4} | {line.AddressingMode,-12} | {errorDisplay}");
             }
             sb.AppendLine();
 
@@ -650,14 +914,41 @@ namespace laboratorioPractica3
             {
                 sb.AppendLine("═══════════════════ ERRORES DETECTADOS ══════════════════════════");
                 
+                // Agrupar errores por tipo
+                var lexicalErrors = Errors.Where(e => e.Type == SICXEErrorType.Lexico).OrderBy(e => e.Line);
+                var syntaxErrors = Errors.Where(e => e.Type == SICXEErrorType.Sintactico).OrderBy(e => e.Line);
                 var semanticErrors = Errors.Where(e => e.Type == SICXEErrorType.Semantico).OrderBy(e => e.Line);
                 
-                foreach (var error in semanticErrors)
+                if (lexicalErrors.Any())
                 {
-                    sb.AppendLine($"  • {error}");
+                    sb.AppendLine("  [ERRORES LÉXICOS]");
+                    foreach (var error in lexicalErrors)
+                    {
+                        sb.AppendLine($"  • {error}");
+                    }
+                    sb.AppendLine();
                 }
                 
-                sb.AppendLine();
+                if (syntaxErrors.Any())
+                {
+                    sb.AppendLine("  [ERRORES SINTÁCTICOS]");
+                    foreach (var error in syntaxErrors)
+                    {
+                        sb.AppendLine($"  • {error}");
+                    }
+                    sb.AppendLine();
+                }
+                
+                if (semanticErrors.Any())
+                {
+                    sb.AppendLine("  [ERRORES SEMÁNTICOS]");
+                    foreach (var error in semanticErrors)
+                    {
+                        sb.AppendLine($"  • {error}");
+                    }
+                    sb.AppendLine();
+                }
+                
                 sb.AppendLine($"  Total errores: {Errors.Count}");
             }
 
@@ -805,7 +1096,7 @@ namespace laboratorioPractica3
             
             // ═══════════════════ SECCIÓN 2: ARCHIVO INTERMEDIO ═══════════════════
             sb.AppendLine("=== ARCHIVO INTERMEDIO ===");
-            sb.AppendLine("NL,CONTLOC_HEX,CONTLOC_DEC,ETQ,CODOP,OPR,FMT,MOD,COMENTARIO");
+            sb.AppendLine("NL,CONTLOC_HEX,CONTLOC_DEC,ETQ,CODOP,OPR,FMT,MOD,ERR,COMENTARIO");
             
             foreach (var line in IntermediateLines)
             {
@@ -814,7 +1105,22 @@ namespace laboratorioPractica3
                 string addressDec = (line.Address >= 0) ? $"{line.Address}" : "\"\"";
                 string fmt = (line.Format > 0) ? $"{line.Format}" : "\"\"";
                 
-                sb.AppendLine($"{line.LineNumber},{addressHex},{addressDec},{FormatCSVCell(line.Label)},{FormatCSVCell(line.Operation)},{FormatCSVCell(line.Operand)},{fmt},{FormatCSVCell(line.AddressingMode)},{FormatCSVCell(line.Comment)}");
+                // Obtener errores para esta línea usando SourceLine para mapeo correcto
+                string errorMsg = line.Error ?? "";
+                if (allErrors != null)
+                {
+                    var lineErrors = allErrors.Where(e => e.Line == line.SourceLine);
+                    if (lineErrors.Any())
+                    {
+                        string additionalErrors = string.Join("; ", lineErrors
+                            .Select(e => e.Message)
+                            .Where(m => !errorMsg.Contains(m)));
+                        if (!string.IsNullOrEmpty(additionalErrors))
+                            errorMsg = string.IsNullOrEmpty(errorMsg) ? additionalErrors : errorMsg + "; " + additionalErrors;
+                    }
+                }
+                
+                sb.AppendLine($"{line.LineNumber},{addressHex},{addressDec},{FormatCSVCell(line.Label)},{FormatCSVCell(line.Operation)},{FormatCSVCell(line.Operand)},{fmt},{FormatCSVCell(line.AddressingMode)},{FormatCSVCell(errorMsg)},{FormatCSVCell(line.Comment)}");
             }
 
             File.WriteAllText(outputPath, sb.ToString(), utf8WithBom);
@@ -952,6 +1258,7 @@ namespace laboratorioPractica3
 
         /// <summary>
         /// Formatea una celda para CSV, escapando valores especiales y forzando formato texto
+        /// IMPORTANTE: Previene que Excel interprete valores como fórmulas
         /// </summary>
         private string FormatCSVCell(string value)
         {
@@ -960,6 +1267,15 @@ namespace laboratorioPractica3
 
             // Escapar comillas dobles
             value = value.Replace("\"", "\"\"");
+            
+            // Prevenir interpretación como fórmula en Excel
+            // Caracteres que Excel interpreta como inicio de fórmula: +, -, =, @
+            if (value.StartsWith("+") || value.StartsWith("-") || value.StartsWith("=") || value.StartsWith("@"))
+            {
+                // Agregar apóstrofo al inicio para forzar texto (se ocultará en Excel)
+                // O simplemente agregar un espacio que Excel preserva
+                value = "'" + value;
+            }
             
             // Siempre usar comillas para mantener formato consistente
             return $"\"{value}\"";
@@ -985,6 +1301,7 @@ namespace laboratorioPractica3
     public class IntermediateLine
     {
         public int LineNumber { get; set; }
+        public int SourceLine { get; set; }  // Número de línea ANTLR (fuente original)
         public int Address { get; set; }
         public string Label { get; set; } = "";
         public string Operation { get; set; } = "";

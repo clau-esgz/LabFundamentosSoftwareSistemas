@@ -46,8 +46,8 @@ public partial class SICXEParser : Parser {
 		WORD=63, RESB=64, RESW=65, BASE=66, NOBASE=67, EQU=68, ORG=69, LTORG=70, 
 		USE=71, EXTDEF=72, EXTREF=73, CSECT=74, FORMAT4_PREFIX=75, PREFIX_INDIRECT=76, 
 		PREFIX_IMMEDIATE=77, COMMA=78, STAR=79, LITERAL_HEX=80, LITERAL_CHAR=81, 
-		LITERAL_NUM=82, HEXCONST=83, CHARCONST=84, NUMBER=85, IDENT=86, COMMENT=87, 
-		NEWLINE=88, WS=89;
+		LITERAL_NUM=82, HEXCONST=83, CHARCONST=84, HEXNUMBER=85, NUMBER=86, IDENT=87, 
+		COMMENT=88, NEWLINE=89, WS=90;
 	public const int
 		RULE_program = 0, RULE_line = 1, RULE_statement = 2, RULE_label = 3, RULE_operation = 4, 
 		RULE_format1Instruction = 5, RULE_format2Instruction = 6, RULE_format34Instruction = 7, 
@@ -78,8 +78,8 @@ public partial class SICXEParser : Parser {
 		"WD", "START", "END", "BYTE", "WORD", "RESB", "RESW", "BASE", "NOBASE", 
 		"EQU", "ORG", "LTORG", "USE", "EXTDEF", "EXTREF", "CSECT", "FORMAT4_PREFIX", 
 		"PREFIX_INDIRECT", "PREFIX_IMMEDIATE", "COMMA", "STAR", "LITERAL_HEX", 
-		"LITERAL_CHAR", "LITERAL_NUM", "HEXCONST", "CHARCONST", "NUMBER", "IDENT", 
-		"COMMENT", "NEWLINE", "WS"
+		"LITERAL_CHAR", "LITERAL_NUM", "HEXCONST", "CHARCONST", "HEXNUMBER", "NUMBER", 
+		"IDENT", "COMMENT", "NEWLINE", "WS"
 	};
 	public static readonly IVocabulary DefaultVocabulary = new Vocabulary(_LiteralNames, _SymbolicNames);
 
@@ -155,7 +155,7 @@ public partial class SICXEParser : Parser {
 			State = 35;
 			ErrorHandler.Sync(this);
 			_la = TokenStream.LA(1);
-			while ((((_la) & ~0x3f) == 0 && ((1L << _la) & -2L) != 0) || ((((_la - 64)) & ~0x3f) == 0 && ((1L << (_la - 64)) & 29364223L) != 0)) {
+			while ((((_la) & ~0x3f) == 0 && ((1L << _la) & -2L) != 0) || ((((_la - 64)) & ~0x3f) == 0 && ((1L << (_la - 64)) & 58724351L) != 0)) {
 				{
 				{
 				State = 32;
@@ -336,7 +336,7 @@ public partial class SICXEParser : Parser {
 			State = 60;
 			ErrorHandler.Sync(this);
 			_la = TokenStream.LA(1);
-			if (((((_la - 76)) & ~0x3f) == 0 && ((1L << (_la - 76)) & 2043L) != 0)) {
+			if (((((_la - 76)) & ~0x3f) == 0 && ((1L << (_la - 76)) & 4091L) != 0)) {
 				{
 				State = 59;
 				operand();
@@ -1135,6 +1135,7 @@ public partial class SICXEParser : Parser {
 			case STAR:
 			case HEXCONST:
 			case CHARCONST:
+			case HEXNUMBER:
 			case NUMBER:
 			case IDENT:
 				EnterOuterAlt(_localctx, 3);
@@ -1229,6 +1230,7 @@ public partial class SICXEParser : Parser {
 
 	public partial class OperandValueContext : ParserRuleContext {
 		[System.Diagnostics.DebuggerNonUserCode] public ITerminalNode IDENT() { return GetToken(SICXEParser.IDENT, 0); }
+		[System.Diagnostics.DebuggerNonUserCode] public ITerminalNode HEXNUMBER() { return GetToken(SICXEParser.HEXNUMBER, 0); }
 		[System.Diagnostics.DebuggerNonUserCode] public ITerminalNode NUMBER() { return GetToken(SICXEParser.NUMBER, 0); }
 		[System.Diagnostics.DebuggerNonUserCode] public ITerminalNode HEXCONST() { return GetToken(SICXEParser.HEXCONST, 0); }
 		[System.Diagnostics.DebuggerNonUserCode] public ITerminalNode CHARCONST() { return GetToken(SICXEParser.CHARCONST, 0); }
@@ -1266,7 +1268,7 @@ public partial class SICXEParser : Parser {
 			{
 			State = 112;
 			_la = TokenStream.LA(1);
-			if ( !(((((_la - 79)) & ~0x3f) == 0 && ((1L << (_la - 79)) & 241L) != 0)) ) {
+			if ( !(((((_la - 79)) & ~0x3f) == 0 && ((1L << (_la - 79)) & 497L) != 0)) ) {
 			ErrorHandler.RecoverInline(this);
 			}
 			else {
@@ -1391,7 +1393,7 @@ public partial class SICXEParser : Parser {
 	}
 
 	private static int[] _serializedATN = {
-		4,1,89,119,2,0,7,0,2,1,7,1,2,2,7,2,2,3,7,3,2,4,7,4,2,5,7,5,2,6,7,6,2,7,
+		4,1,90,119,2,0,7,0,2,1,7,1,2,2,7,2,2,3,7,3,2,4,7,4,2,5,7,5,2,6,7,6,2,7,
 		7,7,2,8,7,8,2,9,7,9,2,10,7,10,2,11,7,11,2,12,7,12,2,13,7,13,2,14,7,14,
 		2,15,7,15,1,0,5,0,34,8,0,10,0,12,0,37,9,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,
 		1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,1,54,8,1,1,2,3,2,57,8,2,1,2,1,2,3,2,
@@ -1402,19 +1404,19 @@ public partial class SICXEParser : Parser {
 		1,15,1,15,1,15,0,0,16,0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,0,6,4,
 		0,12,14,32,32,39,39,56,56,10,0,2,2,5,5,7,7,10,10,30,30,35,35,37,38,52,
 		52,54,54,57,57,13,0,1,1,3,4,6,6,8,9,11,11,15,29,31,31,33,34,36,36,40,51,
-		53,53,55,55,58,59,1,0,60,74,2,0,79,79,83,86,1,0,80,82,120,0,35,1,0,0,0,
+		53,53,55,55,58,59,1,0,60,74,2,0,79,79,83,87,1,0,80,82,120,0,35,1,0,0,0,
 		2,53,1,0,0,0,4,56,1,0,0,0,6,65,1,0,0,0,8,72,1,0,0,0,10,74,1,0,0,0,12,76,
 		1,0,0,0,14,78,1,0,0,0,16,83,1,0,0,0,18,85,1,0,0,0,20,87,1,0,0,0,22,107,
 		1,0,0,0,24,109,1,0,0,0,26,112,1,0,0,0,28,114,1,0,0,0,30,116,1,0,0,0,32,
 		34,3,2,1,0,33,32,1,0,0,0,34,37,1,0,0,0,35,33,1,0,0,0,35,36,1,0,0,0,36,
 		38,1,0,0,0,37,35,1,0,0,0,38,39,5,0,0,1,39,1,1,0,0,0,40,41,3,4,2,0,41,42,
-		5,88,0,0,42,54,1,0,0,0,43,44,3,4,2,0,44,45,5,0,0,1,45,54,1,0,0,0,46,47,
-		3,30,15,0,47,48,5,88,0,0,48,54,1,0,0,0,49,50,3,30,15,0,50,51,5,0,0,1,51,
-		54,1,0,0,0,52,54,5,88,0,0,53,40,1,0,0,0,53,43,1,0,0,0,53,46,1,0,0,0,53,
+		5,89,0,0,42,54,1,0,0,0,43,44,3,4,2,0,44,45,5,0,0,1,45,54,1,0,0,0,46,47,
+		3,30,15,0,47,48,5,89,0,0,48,54,1,0,0,0,49,50,3,30,15,0,50,51,5,0,0,1,51,
+		54,1,0,0,0,52,54,5,89,0,0,53,40,1,0,0,0,53,43,1,0,0,0,53,46,1,0,0,0,53,
 		49,1,0,0,0,53,52,1,0,0,0,54,3,1,0,0,0,55,57,3,6,3,0,56,55,1,0,0,0,56,57,
 		1,0,0,0,57,58,1,0,0,0,58,60,3,8,4,0,59,61,3,20,10,0,60,59,1,0,0,0,60,61,
 		1,0,0,0,61,63,1,0,0,0,62,64,3,30,15,0,63,62,1,0,0,0,63,64,1,0,0,0,64,5,
-		1,0,0,0,65,66,5,86,0,0,66,7,1,0,0,0,67,69,5,75,0,0,68,67,1,0,0,0,68,69,
+		1,0,0,0,65,66,5,87,0,0,66,7,1,0,0,0,67,69,5,75,0,0,68,67,1,0,0,0,68,69,
 		1,0,0,0,69,70,1,0,0,0,70,73,3,16,8,0,71,73,3,18,9,0,72,68,1,0,0,0,72,71,
 		1,0,0,0,73,9,1,0,0,0,74,75,7,0,0,0,75,11,1,0,0,0,76,77,7,1,0,0,77,13,1,
 		0,0,0,78,79,7,2,0,0,79,15,1,0,0,0,80,84,3,10,5,0,81,84,3,12,6,0,82,84,
@@ -1425,9 +1427,9 @@ public partial class SICXEParser : Parser {
 		0,98,99,1,0,0,0,99,108,1,0,0,0,100,101,5,77,0,0,101,108,3,26,13,0,102,
 		104,3,26,13,0,103,105,3,24,12,0,104,103,1,0,0,0,104,105,1,0,0,0,105,108,
 		1,0,0,0,106,108,3,28,14,0,107,95,1,0,0,0,107,100,1,0,0,0,107,102,1,0,0,
-		0,107,106,1,0,0,0,108,23,1,0,0,0,109,110,5,78,0,0,110,111,5,86,0,0,111,
+		0,107,106,1,0,0,0,108,23,1,0,0,0,109,110,5,78,0,0,110,111,5,87,0,0,111,
 		25,1,0,0,0,112,113,7,4,0,0,113,27,1,0,0,0,114,115,7,5,0,0,115,29,1,0,0,
-		0,116,117,5,87,0,0,117,31,1,0,0,0,12,35,53,56,60,63,68,72,83,92,98,104,
+		0,116,117,5,88,0,0,117,31,1,0,0,0,12,35,53,56,60,63,68,72,83,92,98,104,
 		107
 	};
 
