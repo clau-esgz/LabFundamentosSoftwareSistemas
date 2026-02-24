@@ -608,10 +608,89 @@ namespace laboratorioPractica3
             ExportIntermediateListingToCSV(intermediatePath);
             ExportSummaryToCSV(summaryPath);
 
-            Console.WriteLine("📁 Archivos CSV generados:");
-            Console.WriteLine($"  ✓ Tabla de símbolos: {Path.GetFileName(symtabPath)}");
-            Console.WriteLine($"  ✓ Listado intermedio: {Path.GetFileName(intermediatePath)}");
-            Console.WriteLine($"  ✓ Resumen: {Path.GetFileName(summaryPath)}");
+            Console.WriteLine("Archivos CSV generados:");
+            Console.WriteLine($"  - Tabla de simbolos: {Path.GetFileName(symtabPath)}");
+            Console.WriteLine($"  - Listado intermedio: {Path.GetFileName(intermediatePath)}");
+            Console.WriteLine($"  - Resumen: {Path.GetFileName(summaryPath)}");
+        }
+
+        /// <summary>
+        /// Exporta TABSIM y archivo intermedio en UN SOLO archivo CSV
+        /// El formato incluye: Resumen del programa, Tabla de símbolos y Archivo intermedio
+        /// </summary>
+        public void ExportToSingleCSV(string outputPath, List<SICXEError>? allErrors = null)
+        {
+            var sb = new StringBuilder();
+            var errorsToUse = allErrors ?? Errors.ToList();
+            
+            // ═══════════════════ SECCIÓN 1: RESUMEN DEL PROGRAMA ═══════════════════
+            sb.AppendLine("=== RESUMEN DEL PROGRAMA ===");
+            sb.AppendLine("PROPIEDAD,VALOR_HEX,VALOR_DEC");
+            sb.AppendLine($"NOMBRE_PROGRAMA,{PROGRAM_NAME},{PROGRAM_NAME}");
+            sb.AppendLine($"DIRECCION_INICIO,{START_ADDRESS:X4},{START_ADDRESS}");
+            sb.AppendLine($"LONGITUD_PROGRAMA,{PROGRAM_LENGTH:X4},{PROGRAM_LENGTH}");
+            sb.AppendLine($"TOTAL_SIMBOLOS,,{TABSIM.Count}");
+            sb.AppendLine($"TOTAL_LINEAS,,{IntermediateLines.Count}");
+            sb.AppendLine($"TOTAL_ERRORES,,{errorsToUse.Count}");
+            if (BASE_VALUE.HasValue)
+                sb.AppendLine($"VALOR_BASE,{BASE_VALUE.Value:X4},{BASE_VALUE.Value}");
+            sb.AppendLine();
+            
+            // ═══════════════════ SECCIÓN 2: TABLA DE SÍMBOLOS (TABSIM) ═══════════════════
+            sb.AppendLine("=== TABLA DE SIMBOLOS (TABSIM) ===");
+            sb.AppendLine("SIMBOLO,DIRECCION_HEX,DIRECCION_DEC");
+            
+            foreach (var symbol in TABSIM.OrderBy(s => s.Value))
+            {
+                sb.AppendLine($"{symbol.Key},{symbol.Value:X4},{symbol.Value}");
+            }
+            
+            if (TABSIM.Count == 0)
+            {
+                sb.AppendLine("(Sin simbolos definidos),,");
+            }
+            sb.AppendLine();
+            
+            // ═══════════════════ SECCIÓN 3: ARCHIVO INTERMEDIO ═══════════════════
+            sb.AppendLine("=== ARCHIVO INTERMEDIO ===");
+            sb.AppendLine("NL,CONTLOC_HEX,CONTLOC_DEC,ETQ,CODOP,OPR,FMT,MOD,ERR,COMENTARIO");
+            
+            foreach (var line in IntermediateLines)
+            {
+                string addressHex = (line.Address >= 0) ? $"{line.Address:X4}" : "";
+                string addressDec = (line.Address >= 0) ? $"{line.Address}" : "";
+                string fmt = (line.Format > 0) ? $"{line.Format}" : "";
+                
+                // Buscar todos los errores para esta línea
+                var lineErrors = errorsToUse.Where(e => e.Line == line.LineNumber);
+                string errorMsg = "";
+                
+                if (lineErrors.Any())
+                {
+                    errorMsg = string.Join("; ", lineErrors.Select(e => e.Message));
+                }
+                else if (!string.IsNullOrEmpty(line.Error))
+                {
+                    errorMsg = line.Error;
+                }
+                
+                sb.AppendLine($"{line.LineNumber},{addressHex},{addressDec},{EscapeCSV(line.Label)},{EscapeCSV(line.Operation)},{EscapeCSV(line.Operand)},{fmt},{EscapeCSV(line.AddressingMode)},{EscapeCSV(errorMsg)},{EscapeCSV(line.Comment)}");
+            }
+            sb.AppendLine();
+            
+            // ═══════════════════ SECCIÓN 4: LISTADO DE ERRORES ═══════════════════
+            if (errorsToUse.Count > 0)
+            {
+                sb.AppendLine("=== ERRORES DETECTADOS ===");
+                sb.AppendLine("LINEA,COLUMNA,TIPO,MENSAJE");
+                
+                foreach (var error in errorsToUse.OrderBy(e => e.Line).ThenBy(e => e.Column))
+                {
+                    sb.AppendLine($"{error.Line},{error.Column},{error.Type},{EscapeCSV(error.Message)}");
+                }
+            }
+
+            File.WriteAllText(outputPath, sb.ToString(), Encoding.UTF8);
         }
 
         private string EscapeCSV(string value)

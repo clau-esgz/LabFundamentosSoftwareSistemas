@@ -1,26 +1,38 @@
 {
   "Version": 1,
-  "WorkspaceRootPath": "C:\\Users\\espin\\OneDrive\\Desktop\\Fundamentos software de sistemas\\Labo\\laboratorioPractica3\\",
+  "WorkspaceRootPath": "C:\\Users\\aleja\\OneDrive\\Escritorio\\fundamentos ss\\LabFundamentosSoftwareSistemas\\LabSoftSis\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|c:\\users\\espin\\onedrive\\desktop\\fundamentos software de sistemas\\labo\\laboratoriopractica3\\laboratoriopractica3\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|solutionrelative:laboratoriopractica3\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|c:\\users\\espin\\onedrive\\desktop\\fundamentos software de sistemas\\labo\\laboratoriopractica3\\laboratoriopractica3\\sicxesemanticanalyzer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|solutionrelative:laboratoriopractica3\\sicxesemanticanalyzer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|c:\\users\\espin\\onedrive\\desktop\\fundamentos software de sistemas\\labo\\laboratoriopractica3\\laboratoriopractica3\\grammar\\sicxe.g4||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|solutionrelative:laboratoriopractica3\\grammar\\sicxe.g4||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|c:\\users\\espin\\onedrive\\desktop\\fundamentos software de sistemas\\labo\\laboratoriopractica3\\laboratoriopractica3\\laboratoriopractica3.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}",
+      "AbsoluteMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|c:\\users\\aleja\\onedrive\\escritorio\\fundamentos ss\\labfundamentossoftwaresistemas\\labsoftsis\\laboratoriopractica3\\laboratoriopractica3.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}",
       "RelativeMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|solutionrelative:laboratoriopractica3\\laboratoriopractica3.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|c:\\users\\espin\\onedrive\\desktop\\fundamentos software de sistemas\\labo\\laboratoriopractica3\\laboratoriopractica3\\sicxeerrorlistener.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "AbsoluteMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|c:\\users\\aleja\\onedrive\\escritorio\\fundamentos ss\\labfundamentossoftwaresistemas\\labsoftsis\\laboratoriopractica3\\sicxesemanticanalyzer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|solutionrelative:laboratoriopractica3\\sicxesemanticanalyzer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|c:\\users\\aleja\\onedrive\\escritorio\\fundamentos ss\\labfundamentossoftwaresistemas\\labsoftsis\\laboratoriopractica3\\sicxeerrorlistener.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|solutionrelative:laboratoriopractica3\\sicxeerrorlistener.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|c:\\users\\aleja\\onedrive\\escritorio\\fundamentos ss\\labfundamentossoftwaresistemas\\labsoftsis\\laboratoriopractica3\\01.asm||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|solutionrelative:laboratoriopractica3\\01.asm||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|c:\\users\\aleja\\onedrive\\escritorio\\fundamentos ss\\labfundamentossoftwaresistemas\\labsoftsis\\laboratoriopractica3\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|solutionrelative:laboratoriopractica3\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|c:\\users\\aleja\\onedrive\\escritorio\\fundamentos ss\\labfundamentossoftwaresistemas\\labsoftsis\\laboratoriopractica3\\readme_paso1.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
+      "RelativeMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|solutionrelative:laboratoriopractica3\\readme_paso1.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|c:\\users\\aleja\\onedrive\\escritorio\\fundamentos ss\\labfundamentossoftwaresistemas\\labsoftsis\\laboratoriopractica3\\paso1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|solutionrelative:laboratoriopractica3\\paso1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|c:\\users\\aleja\\onedrive\\escritorio\\fundamentos ss\\labfundamentossoftwaresistemas\\labsoftsis\\laboratoriopractica3\\grammar\\sicxe.g4||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A123C082-0840-8D5A-4EDE-A9A20CDAC2B0}|laboratorioPractica3\\laboratorioPractica3.csproj|solutionrelative:laboratoriopractica3\\grammar\\sicxe.g4||{8B382828-6202-11D1-8870-0000F87579D2}"
     }
   ],
   "DocumentGroupContainers": [
@@ -30,8 +42,24 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 2,
+          "SelectedChildIndex": 9,
           "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{aa2115a1-9712-457b-9047-dbb71ca2cdd2}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:128:0:{75188d03-9892-4ae2-abf1-207126247ce5}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{b1e99781-ab81-11d0-b683-00aa00a3ee26}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{eefa5220-e298-11d0-8f78-00a0c9110057}"
+            },
             {
               "$type": "Bookmark",
               "Name": "ST:0:0:{3ae79031-e1bc-11d0-8f78-00a0c9110057}"
@@ -42,24 +70,24 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 4,
               "Title": "Program.cs",
-              "DocumentMoniker": "C:\\Users\\espin\\OneDrive\\Desktop\\Fundamentos software de sistemas\\Labo\\laboratorioPractica3\\laboratorioPractica3\\Program.cs",
+              "DocumentMoniker": "C:\\Users\\aleja\\OneDrive\\Escritorio\\fundamentos ss\\LabFundamentosSoftwareSistemas\\LabSoftSis\\laboratorioPractica3\\Program.cs",
               "RelativeDocumentMoniker": "laboratorioPractica3\\Program.cs",
-              "ToolTip": "C:\\Users\\espin\\OneDrive\\Desktop\\Fundamentos software de sistemas\\Labo\\laboratorioPractica3\\laboratorioPractica3\\Program.cs",
+              "ToolTip": "C:\\Users\\aleja\\OneDrive\\Escritorio\\fundamentos ss\\LabFundamentosSoftwareSistemas\\LabSoftSis\\laboratorioPractica3\\Program.cs",
               "RelativeToolTip": "laboratorioPractica3\\Program.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAADsBAAASAAAAAAAAAA==",
+              "ViewState": "AgIAAAcBAAAAAAAAAABBwOABAAASAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-02-17T19:10:28.391Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 2,
               "Title": "SICXEErrorListener.cs",
-              "DocumentMoniker": "C:\\Users\\espin\\OneDrive\\Desktop\\Fundamentos software de sistemas\\Labo\\laboratorioPractica3\\laboratorioPractica3\\SICXEErrorListener.cs",
+              "DocumentMoniker": "C:\\Users\\aleja\\OneDrive\\Escritorio\\fundamentos ss\\LabFundamentosSoftwareSistemas\\LabSoftSis\\laboratorioPractica3\\SICXEErrorListener.cs",
               "RelativeDocumentMoniker": "laboratorioPractica3\\SICXEErrorListener.cs",
-              "ToolTip": "C:\\Users\\espin\\OneDrive\\Desktop\\Fundamentos software de sistemas\\Labo\\laboratorioPractica3\\laboratorioPractica3\\SICXEErrorListener.cs",
+              "ToolTip": "C:\\Users\\aleja\\OneDrive\\Escritorio\\fundamentos ss\\LabFundamentosSoftwareSistemas\\LabSoftSis\\laboratorioPractica3\\SICXEErrorListener.cs",
               "RelativeToolTip": "laboratorioPractica3\\SICXEErrorListener.cs",
               "ViewState": "AgIAABIAAAAAAAAAAAAYwCEAAAA4AAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
@@ -69,39 +97,75 @@
               "$type": "Document",
               "DocumentIndex": 1,
               "Title": "SICXESemanticAnalyzer.cs",
-              "DocumentMoniker": "C:\\Users\\espin\\OneDrive\\Desktop\\Fundamentos software de sistemas\\Labo\\laboratorioPractica3\\laboratorioPractica3\\SICXESemanticAnalyzer.cs",
+              "DocumentMoniker": "C:\\Users\\aleja\\OneDrive\\Escritorio\\fundamentos ss\\LabFundamentosSoftwareSistemas\\LabSoftSis\\laboratorioPractica3\\SICXESemanticAnalyzer.cs",
               "RelativeDocumentMoniker": "laboratorioPractica3\\SICXESemanticAnalyzer.cs",
-              "ToolTip": "C:\\Users\\espin\\OneDrive\\Desktop\\Fundamentos software de sistemas\\Labo\\laboratorioPractica3\\laboratorioPractica3\\SICXESemanticAnalyzer.cs",
+              "ToolTip": "C:\\Users\\aleja\\OneDrive\\Escritorio\\fundamentos ss\\LabFundamentosSoftwareSistemas\\LabSoftSis\\laboratorioPractica3\\SICXESemanticAnalyzer.cs",
               "RelativeToolTip": "laboratorioPractica3\\SICXESemanticAnalyzer.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAUAAAAeAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAoAAAASAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-02-17T21:11:29.904Z",
+              "WhenOpened": "2026-02-17T21:11:29.904Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "laboratorioPractica3.csproj",
+              "DocumentMoniker": "C:\\Users\\aleja\\OneDrive\\Escritorio\\fundamentos ss\\LabFundamentosSoftwareSistemas\\LabSoftSis\\laboratorioPractica3\\laboratorioPractica3.csproj",
+              "RelativeDocumentMoniker": "laboratorioPractica3\\laboratorioPractica3.csproj",
+              "ToolTip": "C:\\Users\\aleja\\OneDrive\\Escritorio\\fundamentos ss\\LabFundamentosSoftwareSistemas\\LabSoftSis\\laboratorioPractica3\\laboratorioPractica3.csproj",
+              "RelativeToolTip": "laboratorioPractica3\\laboratorioPractica3.csproj",
+              "ViewState": "AgIAABIAAAAAAAAAAAAvwBsAAAAZAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
+              "WhenOpened": "2026-02-17T19:19:36.318Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
-              "Title": "SICXE.g4",
-              "DocumentMoniker": "C:\\Users\\espin\\OneDrive\\Desktop\\Fundamentos software de sistemas\\Labo\\laboratorioPractica3\\laboratorioPractica3\\grammar\\SICXE.g4",
-              "RelativeDocumentMoniker": "laboratorioPractica3\\grammar\\SICXE.g4",
-              "ToolTip": "C:\\Users\\espin\\OneDrive\\Desktop\\Fundamentos software de sistemas\\Labo\\laboratorioPractica3\\laboratorioPractica3\\grammar\\SICXE.g4",
-              "RelativeToolTip": "laboratorioPractica3\\grammar\\SICXE.g4",
-              "ViewState": "AgIAAD8AAAAAAAAAAAAvwAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2026-02-17T21:11:02.552Z",
+              "DocumentIndex": 5,
+              "Title": "README_PASO1.md",
+              "DocumentMoniker": "C:\\Users\\aleja\\OneDrive\\Escritorio\\fundamentos ss\\LabFundamentosSoftwareSistemas\\LabSoftSis\\laboratorioPractica3\\README_PASO1.md",
+              "RelativeDocumentMoniker": "laboratorioPractica3\\README_PASO1.md",
+              "ToolTip": "C:\\Users\\aleja\\OneDrive\\Escritorio\\fundamentos ss\\LabFundamentosSoftwareSistemas\\LabSoftSis\\laboratorioPractica3\\README_PASO1.md",
+              "RelativeToolTip": "laboratorioPractica3\\README_PASO1.md",
+              "ViewState": "AgIAAFEAAAAAAAAAAAAAACAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2026-02-23T05:06:16.053Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "Paso1.cs",
+              "DocumentMoniker": "C:\\Users\\aleja\\OneDrive\\Escritorio\\fundamentos ss\\LabFundamentosSoftwareSistemas\\LabSoftSis\\laboratorioPractica3\\Paso1.cs",
+              "RelativeDocumentMoniker": "laboratorioPractica3\\Paso1.cs",
+              "ToolTip": "C:\\Users\\aleja\\OneDrive\\Escritorio\\fundamentos ss\\LabFundamentosSoftwareSistemas\\LabSoftSis\\laboratorioPractica3\\Paso1.cs",
+              "RelativeToolTip": "laboratorioPractica3\\Paso1.cs",
+              "ViewState": "AgIAAGoCAAAAAAAAAABBwN8CAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-02-23T04:59:54.717Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
               "DocumentIndex": 3,
-              "Title": "laboratorioPractica3.csproj",
-              "DocumentMoniker": "C:\\Users\\espin\\OneDrive\\Desktop\\Fundamentos software de sistemas\\Labo\\laboratorioPractica3\\laboratorioPractica3\\laboratorioPractica3.csproj",
-              "RelativeDocumentMoniker": "laboratorioPractica3\\laboratorioPractica3.csproj",
-              "ToolTip": "C:\\Users\\espin\\OneDrive\\Desktop\\Fundamentos software de sistemas\\Labo\\laboratorioPractica3\\laboratorioPractica3\\laboratorioPractica3.csproj",
-              "RelativeToolTip": "laboratorioPractica3\\laboratorioPractica3.csproj",
-              "ViewState": "AgIAABIAAAAAAAAAAAAvwCAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
-              "WhenOpened": "2026-02-17T19:19:36.318Z"
+              "Title": "01.asm",
+              "DocumentMoniker": "C:\\Users\\aleja\\OneDrive\\Escritorio\\fundamentos ss\\LabFundamentosSoftwareSistemas\\LabSoftSis\\laboratorioPractica3\\01.asm",
+              "RelativeDocumentMoniker": "laboratorioPractica3\\01.asm",
+              "ToolTip": "C:\\Users\\aleja\\OneDrive\\Escritorio\\fundamentos ss\\LabFundamentosSoftwareSistemas\\LabSoftSis\\laboratorioPractica3\\01.asm",
+              "RelativeToolTip": "laboratorioPractica3\\01.asm",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-02-23T18:21:02.619Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "SICXE.g4",
+              "DocumentMoniker": "C:\\Users\\aleja\\OneDrive\\Escritorio\\fundamentos ss\\LabFundamentosSoftwareSistemas\\LabSoftSis\\laboratorioPractica3\\grammar\\SICXE.g4",
+              "RelativeDocumentMoniker": "laboratorioPractica3\\grammar\\SICXE.g4",
+              "ToolTip": "C:\\Users\\aleja\\OneDrive\\Escritorio\\fundamentos ss\\LabFundamentosSoftwareSistemas\\LabSoftSis\\laboratorioPractica3\\grammar\\SICXE.g4",
+              "RelativeToolTip": "laboratorioPractica3\\grammar\\SICXE.g4",
+              "ViewState": "AgIAAD8AAAAAAAAAAAAvwAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-02-17T21:11:02.552Z"
             }
           ]
         },

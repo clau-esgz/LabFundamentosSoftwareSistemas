@@ -302,59 +302,12 @@ class Program
         string baseName = Path.GetFileNameWithoutExtension(baseOutputPath);
         string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
 
-        string symtabPath = Path.Combine(directory, $"{baseName}_SYMTAB_{timestamp}.csv");
-        string intermediatePath = Path.Combine(directory, $"{baseName}_LISTADO_{timestamp}.csv");
-        string summaryPath = Path.Combine(directory, $"{baseName}_RESUMEN_{timestamp}.csv");
+        // Generar UN SOLO archivo CSV con TABSIM + Archivo Intermedio
+        string singleFilePath = Path.Combine(directory, $"{baseName}_PASO1_{timestamp}.csv");
+        paso1.ExportToSingleCSV(singleFilePath, allErrors);
 
-        // Exportar SYMTAB
-        paso1.ExportSymbolTableToCSV(symtabPath);
-        
-        // Exportar LISTADO con errores integrados
-        var sb = new StringBuilder();
-        sb.AppendLine("NL,CONTLOC_HEX,CONTLOC_DEC,ETQ,CODOP,OPR,FMT,MOD,ERR,COMENTARIO");
-        
-        foreach (var line in paso1.Lines)
-        {
-            string addressHex = (line.Address >= 0) ? $"{line.Address:X4}" : "";
-            string addressDec = (line.Address >= 0) ? $"{line.Address}" : "";
-            string fmt = (line.Format > 0) ? $"{line.Format}" : "";
-            
-            // Buscar TODOS los errores para esta línea
-            var lineErrors = allErrors.Where(e => e.Line == line.LineNumber);
-            string errorMsg = "";
-            
-            if (lineErrors.Any())
-            {
-                errorMsg = string.Join("; ", lineErrors.Select(e => e.Message));
-            }
-            else if (!string.IsNullOrEmpty(line.Error))
-            {
-                errorMsg = line.Error;
-            }
-            
-            sb.AppendLine($"{line.LineNumber},{addressHex},{addressDec},{EscapeCSV(line.Label)},{EscapeCSV(line.Operation)},{EscapeCSV(line.Operand)},{fmt},{EscapeCSV(line.AddressingMode)},{EscapeCSV(errorMsg)},{EscapeCSV(line.Comment)}");
-        }
-        
-        File.WriteAllText(intermediatePath, sb.ToString(), Encoding.UTF8);
-        
-        // Exportar RESUMEN con conteo de errores completo
-        var sbSummary = new StringBuilder();
-        sbSummary.AppendLine("PROPIEDAD,VALOR_HEX,VALOR_DEC");
-        sbSummary.AppendLine($"NOMBRE_PROGRAMA,{paso1.ProgramName},{paso1.ProgramName}");
-        sbSummary.AppendLine($"DIRECCION_INICIO,{paso1.ProgramStartAddress:X4},{paso1.ProgramStartAddress}");
-        sbSummary.AppendLine($"LONGITUD_PROGRAMA,{paso1.ProgramSize:X4},{paso1.ProgramSize}");
-        sbSummary.AppendLine($"TOTAL_SIMBOLOS,,{paso1.SymbolTable.Count}");
-        sbSummary.AppendLine($"TOTAL_LINEAS,,{paso1.Lines.Count}");
-        sbSummary.AppendLine($"TOTAL_ERRORES,,{allErrors.Count}");
-        if (paso1.BaseValue.HasValue)
-            sbSummary.AppendLine($"VALOR_BASE,{paso1.BaseValue.Value:X4},{paso1.BaseValue.Value}");
-        
-        File.WriteAllText(summaryPath, sbSummary.ToString(), Encoding.UTF8);
-
-        Console.WriteLine("📁 Archivos CSV generados:");
-        Console.WriteLine($"  ✓ Tabla de símbolos: {Path.GetFileName(symtabPath)}");
-        Console.WriteLine($"  ✓ Listado intermedio: {Path.GetFileName(intermediatePath)}");
-        Console.WriteLine($"  ✓ Resumen: {Path.GetFileName(summaryPath)}");
+        Console.WriteLine("Archivo CSV generado:");
+        Console.WriteLine($"  - {Path.GetFileName(singleFilePath)}");
     }
     
     /// <summary>
