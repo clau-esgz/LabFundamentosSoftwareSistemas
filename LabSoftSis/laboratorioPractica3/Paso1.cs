@@ -121,10 +121,31 @@ namespace laboratorioPractica3
         };
         
         // ═══════════════════ TABLA DE REGISTROS SIC/XE ═══════════════════
-        // Solo mantenemos los registros porque no están en la gramática como tokens individuales
-        private static readonly HashSet<string> REGISTERS = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        // Registros válidos del conjunto de instrucciones SIC/XE
+        // Corresponden a los IDENT que la gramática reconoce como operandos de formato 2
+        public static readonly HashSet<string> REGISTERS = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "A", "X", "L", "B", "S", "T", "F", "PC", "CP", "SW"
+        };
+        
+        // ═══════════════════ NÚMERO DE REGISTRO SIC/XE ═══════════════════
+        // Mapeo nombre → número según especificación SIC/XE (usado por Paso 2 en formato 2)
+        public static readonly Dictionary<string, int> REGISTER_NUMBERS = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "A", 0 }, { "X", 1 }, { "L", 2 }, { "B", 3 },
+            { "S", 4 }, { "T", 5 }, { "F", 6 },
+            { "PC", 8 }, { "SW", 9 }
+        };
+        
+        // ═══════════════════ DIRECTIVAS SIC/XE ═══════════════════
+        // Extraídas de la regla 'directive' de la gramática SICXE.g4:
+        //   directive : START | END | BYTE | WORD | RESB | RESW | BASE | NOBASE
+        //             | EQU | ORG | LTORG | USE | EXTDEF | EXTREF | CSECT ;
+        public static readonly HashSet<string> DIRECTIVES = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "START", "END", "BYTE", "WORD", "RESB", "RESW",
+            "BASE", "NOBASE", "EQU", "ORG", "LTORG", "USE",
+            "EXTDEF", "EXTREF", "CSECT"
         };
         
         // ═══════════════════ ERRORES EXTERNOS (LÉXICOS/SINTÁCTICOS) ═══════════════════
@@ -596,6 +617,7 @@ namespace laboratorioPractica3
 
         /// <summary>
         /// Verifica si un texto es una operación conocida (instrucción o directiva)
+        /// Usa OPTAB (gramática: instruction) y DIRECTIVES (gramática: directive)
         /// </summary>
         private bool IsKnownOperation(string text)
         {
@@ -604,14 +626,11 @@ namespace laboratorioPractica3
             // Remover prefijo + si existe
             string op = text.TrimStart('+');
             
-            // Verificar en OPTAB
+            // Verificar en OPTAB (instrucciones de la gramática)
             if (OPTAB.ContainsKey(op)) return true;
             
-            // Verificar directivas
-            var directives = new[] { "START", "END", "BYTE", "WORD", "RESB", "RESW", 
-                                      "BASE", "NOBASE", "EQU", "ORG", "LTORG", "USE",
-                                      "EXTDEF", "EXTREF", "CSECT" };
-            return directives.Contains(op, StringComparer.OrdinalIgnoreCase);
+            // Verificar en DIRECTIVES (directivas de la gramática)
+            return DIRECTIVES.Contains(op);
         }
 
         /// <summary>
