@@ -1,8 +1,0 @@
-C:/Users/aleja/OneDrive/Escritorio/fundamentos ss/LabFundamentosSoftwareSistemas/LabSoftSis/laboratorioPractica3/obj/Debug/net8.0/SICXE.tokens
-C:/Users/aleja/OneDrive/Escritorio/fundamentos ss/LabFundamentosSoftwareSistemas/LabSoftSis/laboratorioPractica3/obj/Debug/net8.0/SICXEBaseListener.cs
-C:/Users/aleja/OneDrive/Escritorio/fundamentos ss/LabFundamentosSoftwareSistemas/LabSoftSis/laboratorioPractica3/obj/Debug/net8.0/SICXEBaseVisitor.cs
-C:/Users/aleja/OneDrive/Escritorio/fundamentos ss/LabFundamentosSoftwareSistemas/LabSoftSis/laboratorioPractica3/obj/Debug/net8.0/SICXELexer.cs
-C:/Users/aleja/OneDrive/Escritorio/fundamentos ss/LabFundamentosSoftwareSistemas/LabSoftSis/laboratorioPractica3/obj/Debug/net8.0/SICXELexer.tokens
-C:/Users/aleja/OneDrive/Escritorio/fundamentos ss/LabFundamentosSoftwareSistemas/LabSoftSis/laboratorioPractica3/obj/Debug/net8.0/SICXEListener.cs
-C:/Users/aleja/OneDrive/Escritorio/fundamentos ss/LabFundamentosSoftwareSistemas/LabSoftSis/laboratorioPractica3/obj/Debug/net8.0/SICXEParser.cs
-C:/Users/aleja/OneDrive/Escritorio/fundamentos ss/LabFundamentosSoftwareSistemas/LabSoftSis/laboratorioPractica3/obj/Debug/net8.0/SICXEVisitor.cs

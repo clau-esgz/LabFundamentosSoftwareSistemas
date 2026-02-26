@@ -82,10 +82,9 @@ Thumbs.db
 # =============================================================================
 
 # Reportes generados
-/reportes/
-/reportes_paso1/
 *_reporte_*.txt
 *_reporte_*.csv
+*_PASO1_*.csv
 
 # Logs
 *.log
