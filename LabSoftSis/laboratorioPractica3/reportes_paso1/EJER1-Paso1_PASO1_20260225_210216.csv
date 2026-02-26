@@ -1,0 +1,37 @@
+﻿=== TABLA DE SIMBOLOS (TABSIM) ===
+SIMBOLO,DIRECCION_HEX,DIRECCION_DEC
+"EJER1","0000",0
+"LOOP","000F",15
+"COUNT","0019",25
+"TABLE","002D",45
+"TABLE2","004B",75
+
+=== ARCHIVO INTERMEDIO ===
+NL,CONTLOC_HEX,CONTLOC_DEC,ETQ,CODOP,OPR,VALOR_SEM,FMT,MOD,ERR,COMENTARIO
+1,"0000",0,"EJER1","START","0","0000h","","'-","",""
+2,"0000",0,"","LDX","#5","",3,"Inmediato","",""
+3,"0003",3,"","HIO","","",1,"'-","",""
+4,"0004",4,"","'+LDB","#TABLE2","",4,"Inmediato","",""
+5,"0008",8,"","STA","'@COUNT","",3,"Indirecto","",""
+6,"000B",11,"","CLEAR","A","",2,"'-","",""
+7,"000D",13,"","BASE","TABLE2","TABLE2","","'-","",""
+8,"000D",13,"","ADDR","X,A","",2,"'-","La instruccion 'ADDR' requiere exactamente 2 registros (formato: REG1,REG2).",""
+9,"000F",15,"LOOP","ADD","TABLE,X","",3,"Indexado","",""
+10,"0012",18,"","'+STA","TOTAL","",4,"Simple","[Símbolo no definido] La etiqueta 'TOTAL' no está definida en TABSIM",""
+11,"0016",22,"","RSUB","","",3,"'-","",""
+12,"0019",25,"COUNT","RESB","12H","","","'-","RESB requiere un valor numerico que indique la cantidad de bytes/palabras a reservar. Se encontro: '12H'.",""
+13,"002B",43,"","SHIFTL","X,2","",2,"'-","",""
+14,"002D",45,"TABLE","RESW","10","","","'-","",""
+15,"004B",75,"TABLE2","BYTE","C'TEST'","","","'-","",""
+16,"004F",79,"","WORD","16","","","'-","",""
+17,"0052",82,"","END","","","","'-","",""
+
+=== RESUMEN DEL PASO 1 ===
+PROPIEDAD,VALOR_HEX,VALOR_DEC,DESCRIPCION
+"NOMBRE_PROGRAMA","EJER1","EJER1","Nombre del programa"
+"DIR_INICIO","0000",0,"Dirección de inicio (operando de START)"
+"CONTLOC_FINAL","0052",82,"CONTLOC al llegar a END"
+"LONGITUD_PROGRAMA","0052",82,"= CONTLOC_final(0052h) - START(0000h)"
+"TOTAL_SIMBOLOS","",5,"Símbolos definidos en TABSIM"
+"TOTAL_LINEAS","",17,"Líneas en archivo intermedio"
+"TOTAL_ERRORES","",3,"Total de errores detectados"

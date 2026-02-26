@@ -1,0 +1,30 @@
+﻿=== TABLA DE SIMBOLOS (TABSIM) ===
+SIMBOLO,DIRECCION_HEX,DIRECCION_DEC
+"COPY","03E8",1000
+"FIRST","03E8",1000
+"CLOOP","03EB",1003
+"RETADR","03FA",1018
+"LENGTH","03FD",1021
+
+=== ARCHIVO INTERMEDIO ===
+NL,CONTLOC_HEX,CONTLOC_DEC,ETQ,CODOP,OPR,VALOR_SEM,FMT,MOD,ERR,COMENTARIO
+1,"03E8",1000,"COPY","START","1000","03E8h","","'-","",""
+2,"03E8",1000,"FIRST","STL","RETADR","",3,"Simple","",""
+3,"03EB",1003,"CLOOP","'+JSUB","RDREC","",4,"Simple","[Símbolo no definido] La etiqueta 'RDREC' no está definida en TABSIM",""
+4,"03EF",1007,"","LDA","LENGTH","",3,"Simple","",""
+5,"03F2",1010,"","CLEAR","X","",2,"'-","",""
+6,"03F4",1012,"","LDT","#3","",3,"Inmediato","",""
+7,"03F7",1015,"","RSUB","","",3,"'-","",""
+8,"03FA",1018,"RETADR","RESW","1","","","'-","",""
+9,"03FD",1021,"LENGTH","WORD","3","","","'-","",""
+10,"0400",1024,"","END","FIRST","","","'-","",""
+
+=== RESUMEN DEL PASO 1 ===
+PROPIEDAD,VALOR_HEX,VALOR_DEC,DESCRIPCION
+"NOMBRE_PROGRAMA","COPY","COPY","Nombre del programa"
+"DIR_INICIO","03E8",1000,"Dirección de inicio (operando de START)"
+"CONTLOC_FINAL","0400",1024,"CONTLOC al llegar a END"
+"LONGITUD_PROGRAMA","0018",24,"= CONTLOC_final(0400h) - START(03E8h)"
+"TOTAL_SIMBOLOS","",5,"Símbolos definidos en TABSIM"
+"TOTAL_LINEAS","",10,"Líneas en archivo intermedio"
+"TOTAL_ERRORES","",1,"Total de errores detectados"

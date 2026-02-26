@@ -30,9 +30,11 @@ namespace laboratorioPractica3
         
         private int CONTLOC = 0;
         private int START_ADDRESS = 0;
+        private int CONTLOC_FINAL = 0;
         private string PROGRAM_NAME = "";
         private int PROGRAM_LENGTH = 0;
         private int? BASE_VALUE = null;
+        private string BASE_OPERAND = "";
         
         private Dictionary<string, int> TABSIM = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         private List<IntermediateLine> IntermediateLines = new List<IntermediateLine>();
@@ -254,7 +256,6 @@ namespace laboratorioPractica3
             var comment = statement.comment()?.GetText();
             var operation = operationContext?.GetText();
             
-            // ═══════════════════ MANEJO MEJORADO DE ERRORES SINTÁCTICOS ═══════════════════
             // Si hay error sintáctico, SIEMPRE usar la línea original para extraer la información
             // porque ANTLR puede no haber parseado correctamente
             if (hasSyntaxError && SourceLines.Length >= antlrLine)
@@ -323,7 +324,8 @@ namespace laboratorioPractica3
                 {
                     TABSIM[label] = CONTLOC;
                 }
-                
+
+                intermediateLine2.SemanticValue = $"{START_ADDRESS:X4}h";
                 IntermediateLines.Add(intermediateLine2);
                 return;
             }
@@ -338,11 +340,11 @@ namespace laboratorioPractica3
             // Directiva BASE
             if (operationContext?.directive()?.BASE() != null)
             {
+                BASE_OPERAND = operand ?? "";
                 if (!string.IsNullOrEmpty(operand) && TABSIM.ContainsKey(operand))
                     BASE_VALUE = TABSIM[operand];
             }
 
-            // ═══════════════════ MANEJO DE ERRORES SEGÚN ESPECIFICACIÓN ═══════════════════
             // Si hay error sintáctico/léxico en esta línea:
             // - NO insertar etiqueta en TABSIM
             // - NO incrementar CONTLOC
@@ -428,11 +430,13 @@ namespace laboratorioPractica3
             // Cálculo del incremento usando la gramática
             int increment = CalculateIncrementFromGrammar(operationContext, operand);
             intermediateLine2.Increment = increment;
+            intermediateLine2.SemanticValue = CalculateSemanticValue(operationContext, operand);
             IntermediateLines.Add(intermediateLine2);
 
             // Directiva END
             if (operationContext?.directive()?.END() != null)
             {
+                CONTLOC_FINAL = CONTLOC;
                 PROGRAM_LENGTH = CONTLOC - START_ADDRESS;
                 CheckUndefinedSymbols();
                 return;
@@ -816,6 +820,59 @@ namespace laboratorioPractica3
         }
 
         /// <summary>
+        /// Calcula el valor semántico de una directiva según su tipo y base.
+        /// - BYTE C'texto' : códigos ASCII de cada carácter en hexadecimal
+        /// - BYTE X'hex'   : el valor hexadecimal tal como está
+        /// - WORD n        : el entero representado en 6 dígitos hexadecimales
+        /// - RESB/RESW n   : cantidad de bytes reservados (sin valor inicial)
+        /// - BASE sym      : dirección del símbolo base registrado
+        /// </summary>
+        private string CalculateSemanticValue(SICXEParser.OperationContext? operationContext, string? operand)
+        {
+            if (operationContext?.directive() == null) return "";
+            var directive = operationContext.directive();
+            operand = operand ?? "";
+
+    if (directive.BYTE() != null)
+                return "";
+
+            if (directive.WORD() != null)
+                return "";
+
+            if (directive.RESB() != null)
+                return "";
+
+            if (directive.RESW() != null)
+                return "";
+
+            if (directive.BASE() != null && !string.IsNullOrEmpty(operand))
+                return TABSIM.TryGetValue(operand, out int baseAddr) ? $"{baseAddr:X4}h" : operand;
+
+            return "";
+        }
+
+        /// <summary>
+        /// Calcula el valor semántico de BYTE según el tipo de constante:
+        /// - C'texto' → código ASCII de cada carácter concatenado en hex (ej. C'EOF' → 454F46h)
+        /// - X'hex'   → valor hexadecimal directo                        (ej. X'F1'  → F1h)
+        /// </summary>
+        private string CalculateByteSemanticValue(string operand)
+        {
+            if (string.IsNullOrEmpty(operand)) return "";
+
+            if (operand.StartsWith("C'", StringComparison.OrdinalIgnoreCase) && operand.EndsWith("'"))
+            {
+                var content = operand.Substring(2, operand.Length - 3);
+                return string.Concat(content.Select(c => ((int)c).ToString("X2"))) + "h";
+            }
+
+            if (operand.StartsWith("X'", StringComparison.OrdinalIgnoreCase) && operand.EndsWith("'"))
+                return operand.Substring(2, operand.Length - 3).ToUpper() + "h";
+
+            return "";
+        }
+
+        /// <summary>
         /// Parseo de operandos numéricos
         /// Soporta:
         /// - Decimal: 100, 256
@@ -869,12 +926,17 @@ namespace laboratorioPractica3
             sb.AppendLine("╚════════════════════════════════════════════════════════════════════╝");
             sb.AppendLine();
             
-            sb.AppendLine($"Programa: {PROGRAM_NAME}");
-            sb.AppendLine($"Dirección de inicio: {START_ADDRESS:X4}h ({START_ADDRESS})");
-            sb.AppendLine($"Longitud del programa: {PROGRAM_LENGTH:X4}h ({PROGRAM_LENGTH} bytes)");
-            sb.AppendLine($"Total de símbolos: {TABSIM.Count}");
+            int finalContloc = CONTLOC_FINAL > 0 ? CONTLOC_FINAL : CONTLOC;
+            sb.AppendLine($"Programa        : {PROGRAM_NAME}");
+            sb.AppendLine($"Dir. inicio     : {START_ADDRESS:X4}h  ({START_ADDRESS})");
+            sb.AppendLine($"CONTLOC final   : {finalContloc:X4}h  ({finalContloc})");
+            sb.AppendLine($"Long. programa  : {PROGRAM_LENGTH:X4}h  ({PROGRAM_LENGTH} bytes)  [= CONTLOC_final({finalContloc:X4}h) - START({START_ADDRESS:X4}h)]");
+            sb.AppendLine($"Total símbolos  : {TABSIM.Count}");
             if (BASE_VALUE.HasValue)
-                sb.AppendLine($"Valor de BASE: {BASE_VALUE.Value:X4}h ({BASE_VALUE.Value})");
+            {
+                string baseDisplay = string.IsNullOrEmpty(BASE_OPERAND) ? "" : $"'{BASE_OPERAND}' -> ";
+                sb.AppendLine($"Valor BASE      : {baseDisplay}{BASE_VALUE.Value:X4}h  ({BASE_VALUE.Value})  [almacenado para Paso 2]");
+            }
             sb.AppendLine();
 
             sb.AppendLine("═══════════════════ TABLA DE SÍMBOLOS (TABSIM) ═══════════════════");
@@ -893,8 +955,8 @@ namespace laboratorioPractica3
             sb.AppendLine();
 
             sb.AppendLine("═══════════════════ ARCHIVO INTERMEDIO ═══════════════════════════");
-            sb.AppendLine($"{"#",-4} | {"CONTLOC",-8} | {"ETQ",-10} | {"CODOP",-10} | {"OPR",-15} | {"FMT",-4} | {"MOD",-12} | {"ERR"}");
-            sb.AppendLine(new string('─', 110));
+            sb.AppendLine($"{"#",-4} | {"CONTLOC",-8} | {"ETQ",-10} | {"CODOP",-10} | {"OPR",-15} | {"VALOR_SEM",-15} | {"FMT",-4} | {"MOD",-12} | {"ERR"}");
+            sb.AppendLine(new string('─', 125));
             
             foreach (var line in IntermediateLines)
             {
@@ -906,7 +968,7 @@ namespace laboratorioPractica3
                 if (errorDisplay.Length > 40)
                     errorDisplay = errorDisplay.Substring(0, 37) + "...";
                 
-                sb.AppendLine($"{line.LineNumber,-4} | {loc,-8} | {line.Label,-10} | {line.Operation,-10} | {line.Operand,-15} | {fmt,-4} | {line.AddressingMode,-12} | {errorDisplay}");
+                sb.AppendLine($"{line.LineNumber,-4} | {loc,-8} | {line.Label,-10} | {line.Operation,-10} | {line.Operand,-15} | {line.SemanticValue,-15} | {fmt,-4} | {line.AddressingMode,-12} | {errorDisplay}");
             }
             sb.AppendLine();
 
@@ -951,6 +1013,19 @@ namespace laboratorioPractica3
                 
                 sb.AppendLine($"  Total errores: {Errors.Count}");
             }
+
+            // ═══════════════════ RESUMEN DEL ANÁLISIS ═══════════════════
+            sb.AppendLine();
+            sb.AppendLine("═══════════════════ RESUMEN DEL ANÁLISIS ════════════════════");
+            sb.AppendLine($"  * Tabla de símbolos (TABSIM): {TABSIM.Count} símbolo(s) definido(s)");
+            sb.AppendLine($"  * Longitud del programa: CONTLOC_final({finalContloc:X4}h) - START({START_ADDRESS:X4}h) = {PROGRAM_LENGTH:X4}h ({PROGRAM_LENGTH} bytes)");
+            if (BASE_VALUE.HasValue)
+            {
+                string baseSum = string.IsNullOrEmpty(BASE_OPERAND) ? "" : $"'{BASE_OPERAND}' -> ";
+                sb.AppendLine($"  * BASE almacenado: {baseSum}{BASE_VALUE.Value:X4}h ({BASE_VALUE.Value}) [disponible para Paso 2]");
+            }
+            sb.AppendLine($"  * Archivo intermedio: {IntermediateLines.Count} línea(s) generada(s)");
+            sb.AppendLine($"  * Errores detectados: {Errors.Count}");
 
             return sb.ToString();
         }
@@ -1096,7 +1171,7 @@ namespace laboratorioPractica3
             
             // ═══════════════════ SECCIÓN 2: ARCHIVO INTERMEDIO ═══════════════════
             sb.AppendLine("=== ARCHIVO INTERMEDIO ===");
-            sb.AppendLine("NL,CONTLOC_HEX,CONTLOC_DEC,ETQ,CODOP,OPR,FMT,MOD,ERR,COMENTARIO");
+            sb.AppendLine("NL,CONTLOC_HEX,CONTLOC_DEC,ETQ,CODOP,OPR,VALOR_SEM,FMT,MOD,ERR,COMENTARIO");
             
             foreach (var line in IntermediateLines)
             {
@@ -1120,141 +1195,30 @@ namespace laboratorioPractica3
                     }
                 }
                 
-                sb.AppendLine($"{line.LineNumber},{addressHex},{addressDec},{FormatCSVCell(line.Label)},{FormatCSVCell(line.Operation)},{FormatCSVCell(line.Operand)},{fmt},{FormatCSVCell(line.AddressingMode)},{FormatCSVCell(errorMsg)},{FormatCSVCell(line.Comment)}");
+                sb.AppendLine($"{line.LineNumber},{addressHex},{addressDec},{FormatCSVCell(line.Label)},{FormatCSVCell(line.Operation)},{FormatCSVCell(line.Operand)},{FormatCSVCell(line.SemanticValue)},{fmt},{FormatCSVCell(line.AddressingMode)},{FormatCSVCell(errorMsg)},{FormatCSVCell(line.Comment)}");
+            }
+
+            // ═══════════════════ SECCIÓN 3: RESUMEN DEL PASO 1 ═══════════════════
+            sb.AppendLine();
+            sb.AppendLine("=== RESUMEN DEL PASO 1 ===");
+            sb.AppendLine("PROPIEDAD,VALOR_HEX,VALOR_DEC,DESCRIPCION");
+            int csvFinalContloc = CONTLOC_FINAL > 0 ? CONTLOC_FINAL : CONTLOC;
+            sb.AppendLine($"\"NOMBRE_PROGRAMA\",\"{PROGRAM_NAME}\",\"{PROGRAM_NAME}\",\"Nombre del programa\"");
+            sb.AppendLine($"\"DIR_INICIO\",\"{START_ADDRESS:X4}\",{START_ADDRESS},\"Dirección de inicio (operando de START)\"");
+            sb.AppendLine($"\"CONTLOC_FINAL\",\"{csvFinalContloc:X4}\",{csvFinalContloc},\"CONTLOC al llegar a END\"");
+            sb.AppendLine($"\"LONGITUD_PROGRAMA\",\"{PROGRAM_LENGTH:X4}\",{PROGRAM_LENGTH},\"= CONTLOC_final({csvFinalContloc:X4}h) - START({START_ADDRESS:X4}h)\"");
+            sb.AppendLine($"\"TOTAL_SIMBOLOS\",\"\",{TABSIM.Count},\"Símbolos definidos en TABSIM\"");
+            sb.AppendLine($"\"TOTAL_LINEAS\",\"\",{IntermediateLines.Count},\"Líneas en archivo intermedio\"");
+            sb.AppendLine($"\"TOTAL_ERRORES\",\"\",{(allErrors?.Count ?? Errors.Count)},\"Total de errores detectados\"");
+            if (BASE_VALUE.HasValue)
+            {
+                sb.AppendLine($"\"BASE_OPERANDO\",\"\",\"{BASE_OPERAND}\",\"Operando de la directiva BASE\"");
+                sb.AppendLine($"\"BASE_VALOR\",\"{BASE_VALUE.Value:X4}\",{BASE_VALUE.Value},\"Valor almacenado de BASE (para uso en Paso 2)\"");
             }
 
             File.WriteAllText(outputPath, sb.ToString(), utf8WithBom);
         }
 
-        /*
-        /// <summary>
-        /// MÉTODO DESHABILITADO: Exporta TABSIM y archivo intermedio a Excel con formato correcto usando ClosedXML
-        /// Este método está comentado porque no funciona correctamente en todas las configuraciones.
-        /// Se mantiene el código como referencia para futuras implementaciones.
-        /// </summary>
-        public void ExportToExcel(string outputPath, List<SICXEError>? allErrors = null)
-        {
-            using var workbook = new ClosedXML.Excel.XLWorkbook();
-            
-            // ═══════════════════ HOJA 1: TABLA DE SÍMBOLOS ═══════════════════
-            var tabsimSheet = workbook.Worksheets.Add("TABSIM");
-            
-            // Encabezados
-            tabsimSheet.Cell(1, 1).Value = "SIMBOLO";
-            tabsimSheet.Cell(1, 2).Value = "DIRECCION_HEX";
-            tabsimSheet.Cell(1, 3).Value = "DIRECCION_DEC";
-            
-            // Formato de encabezados
-            var tabsimHeaderRange = tabsimSheet.Range(1, 1, 1, 3);
-            tabsimHeaderRange.Style.Font.Bold = true;
-            tabsimHeaderRange.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightGray;
-            tabsimHeaderRange.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
-            tabsimHeaderRange.Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
-            
-            // Datos
-            int row = 2;
-            foreach (var symbol in TABSIM.OrderBy(s => s.Value))
-            {
-                tabsimSheet.Cell(row, 1).Value = symbol.Key;
-                tabsimSheet.Cell(row, 1).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Left;
-                
-                // Forzar como TEXTO para valores hexadecimales usando formato @
-                tabsimSheet.Cell(row, 2).Value = $"{symbol.Value:X4}";
-                tabsimSheet.Cell(row, 2).Style.NumberFormat.Format = "@";
-                tabsimSheet.Cell(row, 2).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
-                
-                tabsimSheet.Cell(row, 3).Value = symbol.Value;
-                tabsimSheet.Cell(row, 3).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Right;
-                tabsimSheet.Cell(row, 3).Style.NumberFormat.Format = "0";
-                row++;
-            }
-            
-            // Ajustar anchos de columna automáticamente al contenido
-            tabsimSheet.Columns().AdjustToContents();
-            
-            // Bordes para toda la tabla
-            if (row > 2)
-            {
-                tabsimSheet.Range(1, 1, row - 1, 3).Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
-                tabsimSheet.Range(1, 1, row - 1, 3).Style.Border.InsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
-            }
-            
-            // ═══════════════════ HOJA 2: ARCHIVO INTERMEDIO ═══════════════════
-            var intermediateSheet = workbook.Worksheets.Add("ARCHIVO INTERMEDIO");
-            
-            // Encabezados
-            string[] headers = { "NL", "CONTLOC_HEX", "CONTLOC_DEC", "ETQ", "CODOP", "OPR", "FMT", "MOD", "COMENTARIO" };
-            for (int i = 0; i < headers.Length; i++)
-            {
-                intermediateSheet.Cell(1, i + 1).Value = headers[i];
-            }
-            
-            // Formato de encabezados
-            var intermediateHeaderRange = intermediateSheet.Range(1, 1, 1, headers.Length);
-            intermediateHeaderRange.Style.Font.Bold = true;
-            intermediateHeaderRange.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightBlue;
-            intermediateHeaderRange.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
-            intermediateHeaderRange.Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
-            
-            // Datos
-            row = 2;
-            foreach (var line in IntermediateLines)
-            {
-                intermediateSheet.Cell(row, 1).Value = line.LineNumber;
-                intermediateSheet.Cell(row, 1).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
-                intermediateSheet.Cell(row, 1).Style.NumberFormat.Format = "0";
-                
-                if (line.Address >= 0)
-                {
-                    // CONTLOC_HEX como TEXTO usando formato @
-                    intermediateSheet.Cell(row, 2).Value = $"{line.Address:X4}";
-                    intermediateSheet.Cell(row, 2).Style.NumberFormat.Format = "@";
-                    intermediateSheet.Cell(row, 2).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
-                    
-                    // CONTLOC_DEC como NÚMERO
-                    intermediateSheet.Cell(row, 3).Value = line.Address;
-                    intermediateSheet.Cell(row, 3).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Right;
-                    intermediateSheet.Cell(row, 3).Style.NumberFormat.Format = "0";
-                }
-                
-                intermediateSheet.Cell(row, 4).Value = line.Label;
-                intermediateSheet.Cell(row, 4).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Left;
-                
-                intermediateSheet.Cell(row, 5).Value = line.Operation;
-                intermediateSheet.Cell(row, 5).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Left;
-                
-                intermediateSheet.Cell(row, 6).Value = line.Operand;
-                intermediateSheet.Cell(row, 6).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Left;
-                
-                if (line.Format > 0)
-                {
-                    intermediateSheet.Cell(row, 7).Value = line.Format;
-                    intermediateSheet.Cell(row, 7).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
-                    intermediateSheet.Cell(row, 7).Style.NumberFormat.Format = "0";
-                }
-                
-                intermediateSheet.Cell(row, 8).Value = line.AddressingMode;
-                intermediateSheet.Cell(row, 8).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
-                
-                intermediateSheet.Cell(row, 9).Value = line.Comment;
-                intermediateSheet.Cell(row, 9).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Left;
-                
-                row++;
-            }
-            
-            // Ajustar anchos de columna automáticamente al contenido
-            intermediateSheet.Columns().AdjustToContents();
-            
-            // Bordes para toda la tabla
-            if (row > 2)
-            {
-                intermediateSheet.Range(1, 1, row - 1, headers.Length).Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
-                intermediateSheet.Range(1, 1, row - 1, headers.Length).Style.Border.InsideBorder = ClosedXML.Excel.XLBorderStyleValues.Hair;
-            }
-            
-            workbook.SaveAs(outputPath);
-        }
-        */
 
         /// <summary>
         /// Formatea una celda para CSV, escapando valores especiales y forzando formato texto
@@ -1306,6 +1270,7 @@ namespace laboratorioPractica3
         public string Label { get; set; } = "";
         public string Operation { get; set; } = "";
         public string Operand { get; set; } = "";
+        public string SemanticValue { get; set; } = "";
         public string Comment { get; set; } = "";
         public int Format { get; set; }
         public string AddressingMode { get; set; } = "-";

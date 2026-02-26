@@ -1,0 +1,46 @@
+﻿=== TABLA DE SIMBOLOS (TABSIM) ===
+SIMBOLO,DIRECCION_HEX,DIRECCION_DEC
+"EJER2","0000",0
+"SIMBOLO","0000",0
+"NUMERO","000B",11
+"DECIMAL","000E",14
+"INICIO","0040",64
+"CICLO","004B",75
+"ARREGLO","0059",89
+"RAIZ","09B9",2489
+"TEMP","09C8",2504
+"FIN","09CB",2507
+"AUX","09D1",2513
+"MAIN","0C21",3105
+
+=== ARCHIVO INTERMEDIO ===
+NL,CONTLOC_HEX,CONTLOC_DEC,ETQ,CODOP,OPR,FMT,MOD,ERR,COMENTARIO
+1,"0000",0,"EJER2","START","0","","'-","",""
+2,"0000",0,"SIMBOLO","RESW","3","","'-","Etiqueta 'SIMBOLO' excede el maximo de 6 caracteres (longitud actual: 7). Las etiquetas deben tener entre 1 y 6 caracteres.",""
+3,"0009",9,"","SUBR","X,T",2,"'-","La instruccion 'SUBR' requiere exactamente 2 registros (formato: REG1,REG2).",""
+4,"000B",11,"NUMERO","WORD","10H","","'-","",""
+5,"000E",14,"DECIMAL","RESB","50","","'-","Etiqueta 'DECIMAL' excede el maximo de 6 caracteres (longitud actual: 7). Las etiquetas deben tener entre 1 y 6 caracteres.",""
+6,"0040",64,"INICIO","'+RD","#SIMBOLO",4,"Inmediato","",""
+7,"0044",68,"","MUL","NUMERO",3,"Simple","",""
+8,"0047",71,"","FLOAT","",1,"'-","",""
+9,"0048",72,"","MULF","DECIMAL",3,"Simple","",""
+10,"004B",75,"CICLO","'+JSUB","'@RAIZ",4,"Indirecto","",""
+11,"004F",79,"ETIQ","HIO","RAIZ",1,"'-","[Error de sintaxis] La instrucción 'HIO' (formato 1) no acepta operandos en la arquitectura SIC/XE.; La instruccion 'HIO' (formato 1) no requiere operandos, pero se encontraron 1.",""
+12,"004F",79,"","LDA","ARREGLO,X",3,"Indexado","",""
+13,"0052",82,"","TIX","#1",3,"Inmediato","",""
+14,"0055",85,"","'+JGT","CICLO,X",4,"Indexado","",""
+15,"0059",89,"ARREGLO","RESW","800","","'-","Etiqueta 'ARREGLO' excede el maximo de 6 caracteres (longitud actual: 7). Las etiquetas deben tener entre 1 y 6 caracteres.",""
+16,"09B9",2489,"RAIZ","CLEAR","B",2,"'-","",""
+17,"09BB",2491,"CICLO","STA","TEMP",3,"Simple","[Símbolo duplicado] La etiqueta 'CICLO' ya está definida en TABSIM; Etiqueta duplicada: 'CICLO'. Esta etiqueta ya fue definida anteriormente en el programa.",""
+18,"09BE",2494,"","WD","'@100H",3,"Indirecto","",""
+19,"09C1",2497,"","'+LPS","#ARREGLO",4,"Inmediato","",""
+20,"09C5",2501,"","J","400H,X",3,"Indexado","",""
+21,"09C8",2504,"TEMP","RESW","1","","'-","",""
+22,"09CB",2507,"FIN","SIO","",1,"'-","",""
+23,"09CC",2508,"","LDX","'@AUX",3,"Indirecto","",""
+24,"09CF",2511,"","SHIFTL","A,4",2,"'-","",""
+25,"09D1",2513,"AUX","RESB","250H","","'-","RESB requiere un valor numerico que indique la cantidad de bytes/palabras a reservar. Se encontro: '250H'.",""
+26,"0C21",3105,"MAIN","BASE","INICIO","","'-","",""
+27,"0C21",3105,"MENOR","BYTE","H'234'","","'-","[Error de sintaxis] Caracter no reconocido: ''. Este caracter no es valido en el lenguaje SIC/XE.; Caracter no reconocido: ''. Este caracter no es valido en el lenguaje SIC/XE.; Instruccion o directiva no valida cerca de '234'. Verifique la sintaxis de la linea.",""
+28,"0C21",3105,"JS","FIN","","","'-","[Instrucción no existe] Instruccion o directiva no valida cerca de 'FIN'. Verifique la sintaxis de la linea.",""
+29,"0C21",3105,"","END","RAIZ","","'-","",""
