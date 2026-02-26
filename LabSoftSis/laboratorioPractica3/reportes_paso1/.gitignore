@@ -1,7 +1,0 @@
-# Ignorar todos los reportes CSV generados automáticamente
-*.csv
-*.txt
-
-# Mantener este archivo y .gitkeep para que la carpeta exista en git
-!.gitkeep
-!.gitignore

@@ -935,7 +935,7 @@ namespace laboratorioPractica3
             }
         }
 
-        public string GenerateReport()
+        public string GenerateReport(Dictionary<int, string>? objectCodes = null)
         {
             var sb = new StringBuilder();
             
@@ -974,8 +974,8 @@ namespace laboratorioPractica3
             sb.AppendLine();
 
             sb.AppendLine("═══════════════════ ARCHIVO INTERMEDIO ═══════════════════════════");
-            sb.AppendLine($"{"#",-4} | {"CONTLOC",-8} | {"ETQ",-10} | {"CODOP",-10} | {"OPR",-15} | {"VALOR_SEM",-15} | {"FMT",-4} | {"MOD",-12} | {"ERR"}");
-            sb.AppendLine(new string('─', 125));
+            sb.AppendLine($"{"#",-4} | {"CONTLOC",-8} | {"ETQ",-10} | {"CODOP",-10} | {"OPR",-15} | {"VALOR_SEM",-15} | {"FMT",-4} | {"MOD",-12} | {"COD_OBJ",-12} | {"ERR"}");
+            sb.AppendLine(new string('─', 140));
             
             foreach (var line in IntermediateLines)
             {
@@ -986,8 +986,12 @@ namespace laboratorioPractica3
                 // Truncar error si es muy largo para la consola
                 if (errorDisplay.Length > 40)
                     errorDisplay = errorDisplay.Substring(0, 37) + "...";
+
+                string codObj = "";
+                if (objectCodes != null && objectCodes.TryGetValue(line.LineNumber, out var oc))
+                    codObj = oc;
                 
-                sb.AppendLine($"{line.LineNumber,-4} | {loc,-8} | {line.Label,-10} | {line.Operation,-10} | {line.Operand,-15} | {line.SemanticValue,-15} | {fmt,-4} | {line.AddressingMode,-12} | {errorDisplay}");
+                sb.AppendLine($"{line.LineNumber,-4} | {loc,-8} | {line.Label,-10} | {line.Operation,-10} | {line.Operand,-15} | {line.SemanticValue,-15} | {fmt,-4} | {line.AddressingMode,-12} | {codObj,-12} | {errorDisplay}");
             }
             sb.AppendLine();
 
