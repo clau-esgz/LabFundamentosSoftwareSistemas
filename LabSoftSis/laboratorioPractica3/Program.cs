@@ -302,8 +302,19 @@ class Program
             .ThenBy(e => e.Column)
             .ToList();
 
-        Console.WriteLine(paso1.GenerateReport());
-        
+        // ═══════════════ EJECUTAR PASO 2 ═══════════════
+        var paso2 = new Paso2(
+            paso1.Lines,
+            paso1.SymbolTable,
+            paso1.ProgramStartAddress,
+            paso1.ProgramSize,
+            paso1.ProgramName,
+            paso1.BaseValue);
+        paso2.ObjectCodeGeneration();
+
+        // Mostrar reporte del Paso 2 (incluye código objeto y errores del Paso 2)
+        Console.WriteLine(paso2.GenerateReport());
+
         // Mostrar errores semánticos adicionales si los hay
         var additionalErrors = semanticAnalyzer.Errors
             .Where(e => !paso1.ErrorList.Any(p => p.Line == e.Line && p.Message == e.Message))
