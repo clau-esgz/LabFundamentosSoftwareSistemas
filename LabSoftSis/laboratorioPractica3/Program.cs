@@ -312,27 +312,8 @@ class Program
             paso1.BaseValue);
         paso2.ObjectCodeGeneration();
 
-        // Construir diccionario de código objeto por número de línea
-        var objectCodes = new Dictionary<int, string>();
-        foreach (var objLine in paso2.ObjectCodeLines)
-        {
-            if (!string.IsNullOrEmpty(objLine.ObjectCode))
-                objectCodes[objLine.IntermLine.LineNumber] = objLine.ObjectCode;
-        }
-
-        Console.WriteLine(paso1.GenerateReport(objectCodes));
-
-        // Mostrar errores del Paso 2
-        if (paso2.Errors.Count > 0)
-        {
-            Console.WriteLine("═══════════════════ ERRORES DEL PASO 2 ═════════════════════════");
-            foreach (var error in paso2.Errors.OrderBy(e => e.Line))
-            {
-                Console.WriteLine($"  • {error}");
-            }
-            Console.WriteLine($"\n  Total errores Paso 2: {paso2.Errors.Count}");
-            Console.WriteLine();
-        }
+        // Mostrar reporte del Paso 2 (incluye código objeto y errores del Paso 2)
+        Console.WriteLine(paso2.GenerateReport());
 
         // Mostrar errores semánticos adicionales si los hay
         var additionalErrors = semanticAnalyzer.Errors

@@ -8,15 +8,16 @@ namespace laboratorioPractica3
 {
     /// <summary>
     /// Implementa el Paso 2 del ensamblador SIC/XE de dos pasadas.
-    /// 
     /// OBJETIVO DEL PASO 2:
     /// - Generar el código objeto para cada línea del archivo intermedio
     /// - Detectar errores propios del Paso 2:
-    ///   · Símbolo no definido en TABSIM al resolver operando
-    ///   · Desplazamiento fuera de rango para PC-relativo / BASE-relativo
-    ///   · BASE no definido cuando se necesita BASE-relativo
-    ///   · Registro inválido en formato 2
-    ///   · Valor inmediato fuera de rango para formato 3
+    ///  Símbolo no definido en TABSIM al resolver operando
+    ///  Desplazamiento fuera de rango para PC-relativo / BASE-relativo
+    ///  BASE no definido cuando se necesita BASE-relativo
+    ///  Registro inválido en formato 2
+    ///  Valor inmediato fuera de rango para formato 3
+    ///  Modo de direccionamiento no existe según tabla de modos
+    ///     (ej: Formato 4 con constante, Indirecto con constante)
     /// 
     /// DATOS COMPARTIDOS CON PASO 1 (no se duplican):
     /// - Paso1.OPTAB            → opcodes y formatos (gramática: instruction)
@@ -25,116 +26,109 @@ namespace laboratorioPractica3
     /// - Paso1.REGISTERS        → nombres de registros válidos
     /// 
     /// CODIFICACIÓN DE INSTRUCCIONES SIC/XE:
-    /// ┌─────────┬───────────────────────────────────────────────────────────────┐
-    /// │ Formato │ Estructura de bits                                           │
-    /// ├─────────┼───────────────────────────────────────────────────────────────┤
-    /// │    1    │ [opcode 8 bits]                                    = 1 byte  │
-    /// │    2    │ [opcode 8][r1 4][r2 4]                             = 2 bytes │
-    /// │    3    │ [opcode 6][n][i][x][b][p][e=0][disp 12 bits]      = 3 bytes │
-    /// │    4    │ [opcode 6][n][i][x][b=0][p=0][e=1][addr 20 bits]  = 4 bytes │
-    /// └─────────┴───────────────────────────────────────────────────────────────┘
+    /// Formato │ Estructura de bits                                           
+   
+    ///    1    │ [opcode 8 bits]                                    = 1 byte  
+    ///    2    │ [opcode 8][r1 4][r2 4]                             = 2 bytes 
+    ///    3    │ [opcode 6][n][i][x][b][p][e=0][disp 12 bits]      = 3 bytes 
+    ///    4    │ [opcode 6][n][i][x][b=0][p=0][e=1][addr 20 bits]  = 4 bytes 
+    
     /// </summary>
     internal class Paso2
     {
-        // ═══════════════════ DATOS DEL PASO 1 ═══════════════════
-        private readonly IReadOnlyList<IntermediateLine> _lines;
-        private readonly IReadOnlyDictionary<string, int> _tabSim;
-        private readonly int _startAddress;
-        private readonly int _programLength;
-        private readonly string _programName;
+        //paso1
+        private readonly IReadOnlyList<IntermediateLine> _lineas;
+        private readonly IReadOnlyDictionary<string, int> _tablaSim;
+        private readonly int _dirInicio;
+        private readonly int _longPrograma;
+        private readonly string _nombrePrograma;
 
-        // ═══════════════════ VARIABLES DEL PASO 2 ═══════════════════
-        private int? _currentBase;
+        private int? _baseActual; // Valor actual de BASE, se actualiza al procesar directivas BASE/NOBASE
 
-        // ═══════════════════ RESULTADOS DEL PASO 2 ═══════════════════
+        // Resultados PASO 2 
         public List<SICXEError> Errors { get; } = new();
         public List<ObjectCodeLine> ObjectCodeLines { get; } = new();
 
-        // ═══════════════════ CONSTRUCTOR ═══════════════════
+        //constuctor que recibe los datos compartidos con el Paso 1 
         public Paso2(
-            IReadOnlyList<IntermediateLine> lines,
-            IReadOnlyDictionary<string, int> tabSim,
-            int startAddress,
-            int programLength,
-            string programName,
-            int? baseValue)
+            IReadOnlyList<IntermediateLine> lineas,
+            IReadOnlyDictionary<string, int> tablaSim,
+            int dirInicio,
+            int longPrograma,
+            string nombrePrograma,
+            int? valorBase)
         {
-            _lines = lines;
-            _tabSim = tabSim;
-            _startAddress = startAddress;
-            _programLength = programLength;
-            _programName = programName;
-            _currentBase = baseValue;
+            _lineas = lineas;
+            _tablaSim = tablaSim;
+            _dirInicio = dirInicio;
+            _longPrograma = longPrograma;
+            _nombrePrograma = nombrePrograma;
+            _baseActual = valorBase;
         }
 
-        // ╔═══════════════════════════════════════════════════════════════════════╗
-        // ║                    MÉTODO PRINCIPAL: ObjectCodeGeneration            ║
-        // ╚═══════════════════════════════════════════════════════════════════════╝
+        //Método principal que       
+        //recorre cada línea del archivo intermedio y genera su código objeto.
+        //si una línea ya tiene error del Paso 1, no genera código objeto.
+        //y por ultimo los errores nuevos del Paso 2 se agregan a la lista Errors.
 
-        /// <summary>
-        /// Recorre cada línea del archivo intermedio y genera su código objeto.
-        /// Si una línea ya tiene error del Paso 1, no genera código objeto.
-        /// Los errores nuevos del Paso 2 se agregan a la lista Errors.
-        /// </summary>
         public void ObjectCodeGeneration()
         {
-            foreach (var line in _lines)
+            foreach (var line in _lineas)
             {
-                string objCode = "";
-                string errorPaso2 = "";
+                string codObj = "";
+                string errPaso2 = "";
 
-                // ── Si la línea ya tiene error del Paso 1, no generar código objeto ──
-                if (!string.IsNullOrWhiteSpace(line.Error))
+                // si la línea ya tiene error del Paso 1, no generar código objeto 
+                if (!string.IsNullOrWhiteSpace(line.Error)) 
                 {
                     ObjectCodeLines.Add(new ObjectCodeLine(line, "", line.Error));
                     continue;
                 }
 
-                // ── Líneas de comentario o sin operación: sin código objeto ──
+                //líneas de comentario o sin operación: sin código objeto ──
                 if (line.Address < 0 || string.IsNullOrWhiteSpace(line.Operation))
                 {
                     ObjectCodeLines.Add(new ObjectCodeLine(line, "", ""));
                     continue;
                 }
 
-                string op = line.Operation.TrimStart('+').ToUpperInvariant();
+                string oper = line.Operation.TrimStart('+').ToUpperInvariant();
 
-                // ═══ DIRECTIVAS (Paso1.DIRECTIVES, gramática: directive) ═══
-                if (Paso1.DIRECTIVES.Contains(op))
+                //DIRECTIVAS 
+                if (Paso1.DIRECTIVES.Contains(oper))
                 {
-                    (objCode, errorPaso2) = ProcessDirective(line, op);
+                    (codObj, errPaso2) = ProcessDirective(line, oper);
 
-                    // Actualizar BASE/NOBASE en tiempo real durante el recorrido
-                    if (op == "BASE" && !string.IsNullOrEmpty(line.Operand))
+                    //actualizar el valor de la base 
+                    if (oper == "BASE" && !string.IsNullOrEmpty(line.Operand))
                     {
-                        if (_tabSim.TryGetValue(line.Operand, out int baseAddr))
-                            _currentBase = baseAddr;
+                        if (_tablaSim.TryGetValue(line.Operand, out int baseAddr))
+                            _baseActual = baseAddr;
                         else if (TryParseNumeric(line.Operand, out int numVal))
-                            _currentBase = numVal;
+                            _baseActual = numVal;
                     }
-                    else if (op == "NOBASE")
+                    else if (oper == "NOBASE") 
                     {
-                        _currentBase = null;
+                        _baseActual = null;
                     }
 
-                    if (!string.IsNullOrEmpty(errorPaso2))
-                        Errors.Add(new SICXEError(line.SourceLine, 0, errorPaso2, SICXEErrorType.Semantico));
+                    if (!string.IsNullOrEmpty(errPaso2))
+                        Errors.Add(new SICXEError(line.SourceLine, 0, errPaso2, SICXEErrorType.Semantico));
 
-                    ObjectCodeLines.Add(new ObjectCodeLine(line, objCode, errorPaso2));
+                    ObjectCodeLines.Add(new ObjectCodeLine(line, codObj, errPaso2));
                     continue;
                 }
 
-                // ═══ INSTRUCCIONES (Paso1.OPTAB, gramática: instruction) ═══
-                if (!Paso1.OPTAB.TryGetValue(op, out var opInfo))
+                //paso 1, aqui se asume que la operación es una instrucción válida, porque si no lo fuera, ya tendría error del Paso 1 y se saltaría esta parte
+                if (!Paso1.OPTAB.TryGetValue(oper, out var opInfo)) //pero va, aqui lo que se hace es si "si la operación no se encuentra en la tabla de opcodes, entonces es un error de instrucción desconocida"
                 {
-                    errorPaso2 = $"[Paso 2] Instrucción desconocida: '{op}'";
-                    Errors.Add(new SICXEError(line.SourceLine, 0, errorPaso2, SICXEErrorType.Semantico));
-                    ObjectCodeLines.Add(new ObjectCodeLine(line, "", errorPaso2));
+                    errPaso2 = "Error: Instrucción desconocida";
+                    Errors.Add(new SICXEError(line.SourceLine, 0, errPaso2, SICXEErrorType.Semantico)); //agregamos a la lista de errores del Paso 2
+                    ObjectCodeLines.Add(new ObjectCodeLine(line, "", errPaso2));
                     continue;
                 }
-
-                // Generar código objeto según formato (gramática: format1/format2/format34)
-                (objCode, errorPaso2) = line.Format switch
+                //Generar código objeto según formato 
+                (codObj, errPaso2) = line.Format switch
                 {
                     1 => GenerateFormat1(opInfo),
                     2 => GenerateFormat2(line, opInfo),
@@ -143,32 +137,28 @@ namespace laboratorioPractica3
                     _ => ("", "")
                 };
 
-                if (!string.IsNullOrEmpty(errorPaso2))
-                    Errors.Add(new SICXEError(line.SourceLine, 0, errorPaso2, SICXEErrorType.Semantico));
+                if (!string.IsNullOrEmpty(errPaso2)) //si hubo error en la generación del código objeto, agregarlo a la lista de errores del Paso 2
+                    Errors.Add(new SICXEError(line.SourceLine, 0, errPaso2, SICXEErrorType.Semantico));
 
-                ObjectCodeLines.Add(new ObjectCodeLine(line, objCode, errorPaso2));
+                ObjectCodeLines.Add(new ObjectCodeLine(line, codObj, errPaso2));
             }
         }
 
-        // ╔═══════════════════════════════════════════════════════════════════════╗
-        // ║  FORMATO 1 (gramática: format1Instruction → FIX|FLOAT|HIO|...)      ║
-        // ║  Estructura: [opcode 8 bits] = 1 byte                               ║
-        // ╚═══════════════════════════════════════════════════════════════════════╝
-
-        private (string ObjCode, string Error) GenerateFormat1(OpCodeInfo opInfo)
+        // FORMATO 1 
+        // estructura: [opcode 8 bits] = 1 byte                               
+        
+        private (string ObjCode, string Error) GenerateFormat1(OpCodeInfo opInfo) //no hay operandos, solo el opcode
         {
             return (opInfo.Opcode.ToString("X2"), "");
         }
 
-        // ╔═══════════════════════════════════════════════════════════════════════╗
-        // ║  FORMATO 2 (gramática: format2Instruction → ADDR|CLEAR|COMPR|...)   ║
-        // ║  Estructura: [opcode 8][r1 4][r2 4] = 2 bytes                      ║
-        // ║  Usa Paso1.REGISTER_NUMBERS para codificar registros                ║
-        // ╚═══════════════════════════════════════════════════════════════════════╝
-
-        private (string ObjCode, string Error) GenerateFormat2(IntermediateLine line, OpCodeInfo opInfo)
+        // FORMATO 2 
+        // Estructura: [opcode 8][r1 4][r2 4] = 2 bytes                      
+        // Usa Paso1.REGISTER_NUMBERS para convertir nombres de registros a números              
+      
+        private (string ObjCode, string Error) GenerateFormat2(IntermediateLine line, OpCodeInfo opInfo) //devuelve el código objeto de formato 2, junto con el mensaje de error
         {
-            string operand = line.Operand.Trim();
+            string operand = line.Operand.Trim(); 
             string[] parts = operand.Split(',');
             string opName = line.Operation.TrimStart('+').ToUpperInvariant();
 
@@ -186,8 +176,12 @@ namespace laboratorioPractica3
             {
                 if (parts.Length >= 1 && !Paso1.REGISTER_NUMBERS.TryGetValue(parts[0].Trim(), out r1))
                 {
-                    string err = $"[Paso 2] Registro inválido: '{parts[0].Trim()}' (válidos: {string.Join(", ", Paso1.REGISTER_NUMBERS.Keys)})";
-                    return ("????", err);
+                    string err = "Error: Registro inválido";
+                    // ERROR: Generar código objeto con registro=0xF (todos 1s en 4 bits)
+                    r1 = 0xF;
+                    r2 = 0xF;
+                    int objCodeErr = (opInfo.Opcode << 8) | (r1 << 4) | r2;
+                    return (objCodeErr.ToString("X4"), err);
                 }
                 r2 = 0;
             }
@@ -196,8 +190,12 @@ namespace laboratorioPractica3
             {
                 if (parts.Length >= 1 && !Paso1.REGISTER_NUMBERS.TryGetValue(parts[0].Trim(), out r1))
                 {
-                    string err = $"[Paso 2] Registro inválido: '{parts[0].Trim()}'";
-                    return ("????", err);
+                    string err = "Error: Registro inválido";
+                    // ERROR: Generar código objeto con registro=0xF (todos 1s en 4 bits)
+                    r1 = 0xF;
+                    r2 = 0xF;
+                    int objCodeErr = (opInfo.Opcode << 8) | (r1 << 4) | r2;
+                    return (objCodeErr.ToString("X4"), err);
                 }
                 if (parts.Length >= 2 && int.TryParse(parts[1].Trim(), out int shiftN))
                     r2 = shiftN - 1;  // SIC/XE codifica n-1
@@ -205,21 +203,27 @@ namespace laboratorioPractica3
             // Dos registros: ADDR, COMPR, DIVR, MULR, RMO, SUBR
             else
             {
+                string err = "";
                 if (parts.Length >= 1)
                 {
                     if (!Paso1.REGISTER_NUMBERS.TryGetValue(parts[0].Trim(), out r1))
                     {
-                        string err = $"[Paso 2] Registro inválido: '{parts[0].Trim()}'";
-                        return ("????", err);
+                        err = "Error: Registro inválido";
+                        r1 = 0xF;  // ERROR: usar 0xF
                     }
                 }
                 if (parts.Length >= 2)
                 {
                     if (!Paso1.REGISTER_NUMBERS.TryGetValue(parts[1].Trim(), out r2))
                     {
-                        string err = $"[Paso 2] Registro inválido: '{parts[1].Trim()}'";
-                        return ("????", err);
+                        err = "Error: Registro inválido";
+                        r2 = 0xF;  // ERROR: usar 0xF
                     }
+                }
+                if (!string.IsNullOrEmpty(err))
+                {
+                    int objCodeErr = (opInfo.Opcode << 8) | (r1 << 4) | r2;
+                    return (objCodeErr.ToString("X4"), err);
                 }
             }
 
@@ -236,6 +240,9 @@ namespace laboratorioPractica3
         // ║    Inmediato (n=0,i=1): PREFIX_IMMEDIATE operandValue (#)           ║
         // ║    Indirecto (n=1,i=0): PREFIX_INDIRECT operandValue  (@)           ║
         // ║    Indexado  (x=1):     operandValue indexing (,X)                  ║
+        // ║                                                                     ║
+        // ║  VALIDACIÓN: Indirecto (@) NO acepta constantes, solo etiquetas     ║
+        // ║  Según tabla: @m es válido, pero @c NO existe                       ║
         // ║                                                                     ║
         // ║  CÁLCULO DE DESPLAZAMIENTO:                                         ║
         // ║    1. PC-relativo: disp = target - PC  (rango -2048..2047)          ║
@@ -281,6 +288,23 @@ namespace laboratorioPractica3
             }
 
             bool isImmediate = (n == 0 && i == 1);
+            bool isIndirect = (n == 1 && i == 0);
+            bool isIndexed = (x == 1);
+
+            // ── Validar modo de direccionamiento según tabla ──
+            // Verificar si el operando es constante o etiqueta
+            bool isNumericOperand = TryParseNumeric(cleanOperand, out int _);
+            
+            // FORMATO 3: Validaciones según tabla de modos de direccionamiento
+            // Indirecto con constante NO existe en la tabla
+            if (isIndirect && isNumericOperand)
+            {
+                string err = "Error: Modo de direccionamiento no existe";
+                int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
+                int objError = (fbError << 16) | (xbpeError << 12) | 0xFFF;
+                return (objError.ToString("X6"), err);
+            }
 
             // ── Resolver dirección objetivo ──
             int targetAddress;
@@ -293,8 +317,12 @@ namespace laboratorioPractica3
                     // Inmediato con constante: disp = valor directo, p=0, b=0
                     if (numericValue < 0 || numericValue > 4095)
                     {
-                        string err = $"[Paso 2] Valor inmediato fuera de rango para formato 3: {numericValue} (máx 4095). Use formato 4 (+)";
-                        return ("??????", err);
+                        string err = "Error: Operando fuera de rango";
+                        // ERROR: Generar código objeto con b=1, p=1, disp=0xFFF (todos 1s)
+                        int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                        int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
+                        int objError = (fbError << 16) | (xbpeError << 12) | 0xFFF; // disp=-1 (complemento a 2)
+                        return (objError.ToString("X6"), err);
                     }
                     int fb = (opInfo.Opcode & 0xFC) | (n << 1) | i;
                     int xbpe = (x << 3); // b=0, p=0, e=0
@@ -306,10 +334,14 @@ namespace laboratorioPractica3
             else
             {
                 // Operando es un símbolo → buscar en TABSIM
-                if (!_tabSim.TryGetValue(cleanOperand, out targetAddress))
+                if (!_tablaSim.TryGetValue(cleanOperand, out targetAddress))
                 {
-                    string err = $"[Paso 2] Símbolo no definido en TABSIM: '{cleanOperand}'";
-                    return ("??????", err);
+                    string err = "Error: Símbolo no encontrado en TABSIM";
+                    // ERROR 1: Símbolo no encontrado - Generar código objeto con b=1, p=1, disp=0xFFF
+                    int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                    int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
+                    int objError = (fbError << 16) | (xbpeError << 12) | 0xFFF; // disp=-1 (complemento a 2)
+                    return (objError.ToString("X6"), err);
                 }
             }
 
@@ -325,24 +357,31 @@ namespace laboratorioPractica3
                 pBit = 1; bBit = 0;
             }
             // 2. Intentar BASE-relativo: rango 0 a 4095
-            else if (_currentBase.HasValue)
+            else if (_baseActual.HasValue)
             {
-                displacement = targetAddress - _currentBase.Value;
+                displacement = targetAddress - _baseActual.Value;
                 if (displacement >= 0 && displacement <= 4095)
                 {
                     bBit = 1; pBit = 0;
                 }
                 else
                 {
-                    string err = $"[Paso 2] Desplazamiento fuera de rango para formato 3 " +
-                                 $"(PC-rel: {targetAddress - pc}, BASE-rel: {displacement}). Use formato 4 (+)";
-                    return ("??????", err);
+                    // ERROR 2: Desplazamiento fuera de rango - Generar código objeto con b=1, p=1, disp=0xFFF
+                    string err = "Error: Operando fuera de rango";
+                    int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                    int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
+                    int objError = (fbError << 16) | (xbpeError << 12) | 0xFFF; // disp=-1 (complemento a 2)
+                    return (objError.ToString("X6"), err);
                 }
             }
             else
             {
-                string err = $"[Paso 2] Desplazamiento fuera de rango para PC-relativo ({displacement}) y BASE no definido";
-                return ("??????", err);
+                // ERROR 4: No es relativa al PC ni a la BASE - Generar código objeto con b=1, p=1, disp=0xFFF
+                string err = "Error: No relativo al CP/B";
+                int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
+                int objError = (fbError << 16) | (xbpeError << 12) | 0xFFF; // disp=-1 (complemento a 2)
+                return (objError.ToString("X6"), err);
             }
 
             // ── Construir código objeto ──
@@ -358,6 +397,10 @@ namespace laboratorioPractica3
         // ║  FORMATO 4 (gramática: FORMAT4_PREFIX instruction → +LDA, +JSUB)    ║
         // ║  Estructura: [opcode 6][n][i][x][b=0][p=0][e=1][addr 20 bits]      ║
         // ║  Dirección ABSOLUTA de 20 bits, sin PC/BASE relativo.               ║
+        // ║                                                                     ║
+        // ║  VALIDACIÓN: Formato 4 SOLO acepta etiquetas (m), NO constantes (c) ║
+        // ║  Según tabla de modos: +op m, +op #m, +op @m, +op m,X son válidos  ║
+        // ║  NO válidos: +op c, +op #c, +op c,X (genera error modo no existe)  ║
         // ╚═══════════════════════════════════════════════════════════════════════╝
 
         private (string ObjCode, string Error) GenerateFormat4(IntermediateLine line, OpCodeInfo opInfo)
@@ -397,20 +440,35 @@ namespace laboratorioPractica3
                     break;
             }
 
+            bool isIndexed = (x == 1);
+
+            // ── Validar modo de direccionamiento según tabla ──
+            // FORMATO 4: Solo acepta etiquetas (m), NO constantes (c)
+            // Verificar si el operando es constante
+            bool isNumericOperand = TryParseNumeric(cleanOperand, out int numericValue);
+            
+            if (isNumericOperand)
+            {
+                // Formato 4 con constante NO existe en la tabla
+                string err = "Error: Modo de direccionamiento no existe";
+                int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
+                int objError = (fbError << 24) | (xbpeError << 20) | 0xFFFFF;
+                return (objError.ToString("X8"), err);
+            }
+
             // ── Resolver dirección objetivo ──
+            // Si llegamos aquí, el operando debe ser una etiqueta (no constante)
             int targetAddress;
 
-            if (TryParseNumeric(cleanOperand, out int numericValue))
+            if (!_tablaSim.TryGetValue(cleanOperand, out targetAddress))
             {
-                targetAddress = numericValue;
-            }
-            else
-            {
-                if (!_tabSim.TryGetValue(cleanOperand, out targetAddress))
-                {
-                    string err = $"[Paso 2] Símbolo no definido en TABSIM: '{cleanOperand}'";
-                    return ("????????", err);
-                }
+                // ERROR 1: Símbolo no encontrado en TABSIM - Generar código objeto con b=1, p=1, addr=0xFFFFF
+                string err = "Error: Símbolo no encontrado en TABSIM";
+                int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
+                int objError = (fbError << 24) | (xbpeError << 20) | 0xFFFFF; // addr=-1 (complemento a 2)
+                return (objError.ToString("X8"), err);
             }
 
             // ── Construir código objeto: dirección absoluta 20 bits, e=1 ──
@@ -444,7 +502,7 @@ namespace laboratorioPractica3
         private (string ObjCode, string Error) GenerateByteObjCode(string operand)
         {
             if (string.IsNullOrEmpty(operand))
-                return ("", "[Paso 2] Operando vacío para directiva BYTE");
+                return ("", "Error: Operando vacío para BYTE");
 
             // gramática: CHARCONST : C '\'' ~[\r\n']+ '\'' ;
             if (operand.StartsWith("C'", StringComparison.OrdinalIgnoreCase) && operand.EndsWith("'"))
@@ -463,7 +521,7 @@ namespace laboratorioPractica3
                 return (content, "");
             }
 
-            return ("", $"[Paso 2] Formato de operando inválido para BYTE: '{operand}'");
+            return ("", "Error: Formato inválido para BYTE");
         }
 
         /// <summary>
@@ -475,7 +533,7 @@ namespace laboratorioPractica3
             if (TryParseNumeric(operand, out int value))
                 return ((value & 0xFFFFFF).ToString("X6"), "");
 
-            return ("", $"[Paso 2] Operando inválido para directiva WORD: '{operand}'");
+            return ("", "Error: Operando inválido para WORD");
         }
 
         // ╔═══════════════════════════════════════════════════════════════════════╗
@@ -533,11 +591,11 @@ namespace laboratorioPractica3
             sb.AppendLine("╚════════════════════════════════════════════════════════════════════╝");
             sb.AppendLine();
 
-            sb.AppendLine($"Programa        : {_programName}");
-            sb.AppendLine($"Dir. inicio     : {_startAddress:X4}h  ({_startAddress})");
-            sb.AppendLine($"Long. programa  : {_programLength:X4}h  ({_programLength} bytes)");
-            if (_currentBase.HasValue)
-                sb.AppendLine($"Valor BASE      : {_currentBase.Value:X4}h  ({_currentBase.Value})");
+            sb.AppendLine($"Programa        : {_nombrePrograma}");
+            sb.AppendLine($"Dir. inicio     : {_dirInicio:X4}h  ({_dirInicio})");
+            sb.AppendLine($"Long. programa  : {_longPrograma:X4}h  ({_longPrograma} bytes)");
+            if (_baseActual.HasValue)
+                sb.AppendLine($"Valor BASE      : {_baseActual.Value:X4}h  ({_baseActual.Value})");
             sb.AppendLine();
 
             sb.AppendLine("═══════════════════ ARCHIVO INTERMEDIO CON CÓDIGO OBJETO ═══════════");
@@ -549,25 +607,14 @@ namespace laboratorioPractica3
                 var line = objLine.IntermLine;
                 string loc = (line.Address >= 0) ? $"{line.Address:X4}h" : "";
                 string fmt = (line.Format > 0) ? $"{line.Format}" : "-";
+                string codObj = string.IsNullOrEmpty(objLine.ObjectCode) ? "----" : objLine.ObjectCode;
 
-                string errorDisplay = CombineErrors(line.Error, objLine.ErrorPaso2);
+                string errorDisplay = CombinarErrores(line.Error, objLine.ErrorPaso2);
                 if (errorDisplay.Length > 45)
                     errorDisplay = errorDisplay[..42] + "...";
 
-                sb.AppendLine($"{line.LineNumber,-4} | {loc,-8} | {line.Label,-10} | {line.Operation,-10} | {line.Operand,-15} | {fmt,-4} | {line.AddressingMode,-12} | {objLine.ObjectCode,-12} | {errorDisplay}");
+                sb.AppendLine($"{line.LineNumber,-4} | {loc,-8} | {line.Label,-10} | {line.Operation,-10} | {line.Operand,-15} | {fmt,-4} | {line.AddressingMode,-12} | {codObj,-12} | {errorDisplay}");
             }
-            sb.AppendLine();
-
-            if (Errors.Count > 0)
-            {
-                sb.AppendLine("═══════════════════ ERRORES DEL PASO 2 ═════════════════════════");
-                foreach (var error in Errors.OrderBy(e => e.Line))
-                {
-                    sb.AppendLine($"  • {error}");
-                }
-                sb.AppendLine($"\n  Total errores Paso 2: {Errors.Count}");
-            }
-
             sb.AppendLine();
             sb.AppendLine("═══════════════════ RESUMEN DEL PASO 2 ═════════════════════════");
             int linesWithObj = ObjectCodeLines.Count(l => !string.IsNullOrEmpty(l.ObjectCode));
@@ -598,35 +645,36 @@ namespace laboratorioPractica3
                 string addressHex = (line.Address >= 0) ? $"\"{line.Address:X4}\"" : "\"\"";
                 string addressDec = (line.Address >= 0) ? $"{line.Address}" : "\"\"";
                 string fmt = (line.Format > 0) ? $"{line.Format}" : "\"\"";
+                string codObj = string.IsNullOrEmpty(objLine.ObjectCode) ? "----" : objLine.ObjectCode;
 
                 sb.AppendLine(string.Join(",",
                     line.LineNumber,
                     addressHex,
                     addressDec,
-                    FormatCSVCell(line.Label),
-                    FormatCSVCell(line.Operation),
-                    FormatCSVCell(line.Operand),
+                    FormatearCeldaCSV(line.Label),
+                    FormatearCeldaCSV(line.Operation),
+                    FormatearCeldaCSV(line.Operand),
                     fmt,
-                    FormatCSVCell(line.AddressingMode),
-                    FormatCSVCell(objLine.ObjectCode),
-                    FormatCSVCell(line.Error),
-                    FormatCSVCell(objLine.ErrorPaso2),
-                    FormatCSVCell(line.Comment)));
+                    FormatearCeldaCSV(line.AddressingMode),
+                    FormatearCeldaCSV(codObj),
+                    FormatearCeldaCSV(line.Error),
+                    FormatearCeldaCSV(objLine.ErrorPaso2),
+                    FormatearCeldaCSV(line.Comment)));
             }
 
             sb.AppendLine();
             sb.AppendLine("=== RESUMEN DEL PASO 2 ===");
             sb.AppendLine("PROPIEDAD,VALOR");
-            sb.AppendLine($"\"NOMBRE_PROGRAMA\",\"{_programName}\"");
-            sb.AppendLine($"\"DIR_INICIO\",\"{_startAddress:X4}\"");
-            sb.AppendLine($"\"LONGITUD_PROGRAMA\",\"{_programLength:X4}\"");
+            sb.AppendLine($"\"NOMBRE_PROGRAMA\",\"{_nombrePrograma}\"");
+            sb.AppendLine($"\"DIR_INICIO\",\"{_dirInicio:X4}\"");
+            sb.AppendLine($"\"LONGITUD_PROGRAMA\",\"{_longPrograma:X4}\"");
             sb.AppendLine($"\"LINEAS_CON_CODIGO\",{ObjectCodeLines.Count(l => !string.IsNullOrEmpty(l.ObjectCode))}");
             sb.AppendLine($"\"ERRORES_PASO2\",{Errors.Count}");
 
             File.WriteAllText(outputPath, sb.ToString(), utf8WithBom);
         }
 
-        private string CombineErrors(string errPaso1, string errPaso2)
+        private string CombinarErrores(string errPaso1, string errPaso2)
         {
             if (string.IsNullOrEmpty(errPaso1) && string.IsNullOrEmpty(errPaso2)) return "";
             if (string.IsNullOrEmpty(errPaso1)) return errPaso2;
@@ -634,12 +682,12 @@ namespace laboratorioPractica3
             return errPaso1 + "; " + errPaso2;
         }
 
-        private string FormatCSVCell(string value)
+        private string FormatearCeldaCSV(string value)
         {
             if (string.IsNullOrEmpty(value)) return "\"\"";
             value = value.Replace("\"", "\"\"");
             if (value.StartsWith("+") || value.StartsWith("-") || value.StartsWith("=") || value.StartsWith("@"))
-                value = "'" + value;
+                value = '\'' + value;
             return $"\"{value}\"";
         }
     }
