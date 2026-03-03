@@ -1,0 +1,43 @@
+﻿=== TABLA DE SIMBOLOS (TABSIM) ===
+SIMBOLO,DIRECCION_HEX,DIRECCION_DEC
+"COPY","0000",0
+"FIRST","0000",0
+"CLOOP","0003",3
+"ENDFIL","0015",21
+"EOF","002B",43
+"THREE","002C",44
+"ZERO","002F",47
+
+=== ARCHIVO INTERMEDIO ===
+NL,CONTLOC_HEX,CONTLOC_DEC,ETQ,CODOP,OPR,VALOR_SEM,FMT,MOD,ERR,COMENTARIO
+1,"0000",0,"COPY","START","","0000h","","'-","La directiva 'START' requiere al menos un operando.",""
+2,"0000",0,"FIRST","STL","","",3,"'-","",""
+3,"0003",3,"CLOOP","JSUB","","",3,"'-","",""
+4,"0006",6,"","LDA","","",3,"'-","",""
+5,"0009",9,"","COMP","","",3,"'-","",""
+6,"000C",12,"","JEQ","","",3,"'-","",""
+7,"000F",15,"","JSUB","","",3,"'-","",""
+8,"0012",18,"","J","","",3,"'-","",""
+9,"0015",21,"ENDFIL","LDA","","",3,"'-","",""
+10,"0018",24,"","STA","","",3,"'-","",""
+11,"001B",27,"","BYTE","","","","'-","La directiva 'BYTE' requiere al menos un operando.",""
+12,"001C",28,"","LDA","","",3,"'-","",""
+13,"001F",31,"","STA","","",3,"'-","",""
+14,"0022",34,"","JSUB","","",3,"'-","",""
+15,"0025",37,"","LDL","","",3,"'-","",""
+16,"0028",40,"","RSUB","","",3,"'-","",""
+17,"002B",43,"","BYTE","BYTE","","","'-","[Error de sintaxis] Instruccion o directiva no valida cerca de 'BYTE'. Verifique la sintaxis de la linea.; La directiva 'BYTE' requiere al menos un operando.",""
+18,"002B",43,"","BYTE","BYTE","","","'-","[Error de sintaxis] Instruccion o directiva no valida cerca de 'BYTE'. Verifique la sintaxis de la linea.; La directiva 'BYTE' requiere al menos un operando.",""
+19,"002B",43,"EOF","BYTE","","","","'-","La directiva 'BYTE' requiere al menos un operando.",""
+20,"002C",44,"THREE","WORD","","","","'-","La directiva 'WORD' requiere al menos un operando.",""
+21,"002F",47,"ZERO","WORD","","","","'-","La directiva 'WORD' requiere al menos un operando.",""
+
+=== RESUMEN DEL PASO 1 ===
+PROPIEDAD,VALOR_HEX,VALOR_DEC,DESCRIPCION
+"NOMBRE_PROGRAMA","COPY","COPY","Nombre del programa"
+"DIR_INICIO","0000",0,"Dirección de inicio (operando de START)"
+"CONTLOC_FINAL","0032",50,"CONTLOC al llegar a END"
+"LONGITUD_PROGRAMA","0000",0,"= CONTLOC_final(0032h) - START(0000h)"
+"TOTAL_SIMBOLOS","",7,"Símbolos definidos en TABSIM"
+"TOTAL_LINEAS","",21,"Líneas en archivo intermedio"
+"TOTAL_ERRORES","",7,"Total de errores detectados"

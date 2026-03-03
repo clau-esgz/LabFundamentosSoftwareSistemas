@@ -1,0 +1,46 @@
+﻿=== TABLA DE SIMBOLOS (TABSIM) ===
+SIMBOLO,DIRECCION_HEX,DIRECCION_DEC
+"EJER3","0000",0
+"NUM","0030",48
+"VALOR","0073",115
+"INICIO","0077",119
+"TEMP","00A7",167
+"CAD","00AD",173
+"TABLA","00B3",179
+
+=== ARCHIVO INTERMEDIO ===
+NL,CONTLOC_HEX,CONTLOC_DEC,ETQ,CODOP,OPR,VALOR_SEM,FMT,MOD,ERR,COMENTARIO
+1,"0000",0,"EJER3","START","0","0000h","","'-","",""
+2,"0000",0,"","RESW","10H","","","'-","RESW requiere un valor numerico que indique la cantidad de bytes/palabras a reservar. Se encontro: '10H'.",""
+3,"0030",48,"NUM","WORD","64","","","'-","",""
+4,"0033",51,"","RESB","64","","","'-","",""
+5,"0073",115,"VALOR","WORD","16H","","","'-","",""
+6,"0076",118,"","HIO","","",1,"'-","",""
+7,"0077",119,"INICIO","CLEAR","X","",2,"'-","",""
+8,"0079",121,"","LDT","NUMERO","",3,"Simple","[Símbolo no definido] La etiqueta 'NUMERO' no está definida en TABSIM",""
+9,"007C",124,"","RESW","10","","","'-","",""
+10,"009A",154,"","BASE","TABLA","TABLA","","'-","",""
+11,"009A",154,"","'+MUL","#INICIO","",4,"Inmediato","",""
+12,"009E",158,"","LDA","'@VALOR","",3,"Indirecto","",""
+13,"00A1",161,"","'+STA","#VALORES","",4,"Inmediato","[Símbolo no definido] La etiqueta 'VALORES' no está definida en TABSIM",""
+14,"00A5",165,"","MULR","X,A","",2,"'-","La instruccion 'MULR' requiere exactamente 2 registros (formato: REG1,REG2).",""
+15,"00A7",167,"TEMP","RESW","2","","","'-","",""
+16,"00AD",173,"CAD","BYTE","C'EJERC3'","","","'-","",""
+17,"00B3",179,"TABLA","RESW","1004H","","","'-","RESW requiere un valor numerico que indique la cantidad de bytes/palabras a reservar. Se encontro: '1004H'.",""
+18,"30BF",12479,"","LDCH","NUM","",3,"Simple","",""
+19,"30C2",12482,"","'+JGT","100H,X","",4,"Indexado","",""
+20,"30C6",12486,"","COMP","TEMP","",3,"Simple","",""
+21,"30C9",12489,"","RESB","1","","","'-","",""
+22,"30CA",12490,"","BYTE","X'321'","","","'-","",""
+23,"30CC",12492,"","RSUB","","",3,"'-","",""
+24,"30CF",12495,"","END","","","","'-","",""
+
+=== RESUMEN DEL PASO 1 ===
+PROPIEDAD,VALOR_HEX,VALOR_DEC,DESCRIPCION
+"NOMBRE_PROGRAMA","EJER3","EJER3","Nombre del programa"
+"DIR_INICIO","0000",0,"Dirección de inicio (operando de START)"
+"CONTLOC_FINAL","30CF",12495,"CONTLOC al llegar a END"
+"LONGITUD_PROGRAMA","30CF",12495,"= CONTLOC_final(30CFh) - START(0000h)"
+"TOTAL_SIMBOLOS","",7,"Símbolos definidos en TABSIM"
+"TOTAL_LINEAS","",24,"Líneas en archivo intermedio"
+"TOTAL_ERRORES","",5,"Total de errores detectados"
