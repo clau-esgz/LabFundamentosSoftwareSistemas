@@ -341,8 +341,19 @@ class Program
 
         // Exportar con todos los errores combinados
         ExportPaso1WithValidation(paso1, allErrors, baseOutputPath);
-        
-        Console.WriteLine($"\nDirectorio de salida: {reportesDir}");
+
+        // Exportar CSV del Paso 2
+        string reportesPaso2Dir = Path.Combine(projectDir, "reportes_paso2");
+        if (!Directory.Exists(reportesPaso2Dir))
+            Directory.CreateDirectory(reportesPaso2Dir);
+
+        string timestamp2 = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        string csvPaso2Path = Path.Combine(reportesPaso2Dir, $"{baseName}_PASO2_{timestamp2}.csv");
+        paso2.ExportToCSV(csvPaso2Path);
+        Console.WriteLine($"  - CSV Paso 2: {Path.GetFileName(csvPaso2Path)}");
+
+        Console.WriteLine($"\nDirectorio de salida Paso 1: {reportesDir}");
+        Console.WriteLine($"Directorio de salida Paso 2: {reportesPaso2Dir}");
         
         if (allErrors.Count == 0)
         {

@@ -365,8 +365,8 @@ namespace laboratorioPractica3
                 }
                 else
                 {
-                    // ERROR 2: Desplazamiento fuera de rango - Generar código objeto con b=1, p=1, disp=0xFFF
-                    string err = "Error: Operando fuera de rango";
+                    // ERROR 4: desplazamiento no cabe en BASE-relativo → instrucción no relativa al CP ni a la B
+                    string err = "Error: No relativo al CP/B";
                     int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
                     int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
                     int objError = (fbError << 16) | (xbpeError << 12) | 0xFFF; // disp=-1 (complemento a 2)
@@ -375,7 +375,7 @@ namespace laboratorioPractica3
             }
             else
             {
-                // ERROR 4: No es relativa al PC ni a la BASE - Generar código objeto con b=1, p=1, disp=0xFFF
+                // ERROR 4: BASE no definida (NOBASE activo) → instrucción no relativa al CP ni a la B
                 string err = "Error: No relativo al CP/B";
                 int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
                 int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
@@ -405,7 +405,7 @@ namespace laboratorioPractica3
             string operand = line.Operand.Trim();
             string op = line.Operation.TrimStart('+').ToUpperInvariant();
 
-            // ── Caso especial: +RSUB ──
+            // Caso especial: +RSUB
             if (op == "RSUB")
             {
                 int firstByte = (opInfo.Opcode & 0xFC) | 0x03; // n=1, i=1
@@ -414,7 +414,7 @@ namespace laboratorioPractica3
                 return (rsub.ToString("X8"), "");
             }
 
-            // ── Determinar bits n, i, x ──
+            // Determinar bits n, i, x
             int n = 1, i = 1, x = 0;
             string cleanOperand = operand;
 
@@ -437,43 +437,60 @@ namespace laboratorioPractica3
                     break;
             }
 
-            bool isIndexed = (x == 1);
-
-            // Validar modo de direccionamiento según tabla 
-            // FORMATO 4: Solo acepta etiquetas (m), NO constantes (c)
-            // Verificar si el operando es constante
+            // Verificar si el operando es constante hexadecimal 000H o cualquier otro numérico
+            bool isHexConstant = cleanOperand.EndsWith("H", StringComparison.OrdinalIgnoreCase);
             bool isNumericOperand = TryParseNumeric(cleanOperand, out int numericValue);
-            
+
             if (isNumericOperand)
             {
-                // Formato 4 con constante NO existe en la tabla
-                string err = "Error: Modo de direccionamiento no existe";
+                // Constante hex 000H: válida en formato 4 solo si su valor decimal > 4095
+                if (isHexConstant && numericValue > 4095)
+                {
+                    int firstByte = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                    int xbpe = (x << 3) | 1; // b=0, p=0, e=1
+                    int objCode = (firstByte << 24) | (xbpe << 20) | (numericValue & 0xFFFFF);
+                    return (objCode.ToString("X8"), "");
+                }
+                else if (isHexConstant) // isHexConstant && numericValue <= 4095
+                {
+                    // ERROR 2: constante hex ≤ 4095 en formato 4 → operando fuera de rango
+                    string err = "Error: Operando fuera de rango";
+                    int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                    int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
+                    int objError = (fbError << 24) | (xbpeError << 20) | 0xFFFFF;
+                    return (objError.ToString("X8"), err);
+                }
+                else
+                {
+                    // Cualquier otra constante (decimal, 0x...) → modo no existe en formato 4
+                    string err = "Error: Modo de direccionamiento no existe";
+                    int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                    int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
+                    int objError = (fbError << 24) | (xbpeError << 20) | 0xFFFFF;
+                    return (objError.ToString("X8"), err);
+                }
+            }
+
+            // Operando es etiqueta (m) → resolver en TABSIM
+            // Se antepone * para indicar registro relocalizable
+            int targetAddress;
+
+            if (!_tablaSim.TryGetValue(cleanOperand, out targetAddress))
+            {
+                string err = "Error: Símbolo no encontrado en TABSIM";
                 int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
                 int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
                 int objError = (fbError << 24) | (xbpeError << 20) | 0xFFFFF;
                 return (objError.ToString("X8"), err);
             }
 
-            // Resolver dirección objetivo 
-            // Si llegamos aquí, el operando debe ser una etiqueta (no constante)
-            int targetAddress;
-
-            if (!_tablaSim.TryGetValue(cleanOperand, out targetAddress))
-            {
-                // ERROR 1: Símbolo no encontrado en TABSIM - Generar código objeto con b=1, p=1, addr=0xFFFFF
-                string err = "Error: Símbolo no encontrado en TABSIM";
-                int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
-                int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
-                int objError = (fbError << 24) | (xbpeError << 20) | 0xFFFFF; // addr=-1 (complemento a 2)
-                return (objError.ToString("X8"), err);
-            }
-
-            // Construir código objeto: dirección absoluta 20 bits, e=1 
+            // Construir código objeto: dirección absoluta 20 bits, e=1
+            // * al final indica que la dirección es relocalizable (depende de dónde se cargue el programa)
             {
                 int firstByte = (opInfo.Opcode & 0xFC) | (n << 1) | i;
                 int xbpe = (x << 3) | 1; // b=0, p=0, e=1
                 int objCode = (firstByte << 24) | (xbpe << 20) | (targetAddress & 0xFFFFF);
-                return (objCode.ToString("X8"), "");
+                return (objCode.ToString("X8") + "*", "");
             }
         }
 
