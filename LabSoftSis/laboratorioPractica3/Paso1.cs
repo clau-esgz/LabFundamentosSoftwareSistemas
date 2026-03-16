@@ -36,7 +36,9 @@ namespace laboratorioPractica3
         private int? BASE_VALUE = null;
         private string BASE_OPERAND = "";
         
-        private Dictionary<string, int> TABSIM = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        private SimbolosYExpresiones TABSIM_EXT = new SimbolosYExpresiones();
+        private Dictionary<string, int> TABSIM => TABSIM_EXT.GetAllSymbols().ToDictionary(k => k.Key, v => v.Value.Value, StringComparer.OrdinalIgnoreCase);
+        
         private List<IntermediateLine> IntermediateLines = new List<IntermediateLine>();
         private List<SICXEError> Errors = new List<SICXEError>();
         private HashSet<string> ReferencedSymbols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -155,6 +157,7 @@ namespace laboratorioPractica3
         private HashSet<int> ProcessedErrorLines = new HashSet<int>();  // Líneas de error ya procesadas
 
         public IReadOnlyDictionary<string, int> SymbolTable => TABSIM;
+        public SimbolosYExpresiones SymbolTableExtended => TABSIM_EXT;
         public IReadOnlyList<IntermediateLine> Lines => IntermediateLines;
         public IReadOnlyList<SICXEError> ErrorList => Errors;
         public int ProgramStartAddress => START_ADDRESS;
@@ -341,9 +344,9 @@ namespace laboratorioPractica3
                 ProgramStarted = true;
                 
                 // Para START, insertar etiqueta en TABSIM si existe
-                if (!string.IsNullOrEmpty(label) && !TABSIM.ContainsKey(label))
+                if (!string.IsNullOrEmpty(label) && !TABSIM_EXT.ContainsKey(label))
                 {
-                    TABSIM[label] = CONTLOC;
+                    TABSIM_EXT.AddSymbol(label, CONTLOC, SymbolType.Relative);
                 }
 
                 intermediateLine2.SemanticValue = $"{START_ADDRESS:X4}h";
@@ -351,19 +354,19 @@ namespace laboratorioPractica3
                 return;
             }
 
-            if (!ProgramStarted)
+            if (!ProgramStarted && !string.IsNullOrEmpty(operation))
             {
-                CONTLOC = 0;
-                START_ADDRESS = 0;
-                ProgramStarted = true;
+                string msg = "Programa debe iniciar con START";
+                Errors.Add(new SICXEError(CurrentLine, 0, msg, SICXEErrorType.Semantico));
+                return;
             }
             
             // Directiva BASE
             if (operationContext?.directive()?.BASE() != null)
             {
                 BASE_OPERAND = operand ?? "";
-                if (!string.IsNullOrEmpty(operand) && TABSIM.ContainsKey(operand))
-                    BASE_VALUE = TABSIM[operand];
+                if (!string.IsNullOrEmpty(operand) && TABSIM_EXT.TryGetValue(operand, out var symInfo))
+                    BASE_VALUE = symInfo.Value;
             }
 
             // Si hay error sintáctico/léxico en esta línea:
@@ -399,54 +402,81 @@ namespace laboratorioPractica3
                 // Regla 1: El prefijo '+' (formato 4) solo es válido para instrucciones de formato 3
                 if (isFormat4 && instrContext != null)
                 {
-                    if (instrContext.format1Instruction() != null)
+                    if (GetFormatFromGrammar(operationContext, false) != 3) 
                     {
-                        string opName = (baseOperation ?? "").ToUpper();
-                        architecturalError = $"[Error de sintaxis] El prefijo '+' no es válido para '{opName}' (formato 1) en la arquitectura SIC/XE.";
+                        architecturalError = "El formato 4 (+) solo aplica a instrucciones de formato 3";
                     }
-                    else if (instrContext.format2Instruction() != null)
-                    {
-                        string opName = (baseOperation ?? "").ToUpper();
-                        architecturalError = $"[Error de sintaxis] El prefijo '+' no es válido para '{opName}' (formato 2) en la arquitectura SIC/XE.";
-                    }
-                }
-
-                // Regla 2: Instrucciones de formato 1 (FIX, FLOAT, HIO, NORM, SIO, TIO) NO aceptan operandos
-                if (architecturalError == null && format == 1 && !string.IsNullOrEmpty(operand))
-                {
-                    string opName = (baseOperation ?? operation ?? "").ToUpper();
-                    architecturalError = $"[Error de sintaxis] La instrucción '{opName}' (formato 1) no acepta operandos en la arquitectura SIC/XE.";
                 }
 
                 if (architecturalError != null)
                 {
-                    intermediateLine2.Error = string.IsNullOrEmpty(intermediateLine2.Error)
-                        ? architecturalError
-                        : intermediateLine2.Error + "; " + architecturalError;
-                    Errors.Add(new SICXEError(antlrLine, 0, architecturalError, SICXEErrorType.Semantico));
-                    intermediateLine2.Increment = 0;  // NO incrementar CONTLOC
+                    intermediateLine2.Increment = 0;
+                    if (string.IsNullOrEmpty(intermediateLine2.Error))
+                        intermediateLine2.Error = architecturalError;
+                    else
+                        intermediateLine2.Error += "; " + architecturalError;
+                        
                     IntermediateLines.Add(intermediateLine2);
-                    // NO insertar etiqueta en TABSIM, NO incrementar CONTLOC
+                    Errors.Add(new SICXEError(antlrLine, 0, architecturalError, SICXEErrorType.Semantico));
                     return;
                 }
             }
 
-            // Inserción en TABSIM (solo si NO hay error sintáctico)
+            // Directiva EQU
+            if (operationContext?.directive()?.EQU() != null)
+            {
+                if (!string.IsNullOrEmpty(label))
+                {
+                    if (TABSIM_EXT.ContainsKey(label))
+                    {
+                        var dupErr = new SICXEError(antlrLine, 0, $"Símbolo duplicado: {label}", SICXEErrorType.Semantico);
+                        lineErrors.Add(dupErr);
+                        Errors.Add(dupErr);
+                        if (string.IsNullOrEmpty(intermediateLine2.Error))
+                            intermediateLine2.Error = dupErr.Message;
+                        else
+                            intermediateLine2.Error += "; " + dupErr.Message;
+                    }
+                    else
+                    {
+                        var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operand, CONTLOC);
+                        if (evalErr != null)
+                        {
+                            var errEq = new SICXEError(antlrLine, 0, evalErr, SICXEErrorType.Semantico);
+                            Errors.Add(errEq);
+                            intermediateLine2.Error = string.IsNullOrEmpty(intermediateLine2.Error) ? evalErr : intermediateLine2.Error + "; " + evalErr;
+                            // Asignar -1 (FFFF) para continuar con el ensamblado (Punto 6)
+                            TABSIM_EXT.AddSymbol(label, -1, SymbolType.Absolute);
+                            intermediateLine2.SemanticValue = "FFFFh";
+                        }
+                        else
+                        {
+                            TABSIM_EXT.AddSymbol(label, evalVal, evalType);
+                            intermediateLine2.SemanticValue = $"{evalVal:X4}h";
+                        }
+                    }
+                }
+                intermediateLine2.Increment = 0;
+                IntermediateLines.Add(intermediateLine2);
+                return;
+            }
+
+            // Para otras instrucciones/directivas, si hay etiqueta y no está duplicada, insertar
             if (!string.IsNullOrEmpty(label))
             {
-                if (TABSIM.ContainsKey(label))
+                if (TABSIM_EXT.ContainsKey(label))
                 {
-                    // Símbolo duplicado: se marca error, pero la línea puede afectar CP si es correcta
-                    string dupError = $"[Símbolo duplicado] La etiqueta '{label}' ya está definida en TABSIM";
-                    Errors.Add(new SICXEError(CurrentLine, 0, dupError, SICXEErrorType.Semantico));
-                    intermediateLine2.Error = dupError;
-                    // NO se inserta en TABSIM
+                    var dupErr = new SICXEError(antlrLine, 0, $"Símbolo duplicado: {label}", SICXEErrorType.Semantico);
+                    lineErrors.Add(dupErr);
                 }
                 else
                 {
-                    TABSIM[label] = CONTLOC;
+                    TABSIM_EXT.AddSymbol(label, CONTLOC, SymbolType.Relative);
                 }
             }
+
+            // Guardar el CONTLOC actual en la línea intermedio ANTES de incrementarlo
+            IntermediateLines.Add(intermediateLine2);
 
             // Cálculo del incremento usando la gramática
             int increment = CalculateIncrementFromGrammar(operationContext, operand);
@@ -637,7 +667,7 @@ namespace laboratorioPractica3
         /// OBTIENE EL FORMATO USANDO EL CONTEXTO DE LA GRAMÁTICA
         /// En lugar de duplicar listas, usa las reglas definidas en SICXE.g4
         /// </summary>
-        private int GetFormatFromGrammar(SICXEParser.OperationContext operationContext, bool isFormat4)
+        private int GetFormatFromGrammar(SICXEParser.OperationContext? operationContext, bool isFormat4)
         {
             if (operationContext == null)
                 return 0;
@@ -698,7 +728,7 @@ namespace laboratorioPractica3
         /// <summary>
         /// CALCULA EL INCREMENTO USANDO LA GRAMÁTICA
         /// </summary>
-        private int CalculateIncrementFromGrammar(SICXEParser.OperationContext operationContext, string operand)
+        private int CalculateIncrementFromGrammar(SICXEParser.OperationContext? operationContext, string? operand)
         {
             if (operationContext == null)
                 return 0;
@@ -784,7 +814,7 @@ namespace laboratorioPractica3
         {
             foreach (var symbol in ReferencedSymbols)
             {
-                if (!TABSIM.ContainsKey(symbol) && !REGISTERS.Contains(symbol))
+                if (!TABSIM_EXT.ContainsKey(symbol) && !REGISTERS.Contains(symbol))
                 {
                     // Obtener las líneas donde se usa este símbolo
                     if (SymbolUsageLines.ContainsKey(symbol))
@@ -865,7 +895,7 @@ namespace laboratorioPractica3
                 return "";
 
             if (directive.BASE() != null && !string.IsNullOrEmpty(operand))
-                return TABSIM.TryGetValue(operand, out int baseAddr) ? $"{baseAddr:X4}h" : operand;
+                return TABSIM_EXT.TryGetValue(operand, out var symInfo) ? $"{symInfo.Value:X4}h" : operand;
 
             return "";
         }
@@ -899,7 +929,7 @@ namespace laboratorioPractica3
         /// - Hexadecimal con prefijo 0x: 0x12, 0x100
         /// - Constante X'...': X'12', X'ABC'
         /// </summary>
-        private int ParseOperand(string operand)
+        private int ParseOperand(string? operand)
         {
             if (string.IsNullOrEmpty(operand))
                 return 0;
@@ -950,7 +980,7 @@ namespace laboratorioPractica3
             sb.AppendLine($"Dir. inicio     : {START_ADDRESS:X4}h  ({START_ADDRESS})");
             sb.AppendLine($"CONTLOC final   : {finalContloc:X4}h  ({finalContloc})");
             sb.AppendLine($"Long. programa  : {PROGRAM_LENGTH:X4}h  ({PROGRAM_LENGTH} bytes)  [= CONTLOC_final({finalContloc:X4}h) - START({START_ADDRESS:X4}h)]");
-            sb.AppendLine($"Total símbolos  : {TABSIM.Count}");
+            sb.AppendLine($"Total símbolos  : {TABSIM_EXT.Count}");
             if (BASE_VALUE.HasValue)
             {
                 string baseDisplay = string.IsNullOrEmpty(BASE_OPERAND) ? "" : $"'{BASE_OPERAND}' -> ";
@@ -959,15 +989,15 @@ namespace laboratorioPractica3
             sb.AppendLine();
 
             sb.AppendLine("═══════════════════ TABLA DE SÍMBOLOS (TABSIM) ═══════════════════");
-            sb.AppendLine($"{"SÍMBOLO",-20} | {"DIRECCIÓN (HEX)",-18} | {"DIRECCIÓN (DEC)",-18}");
-            sb.AppendLine(new string('─', 60));
+            sb.AppendLine($"{"SÍMBOLO",-20} | {"DIRECCIÓN (HEX)",-18} | {"DIRECCIÓN (DEC)",-18} | {"TIPO",-10}");
+            sb.AppendLine(new string('─', 75));
             
-            foreach (var symbol in TABSIM.OrderBy(s => s.Value))
+            foreach (var symbol in TABSIM_EXT.GetAllSymbols().OrderBy(s => s.Value.Value))
             {
-                sb.AppendLine($"{symbol.Key,-20} | {symbol.Value:X4}h{"",-13} | {symbol.Value,-18}");
+                sb.AppendLine($"{symbol.Key,-20} | {symbol.Value.Value:X4}h{"",-13} | {symbol.Value.Value,-18} | {symbol.Value.Type,-10}");
             }
             
-            if (TABSIM.Count == 0)
+            if (TABSIM_EXT.Count == 0)
             {
                 sb.AppendLine("  (No hay símbolos definidos)");
             }
@@ -1040,7 +1070,7 @@ namespace laboratorioPractica3
             // ═══════════════════ RESUMEN DEL ANÁLISIS ═══════════════════
             sb.AppendLine();
             sb.AppendLine("═══════════════════ RESUMEN DEL ANÁLISIS ════════════════════");
-            sb.AppendLine($"  * Tabla de símbolos (TABSIM): {TABSIM.Count} símbolo(s) definido(s)");
+            sb.AppendLine($"  * Tabla de símbolos (TABSIM): {TABSIM_EXT.Count} símbolo(s) definido(s)");
             sb.AppendLine($"  * Longitud del programa: CONTLOC_final({finalContloc:X4}h) - START({START_ADDRESS:X4}h) = {PROGRAM_LENGTH:X4}h ({PROGRAM_LENGTH} bytes)");
             if (BASE_VALUE.HasValue)
             {
@@ -1111,7 +1141,7 @@ namespace laboratorioPractica3
             sb.AppendLine($"NOMBRE_PROGRAMA,{PROGRAM_NAME},{PROGRAM_NAME}");
             sb.AppendLine($"DIRECCION_INICIO,{START_ADDRESS:X4},{START_ADDRESS}");
             sb.AppendLine($"LONGITUD_PROGRAMA,{PROGRAM_LENGTH:X4},{PROGRAM_LENGTH}");
-            sb.AppendLine($"TOTAL_SIMBOLOS,,{TABSIM.Count}");
+            sb.AppendLine($"TOTAL_SIMBOLOS,,{TABSIM_EXT.Count}");
             sb.AppendLine($"TOTAL_LINEAS,,{IntermediateLines.Count}");
             sb.AppendLine($"TOTAL_ERRORES,,{Errors.Count}");
             if (BASE_VALUE.HasValue)
@@ -1178,18 +1208,19 @@ namespace laboratorioPractica3
             
             // ═══════════════════ SECCIÓN 1: TABLA DE SÍMBOLOS (TABSIM) ═══════════════════
             sb.AppendLine("=== TABLA DE SIMBOLOS (TABSIM) ===");
-            sb.AppendLine("SIMBOLO,DIRECCION_HEX,DIRECCION_DEC");
+            sb.AppendLine("SIMBOLO,DIRECCION_HEX,DIRECCION_DEC,TIPO");
             
-            foreach (var symbol in TABSIM.OrderBy(s => s.Value))
+            foreach (var symbol in TABSIM_EXT.GetAllSymbols().OrderBy(s => s.Value.Value))
             {
                 // Usar comillas para forzar formato texto en valores hexadecimales
-                sb.AppendLine($"\"{symbol.Key}\",\"{symbol.Value:X4}\",{symbol.Value}");
+                sb.AppendLine($"\"{symbol.Key}\",\"{symbol.Value.Value:X4}\",{symbol.Value.Value},{symbol.Value.Type}");
             }
             
-            if (TABSIM.Count == 0)
+            if (TABSIM_EXT.Count == 0)
             {
-                sb.AppendLine("\"(Sin simbolos definidos)\",\"\",\"\"");
+                sb.AppendLine("\"(Sin símbolos)\",\"\",\"\",\"\"");
             }
+            
             sb.AppendLine();
             
             // ═══════════════════ SECCIÓN 2: ARCHIVO INTERMEDIO ═══════════════════
@@ -1230,13 +1261,13 @@ namespace laboratorioPractica3
             sb.AppendLine($"\"DIR_INICIO\",\"{START_ADDRESS:X4}\",{START_ADDRESS},\"Dirección de inicio (operando de START)\"");
             sb.AppendLine($"\"CONTLOC_FINAL\",\"{csvFinalContloc:X4}\",{csvFinalContloc},\"CONTLOC al llegar a END\"");
             sb.AppendLine($"\"LONGITUD_PROGRAMA\",\"{PROGRAM_LENGTH:X4}\",{PROGRAM_LENGTH},\"= CONTLOC_final({csvFinalContloc:X4}h) - START({START_ADDRESS:X4}h)\"");
-            sb.AppendLine($"\"TOTAL_SIMBOLOS\",\"\",{TABSIM.Count},\"Símbolos definidos en TABSIM\"");
+            sb.AppendLine($"\"TOTAL_SIMBOLOS\",\"\",{TABSIM_EXT.Count},\"Símbolos definidos en TABSIM\"");
             sb.AppendLine($"\"TOTAL_LINEAS\",\"\",{IntermediateLines.Count},\"Líneas en archivo intermedio\"");
             sb.AppendLine($"\"TOTAL_ERRORES\",\"\",{(allErrors?.Count ?? Errors.Count)},\"Total de errores detectados\"");
             if (BASE_VALUE.HasValue)
             {
-                sb.AppendLine($"\"BASE_OPERANDO\",\"\",\"{BASE_OPERAND}\",\"Operando de la directiva BASE\"");
-                sb.AppendLine($"\"BASE_VALOR\",\"{BASE_VALUE.Value:X4}\",{BASE_VALUE.Value},\"Valor almacenado de BASE (para uso en Paso 2)\"");
+                sb.AppendLine($"\"BASE_OPERANDO\",\"{BASE_VALUE.Value:X4}\",\"{BASE_VALUE.Value}\",\"Valor almacenado de BASE (para uso en Paso 2)\"");
+                sb.AppendLine($"\"BASE_VALOR\",\"\",\"{BASE_OPERAND}\",\"Operando de la directiva BASE\"");
             }
 
             File.WriteAllText(outputPath, sb.ToString(), utf8WithBom);

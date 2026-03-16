@@ -235,10 +235,10 @@ namespace laboratorioPractica3
             for (int i = 0; i < Math.Min(operands.Length, expectedCount); i++)
             {
                 var operand = operands[i];
-                var operandValue = operand.operandValue();
-                if (operandValue != null)
+                var expr = operand.expression();
+                if (expr != null)
                 {
-                    string text = operandValue.GetText();
+                    string text = expr.GetText();
                     if (!ValidRegisters.Contains(text))
                     {
                         _errors.Add(new SICXEError(operand.Start.Line, operand.Start.Column,

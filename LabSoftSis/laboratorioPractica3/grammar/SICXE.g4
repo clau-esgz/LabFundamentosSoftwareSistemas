@@ -1,4 +1,3 @@
-
 //define la gramatica para el lenguaje ensamblador SIC/XE,
 //incluyendo instrucciones, directivas, operandos, comentarios y reglas de formato.
 grammar SICXE;
@@ -33,12 +32,12 @@ operation
 // Instrucciones de formato 1 (sin operandos)
 format1Instruction
     : FIX | FLOAT | HIO | NORM | SIO | TIO
-    ;
+   ;
 
 // Instrucciones de formato 2 (registros)
 format2Instruction
     : ADDR | CLEAR | COMPR | DIVR | MULR | RMO | SHIFTL | SHIFTR | SUBR | SVC | TIXR
-    ;
+   ;
 
 // Instrucciones de formato 3/4 (memoria)
 format34Instruction
@@ -57,7 +56,7 @@ instruction
 directive
     : START | END | BYTE | WORD | RESB | RESW | BASE | NOBASE
     | EQU | ORG | LTORG | USE | EXTDEF | EXTREF | CSECT
-    ;
+   ;
 
 // Reglas para operandos, incluyendo formatos de direccionamiento y literales
 //por ejemplo LDA #3 (inmediato), JEQ @ENDFIL (indirecto), STA BUFFER,X (indexado)
@@ -66,10 +65,25 @@ operand
     ;
 
 operandExpr 
-    : PREFIX_INDIRECT operandValue indexing? // Indirecto
-    | PREFIX_IMMEDIATE operandValue // Inmediato
-    | operandValue indexing? // Directo o indexado
+    : PREFIX_INDIRECT expression           // Indirecto
+    | PREFIX_IMMEDIATE expression          // Inmediato
+    | expression indexing?                 // Directo o indexado
     | literal
+    ;
+
+expression
+    : term ( ( PLUS | MINUS ) term )*
+    ;
+
+term
+    : factor ( ( STAR | SLASH ) factor )*
+    ;
+
+factor
+    : operandValue
+    | LPAREN expression RPAREN
+    | MINUS factor
+    | PLUS factor
     ;
 
 indexing
@@ -93,14 +107,14 @@ literal // Puede ser un literal hexadecimal, de carácter o numérico
 
 comment
     : COMMENT
-    ;
+   ;
 
 // ===================== LEXER RULES =====================
 //las reglas lexicas definen los tokens para instrucciones,
 //directivas, operandos, comentarios y otros elementos del lenguaje ensamblador SIC/XE.
 // tienen este formato porque de esta forma se pueden escribir las instrucciones 
 //y directivas de forma case-insensitive (por ejemplo, "LDA", "lda" o "LdA" serán reconocidos como la misma instrucción).
-//y tienen un guion bajo al final de algunas instrucciones para evitar conflictos con palabras reservadas 
+//y tienen un guion _ bajo al final de algunas instrucciones para evitar conflictos con palabras reservadas 
 //o tokens similares (por ejemplo, "ADD" vs "ADDR").
 ADDF    : A D D F ;
 ADDR    : A D D R_ ;
@@ -185,10 +199,12 @@ PREFIX_INDIRECT  : '@' ;
 PREFIX_IMMEDIATE : '#' ;
 COMMA            : ',' ;
 STAR             : '*' ;
+PLUS             : '+' ;
+MINUS            : '-' ;
+SLASH            : '/' ;
+LPAREN           : '(' ;
+RPAREN           : ')' ;
 
-//aqui establecemos los tokens para literales y constantes,
-//incluyendo formatos para literales hexadecimales, de caracteres y numéricos,
-//así como constantes hexadecimales, de caracteres y números.
 // --- Literals and constants ---
 LITERAL_HEX  : '=' X '\'' [0-9A-Fa-f]+ '\'' ;
 LITERAL_CHAR : '=' C '\'' ~[\r\n']+ '\'' ;

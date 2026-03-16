@@ -35,7 +35,7 @@ namespace laboratorioPractica3
     {
         //paso1
         private readonly IReadOnlyList<IntermediateLine> _lineas;
-        private readonly IReadOnlyDictionary<string, int> _tablaSim;
+        private readonly SimbolosYExpresiones _tabSimExt;
         private readonly int _dirInicio;
         private readonly int _longPrograma;
         private readonly string _nombrePrograma;
@@ -49,14 +49,14 @@ namespace laboratorioPractica3
         //constuctor que recibe los datos compartidos con el Paso 1 
         public Paso2(
             IReadOnlyList<IntermediateLine> lineas,
-            IReadOnlyDictionary<string, int> tablaSim,
+            SimbolosYExpresiones tablaSimExt,
             int dirInicio,
             int longPrograma,
             string nombrePrograma,
             int? valorBase)
         {
             _lineas = lineas;
-            _tablaSim = tablaSim;
+            _tabSimExt = tablaSimExt;
             _dirInicio = dirInicio;
             _longPrograma = longPrograma;
             _nombrePrograma = nombrePrograma;
@@ -104,8 +104,8 @@ namespace laboratorioPractica3
                     //actualizar el valor de la base 
                     if (oper == "BASE" && !string.IsNullOrEmpty(line.Operand))
                     {
-                        if (_tablaSim.TryGetValue(line.Operand, out int baseAddr))
-                            _baseActual = baseAddr;
+                        if (_tabSimExt.TryGetValue(line.Operand, out var symInfo))
+                            _baseActual = symInfo.Value;
                         else if (TryParseNumeric(line.Operand, out int numVal))
                             _baseActual = numVal;
                     }
@@ -307,41 +307,39 @@ namespace laboratorioPractica3
 
             // Resolver dirección objetivo
             int targetAddress;
+            SymbolType targetType;
 
-            if (TryParseNumeric(cleanOperand, out int numericValue))
+            var (evalVal, evalType, evalErr) = _tabSimExt.EvaluateExpression(cleanOperand, line.Address);
+            
+            if (evalErr != null)
             {
-                // Operando es valor numérico directo
-                if (isImmediate)
-                {
-                    // Inmediato con constante: disp = valor directo, p=0, b=0
-                    if (numericValue < 0 || numericValue > 4095)
-                    {
-                        string err = "Error: Operando fuera de rango";
-                        // ERROR: Generar código objeto con b=1, p=1, disp=0xFFF (todos 1s)
-                        int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
-                        int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
-                        int objError = (fbError << 16) | (xbpeError << 12) | 0xFFF; // disp=-1 (complemento a 2)
-                        return (objError.ToString("X6"), err);
-                    }
-                    int fb = (opInfo.Opcode & 0xFC) | (n << 1) | i;
-                    int xbpe = (x << 3); // b=0, p=0, e=0
-                    int obj = (fb << 16) | (xbpe << 12) | (numericValue & 0xFFF);
-                    return (obj.ToString("X6"), "");
-                }
-                targetAddress = numericValue;
+                string err = "Error: Símbolo no encontrado en TABSIM";
+                // ERROR 1: Símbolo no encontrado - Generar código objeto con b=1, p=1, disp=0xFFF
+                int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
+                int objError = (fbError << 16) | (xbpeError << 12) | 0xFFF; // disp=-1 (complemento a 2)
+                return (objError.ToString("X6"), err);
             }
-            else
+            
+            targetAddress = evalVal;
+            targetType = evalType;
+            
+            // Si el operando resultó ser una constante absoluta (ej: #3 o #100 o #MAXLEN si MAXLEN es EQU 100 absoluto)
+            // Y estamos en Inmediato (n=0, i=1), usamos disp directo al valor:
+            if (isImmediate && targetType == SymbolType.Absolute)
             {
-                // Operando es un símbolo buscar en TABSIM
-                if (!_tablaSim.TryGetValue(cleanOperand, out targetAddress))
+                if (targetAddress < 0 || targetAddress > 4095)
                 {
-                    string err = "Error: Símbolo no encontrado en TABSIM";
-                    // ERROR 1: Símbolo no encontrado - Generar código objeto con b=1, p=1, disp=0xFFF
+                    string err = "Error: Operando fuera de rango";
                     int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
                     int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
                     int objError = (fbError << 16) | (xbpeError << 12) | 0xFFF; // disp=-1 (complemento a 2)
                     return (objError.ToString("X6"), err);
                 }
+                int fb = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                int xbpe = (x << 3); // b=0, p=0, e=0
+                int obj = (fb << 16) | (xbpe << 12) | (targetAddress & 0xFFF);
+                return (obj.ToString("X6"), "");
             }
 
             // Calcular desplazamiento (PC-relativo o BASE-relativo) 
@@ -398,7 +396,7 @@ namespace laboratorioPractica3
         // VALIDACIÓN: Formato 4 SOLO acepta etiquetas (m), NO constantes (c) 
         // Según tabla de modos: +op m, +op #m, +op @m, +op m,X son válidos  
         // NO válidos: +op c, +op #c, +op c,X (genera error modo no existe)  
-        // 
+        //
 
         private (string ObjCode, string Error) GenerateFormat4(IntermediateLine line, OpCodeInfo opInfo)
         {
@@ -437,21 +435,26 @@ namespace laboratorioPractica3
                     break;
             }
 
+            bool isImmediate = (n == 0 && i == 1);
+
             // Verificar si el operando es constante hexadecimal 000H o cualquier otro numérico
             bool isHexConstant = cleanOperand.EndsWith("H", StringComparison.OrdinalIgnoreCase);
+
+            var (evalVal, evalType, evalErr) = _tabSimExt.EvaluateExpression(cleanOperand, line.Address);
+
             bool isNumericOperand = TryParseNumeric(cleanOperand, out int numericValue);
 
-            if (isNumericOperand)
+            if (isImmediate && evalType == SymbolType.Absolute)
             {
                 // Constante hex 000H: válida en formato 4 solo si su valor decimal > 4095
-                if (isHexConstant && numericValue > 4095)
+                if (isHexConstant && evalVal > 4095)
                 {
                     int firstByte = (opInfo.Opcode & 0xFC) | (n << 1) | i;
                     int xbpe = (x << 3) | 1; // b=0, p=0, e=1
-                    int objCode = (firstByte << 24) | (xbpe << 20) | (numericValue & 0xFFFFF);
+                    int objCode = (firstByte << 24) | (xbpe << 20) | (evalVal & 0xFFFFF);
                     return (objCode.ToString("X8"), "");
                 }
-                else if (isHexConstant) // isHexConstant && numericValue <= 4095
+                else if (isHexConstant) // isHexConstant && evalVal <= 4095
                 {
                     // ERROR 2: constante hex ≤ 4095 en formato 4 → operando fuera de rango
                     string err = "Error: Operando fuera de rango";
@@ -463,6 +466,8 @@ namespace laboratorioPractica3
                 else
                 {
                     // Cualquier otra constante (decimal, 0x...) → modo no existe en formato 4
+                    // O expresiones evaluadas absolutas:
+                    // De hecho, si es expresión absoluta simple #MAXLEN, y MAXLEN=2000, entonces debe generar error de modo no existe
                     string err = "Error: Modo de direccionamiento no existe";
                     int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
                     int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
@@ -471,26 +476,28 @@ namespace laboratorioPractica3
                 }
             }
 
-            // Operando es etiqueta (m) → resolver en TABSIM
+            // Operando es etiqueta o expresión (m) → resolver en TABSIM
             // Se antepone * para indicar registro relocalizable
             int targetAddress;
 
-            if (!_tablaSim.TryGetValue(cleanOperand, out targetAddress))
+            if (evalErr != null)
             {
-                string err = "Error: Símbolo no encontrado en TABSIM";
+                string err = "Error: Símbolo no encontrado en TABSIM u operando inválido";
                 int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
                 int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
                 int objError = (fbError << 24) | (xbpeError << 20) | 0xFFFFF;
                 return (objError.ToString("X8"), err);
             }
+            targetAddress = evalVal;
 
             // Construir código objeto: dirección absoluta 20 bits, e=1
-            // * al final indica que la dirección es relocalizable (depende de dónde se cargue el programa)
+            // * al final indica que la dirección es relocalizable (depende de dónde se cargue el programa y si es relativa)
             {
                 int firstByte = (opInfo.Opcode & 0xFC) | (n << 1) | i;
                 int xbpe = (x << 3) | 1; // b=0, p=0, e=1
                 int objCode = (firstByte << 24) | (xbpe << 20) | (targetAddress & 0xFFFFF);
-                return (objCode.ToString("X8") + "*", "");
+                string suffix = (evalType == SymbolType.Relative) ? "*" : "";
+                return (objCode.ToString("X8") + suffix, "");
             }
         }
 
@@ -502,7 +509,7 @@ namespace laboratorioPractica3
             return op switch
             {
                 "BYTE" => GenerateByteObjCode(line.Operand),
-                "WORD" => GenerateWordObjCode(line.Operand),
+                "WORD" => GenerateWordObjCode(line.Operand, line.Address),
                 _ => ("", "") // START, END, BASE, NOBASE, RESB, RESW, etc.
             };
         }
@@ -536,14 +543,19 @@ namespace laboratorioPractica3
             return ("", "Error: Formato inválido para BYTE");
         }
 
-        /// WORD n → valor entero en 24 bits (6 dígitos hex)
-        /// Ejemplo: WORD 3 → 000003
-        private (string ObjCode, string Error) GenerateWordObjCode(string operand)
+        /// WORD expresión → valor entero en 24 bits (6 dígitos hex)
+        /// Ejemplo: WORD 3 → 000003, WORD BUFFER-BUFEND
+        private (string ObjCode, string Error) GenerateWordObjCode(string operand, int pc)
         {
-            if (TryParseNumeric(operand, out int value))
-                return ((value & 0xFFFFFF).ToString("X6"), "");
+            var (val, type, err) = _tabSimExt.EvaluateExpression(operand, pc);
+            if (err != null)
+                return ("FFFFFF", "Error: " + err); // O reportar algún error base especial
 
-            return ("", "Error: Operando inválido para WORD");
+            string code = (val & 0xFFFFFF).ToString("X6");
+            if (type == SymbolType.Relative)
+                code += "*";
+
+            return (code, "");
         }
 
 

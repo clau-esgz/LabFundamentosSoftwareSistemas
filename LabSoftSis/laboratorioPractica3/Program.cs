@@ -305,7 +305,7 @@ class Program
         // ═══════════════ EJECUTAR PASO 2 ═══════════════
         var paso2 = new Paso2(
             paso1.Lines,
-            paso1.SymbolTable,
+            paso1.SymbolTableExtended,
             paso1.ProgramStartAddress,
             paso1.ProgramSize,
             paso1.ProgramName,
@@ -352,8 +352,33 @@ class Program
         paso2.ExportToCSV(csvPaso2Path);
         Console.WriteLine($"  - CSV Paso 2: {Path.GetFileName(csvPaso2Path)}");
 
+        // ═══════════════ EJECUTAR PROGRAMA OBJETO ═══════════════
+        var progObjeto = new ProgramaObjeto(
+            paso2.ObjectCodeLines,
+            paso1.ProgramName,
+            paso1.ProgramStartAddress,
+            paso1.ProgramSize);
+
+        Console.WriteLine("\n═══════════════════════════════════════════════════════════════════");
+        Console.WriteLine("                    PROGRAMA OBJETO GENERADO");
+        Console.WriteLine("═══════════════════════════════════════════════════════════════════");
+        var objRecords = progObjeto.GenerarRegistros();
+        foreach (var r in objRecords)
+        {
+            Console.WriteLine(r);
+        }
+
+        string reportesObjDir = Path.Combine(projectDir, "reportes_objeto");
+        if (!Directory.Exists(reportesObjDir))
+            Directory.CreateDirectory(reportesObjDir);
+
+        string csvObjPath = Path.Combine(reportesObjDir, $"{baseName}_OBJETO_{timestamp2}.csv");
+        progObjeto.ExportarACSV(csvObjPath);
+        Console.WriteLine($"  - Excel/CSV Programa Objeto guardado en: {Path.GetFileName(csvObjPath)}");
+
         Console.WriteLine($"\nDirectorio de salida Paso 1: {reportesDir}");
         Console.WriteLine($"Directorio de salida Paso 2: {reportesPaso2Dir}");
+        Console.WriteLine($"Directorio de salida Programa Objeto: {reportesObjDir}");
         
         if (allErrors.Count == 0)
         {
