@@ -774,6 +774,8 @@ namespace laboratorioPractica3
             int increment = CalculateIncrementFromGrammar(operationContext, operand, operation);
             intermediateLine2.Increment = increment;
             intermediateLine2.SemanticValue = CalculateSemanticValue(operationContext, operand);
+
+            // Guardar el CONTLOC actual en la línea intermedio
             IntermediateLines.Add(intermediateLine2);
 
             // Directiva END
