@@ -52,15 +52,16 @@ namespace laboratorioPractica3
         public void Clear() => _tabsim.Clear();
 
         // Evaluador de expresiones
-        public (int value, SymbolType type, string? error) EvaluateExpression(string? expression, int currentAddress)
+        // allowUndefinedSymbols: si true, permite símbolos no definidos (útil para Paso 1)
+        public (int value, SymbolType type, string? error) EvaluateExpression(string? expression, int currentAddress, bool allowUndefinedSymbols = false)
         {
             if (string.IsNullOrWhiteSpace(expression)) return (0, SymbolType.Absolute, "Expresión vacía");
 
             // TODO: Un parser simple de la expresión para calcular su valor evaluando *, símbolos, y constantes
-            return ParseExpressionTokens(expression, currentAddress);
+            return ParseExpressionTokens(expression, currentAddress, allowUndefinedSymbols);
         }
 
-        private (int value, SymbolType type, string? error) ParseExpressionTokens(string expr, int currentAddress)
+        private (int value, SymbolType type, string? error) ParseExpressionTokens(string expr, int currentAddress, bool allowUndefinedSymbols = false)
         {
             // Implementa un parser recursivo descendente simple o un evaluador postfix aquí.
             // Para simplificar, tokenize and evaluate.
@@ -68,7 +69,7 @@ namespace laboratorioPractica3
             {
                 var tokens = Tokenize(expr);
                 int pos = 0;
-                var (val, type, err) = ParseAddSub(tokens, ref pos, currentAddress);
+                var (val, type, err) = ParseAddSub(tokens, ref pos, currentAddress, allowUndefinedSymbols);
                 if (err != null) return (-1, SymbolType.Absolute, err);
                 if (pos < tokens.Count) return (-1, SymbolType.Absolute, "Tokens adicionales inesperados");
                 return (val, type, null);
@@ -101,18 +102,19 @@ namespace laboratorioPractica3
             return tokens;
         }
 
-        private (int val, SymbolType type, string? err) ParseAddSub(List<string> tokens, ref int pos, int pc)
+        private (int val, SymbolType type, string? err) ParseAddSub(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols = false)
         {
-            var (leftVal, leftType, err) = ParseMulDiv(tokens, ref pos, pc);
+            var (leftVal, leftType, err) = ParseMulDiv(tokens, ref pos, pc, allowUndefinedSymbols);
             if (err != null) return (leftVal, leftType, err);
 
             while (pos < tokens.Count && (tokens[pos] == "+" || tokens[pos] == "-"))
             {
                 string op = tokens[pos++];
-                var (rightVal, rightType, rightErr) = ParseMulDiv(tokens, ref pos, pc);
+                var (rightVal, rightType, rightErr) = ParseMulDiv(tokens, ref pos, pc, allowUndefinedSymbols);
                 if (rightErr != null) return (-1, SymbolType.Absolute, rightErr);
 
-                // Reglas de apareamiento de expresiones absolutas y relativas
+                // Reglas de apareamiento de expresiones absolutas y relativas según SIC/XE
+                // Solo se permiten ciertas combinaciones válidas
                 if (op == "+")
                 {
                     if (leftType == SymbolType.Relative && rightType == SymbolType.Relative)
@@ -130,8 +132,13 @@ namespace laboratorioPractica3
                 }
                 else if (op == "-")
                 {
-                    if (leftType == SymbolType.Absolute && rightType == SymbolType.Relative)
-                        return (-1, SymbolType.Absolute, "No se permite restar un término relativo de uno absoluto");
+                    // Reglas válidas de resta en SIC/XE:
+                    // Absolute - Absolute = Absolute
+                    // Relative - Relative = Absolute (se cancelan las componentes)
+                    // Relative - Absolute = Relative (restar offset a dirección)
+                    // Absolute - (-Relative) = Relative (restar un relativo negado = sumar, ej: A - (-B) = A + B)
+                    // INVÁLIDO: Absolute - Relative (si el relativo es positivo)
+
                     if (leftType == SymbolType.Relative && rightType == SymbolType.Relative)
                     {
                         leftVal -= rightVal;
@@ -142,25 +149,44 @@ namespace laboratorioPractica3
                         leftVal -= rightVal;
                         leftType = SymbolType.Absolute;
                     }
-                    else // Relativo - Absoluto
+                    else if (leftType == SymbolType.Relative && rightType == SymbolType.Absolute)
                     {
+                        // Relative - Absolute = Relative (restar offset a dirección, ej: ETIQ - 10)
                         leftVal -= rightVal;
                         leftType = SymbolType.Relative;
+                    }
+                    else if (leftType == SymbolType.Absolute && rightType == SymbolType.Relative)
+                    {
+                        // Absolute - Relative es válido solo si el relativo es negado
+                        // Razón: A - (-B) = A + B (restar un negativo = sumar su opuesto)
+                        // Si rightVal < 0, entonces fue negado por operador unario, es válido
+                        // Si rightVal >= 0, es un error porque sería Absoluto - Relativo positivo
+                        if (rightVal < 0)
+                        {
+                            // Es Absolute - (-Relative), que es equivalente a Absolute + Relative
+                            leftVal -= rightVal;  // Esto realiza la resta correctamente: A - (-B) = A + B
+                            leftType = SymbolType.Relative;
+                        }
+                        else
+                        {
+                            // INVÁLIDO: Absolute - Relative positivo no está permitido en SIC/XE
+                            return (-1, SymbolType.Absolute, "No se permite restar un término relativo de uno absoluto (Absoluto - Relativo)");
+                        }
                     }
                 }
             }
             return (leftVal, leftType, null);
         }
 
-        private (int val, SymbolType type, string? err) ParseMulDiv(List<string> tokens, ref int pos, int pc)
+        private (int val, SymbolType type, string? err) ParseMulDiv(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols = false)
         {
-            var (leftVal, leftType, err) = ParseFactor(tokens, ref pos, pc);
+            var (leftVal, leftType, err) = ParseFactor(tokens, ref pos, pc, allowUndefinedSymbols);
             if (err != null) return (leftVal, leftType, err);
 
             while (pos < tokens.Count && (tokens[pos] == "*" || tokens[pos] == "/"))
             {
                 string op = tokens[pos++];
-                var (rightVal, rightType, rightErr) = ParseFactor(tokens, ref pos, pc);
+                var (rightVal, rightType, rightErr) = ParseFactor(tokens, ref pos, pc, allowUndefinedSymbols);
                 if (rightErr != null) return (-1, SymbolType.Absolute, rightErr);
 
                 // En multiplicación/división los operandos DEBEN ser absolutos
@@ -182,15 +208,37 @@ namespace laboratorioPractica3
             return (leftVal, leftType, null);
         }
 
-        private (int val, SymbolType type, string? err) ParseFactor(List<string> tokens, ref int pos, int pc)
+        private (int val, SymbolType type, string? err) ParseFactor(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols = false)
         {
             if (pos >= tokens.Count) return (-1, SymbolType.Absolute, "Expresión mal formada");
 
-            string token = tokens[pos++];
+            string token = tokens[pos];
+
+            // Manejar operadores unarios (+ y -)
+            if (token == "+" || token == "-")
+            {
+                string unaryOp = token;
+                pos++;  // Consumir el operador
+
+                // Recursivamente parsear el siguiente factor
+                var (val, type, err) = ParseFactor(tokens, ref pos, pc, allowUndefinedSymbols);
+                if (err != null) return (val, type, err);
+
+                // Aplicar el operador unario
+                if (unaryOp == "-")
+                {
+                    val = -val;  // Negar el valor
+                }
+                // El + unario no hace nada, solo retorna el valor
+
+                return (val, type, null);
+            }
+
+            pos++;  // Consumir el token (ya no es operador unario)
 
             if (token == "(")
             {
-                var (val, type, err) = ParseAddSub(tokens, ref pos, pc);
+                var (val, type, err) = ParseAddSub(tokens, ref pos, pc, allowUndefinedSymbols);
                 if (err != null) return (val, type, err);
                 if (pos >= tokens.Count || tokens[pos++] != ")") return (-1, SymbolType.Absolute, "Se esperaba ')'");
                 return (val, type, null);
@@ -222,6 +270,14 @@ namespace laboratorioPractica3
             else if (int.TryParse(token, out value))
             {
                 return (value, SymbolType.Absolute, null);
+            }
+
+            // Si allowUndefinedSymbols es true, retorna un valor temporal (0) para símbolos no definidos
+            // Esto permite forward references en Paso 1
+            if (allowUndefinedSymbols)
+            {
+                // Retorna 0 como valor placeholder, pero marca como Relative para indicar que puede cambiar
+                return (0, SymbolType.Relative, null);
             }
 
             return (-1, SymbolType.Absolute, $"Símbolo no definido o valor inválido: {token}");

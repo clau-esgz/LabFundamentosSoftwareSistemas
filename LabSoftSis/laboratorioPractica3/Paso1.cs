@@ -31,6 +31,7 @@ namespace laboratorioPractica3
         private int CONTLOC = 0;
         private int START_ADDRESS = 0;
         private int CONTLOC_FINAL = 0;
+        private int EXECUTION_ENTRY_POINT = 0;  // Dirección de inicio de ejecución (del operando de END)
         private string PROGRAM_NAME = "";
         private int PROGRAM_LENGTH = 0;
         private int? BASE_VALUE = null;
@@ -164,6 +165,7 @@ namespace laboratorioPractica3
         public int ProgramSize => PROGRAM_LENGTH;
         public string ProgramName => PROGRAM_NAME;
         public int? BaseValue => BASE_VALUE;
+        public int ExecutionEntryPoint => EXECUTION_ENTRY_POINT;
 
         /// <summary>
         /// Agrega errores externos (léxicos/sintácticos) para asociarlos con líneas del archivo intermedio
@@ -230,28 +232,207 @@ namespace laboratorioPractica3
             
             // Obtener la línea real del contexto de ANTLR
             int antlrLine = context.Start?.Line ?? CurrentLine;
-            
+
             // Verificar si hay error sintáctico/léxico en esta línea (usar línea de ANTLR)
             bool hasSyntaxError = HasSyntaxErrorOnLine(antlrLine);
             var lineErrors = GetErrorsForLine(antlrLine);
-            
+
             var statement = context.statement();
-            
+
             // Si no hay statement Y no hay comentario, verificar si hay error en la línea
             if (statement == null && context.comment() == null)
             {
-                // Si hay error sintáctico y NO hemos procesado esta línea antes, crear línea de error
+                 // Si hay error sintáctico, intentar extraer manualmente para procesar WORD/BYTE/ORG
                 if (hasSyntaxError && SourceLines.Length >= antlrLine && !ProcessedErrorLines.Contains(antlrLine))
                 {
-                    ProcessedErrorLines.Add(antlrLine);  // Marcar como procesada
+                    ProcessedErrorLines.Add(antlrLine);  // Marcar como procesada para evitar duplicados
                     string originalLine = SourceLines[antlrLine - 1];
+                    var parsedLine = ParseLineManually(originalLine);
+
+                    // Detectar si es WORD, BYTE u ORG con expresión, o instrucción con expresión
+                    bool isWordOrByteWithExpression = false;
+                    bool isOrgWithExpression = false;
+                    bool isInstructionWithExpression = false;
+                    if (!string.IsNullOrEmpty(parsedLine.Operation))
+                    {
+                        string baseOp = parsedLine.Operation.TrimStart('+');
+                        if ((baseOp.Equals("WORD", StringComparison.OrdinalIgnoreCase) || 
+                             baseOp.Equals("BYTE", StringComparison.OrdinalIgnoreCase)) &&
+                            !string.IsNullOrEmpty(parsedLine.Operand) &&
+                            (parsedLine.Operand.Contains('*') || parsedLine.Operand.Contains('/') || parsedLine.Operand.Contains('+') || 
+                             parsedLine.Operand.Contains('-') || parsedLine.Operand.Contains('(') || parsedLine.Operand.Contains(')')))
+                        {
+                            isWordOrByteWithExpression = true;
+                        }
+                        else if (baseOp.Equals("ORG", StringComparison.OrdinalIgnoreCase) &&
+                                 !string.IsNullOrEmpty(parsedLine.Operand) &&
+                                 (parsedLine.Operand.Contains('*') || parsedLine.Operand.Contains('/') || parsedLine.Operand.Contains('+') || 
+                                  parsedLine.Operand.Contains('-') || parsedLine.Operand.Contains('(') || parsedLine.Operand.Contains(')')))
+                        {
+                            isOrgWithExpression = true;
+                        }
+                        else if (OPTAB.ContainsKey(baseOp) &&
+                                 !string.IsNullOrEmpty(parsedLine.Operand) &&
+                                 (parsedLine.Operand.Contains('*') || parsedLine.Operand.Contains('/') || parsedLine.Operand.Contains('+') || 
+                                  parsedLine.Operand.Contains('-') || parsedLine.Operand.Contains('(') || parsedLine.Operand.Contains(')')))
+                        {
+                            isInstructionWithExpression = true;
+                        }
+                    }
+
+                    // Si es ORG con expresión, procesarlo
+                    if (isOrgWithExpression)
+                    {
+                        var intermediateLine = new IntermediateLine
+                        {
+                            LineNumber = IntermediateLines.Count + 1,
+                            SourceLine = antlrLine,
+                            Address = CONTLOC,
+                            Label = parsedLine.Label,
+                            Operation = parsedLine.Operation,
+                            Operand = parsedLine.Operand,
+                            Comment = parsedLine.Comment,
+                            Format = 0,
+                            AddressingMode = "-"
+                        };
+
+                        // Intentar evaluar la expresión ORG
+                        if (!string.IsNullOrEmpty(parsedLine.Operand))
+                        {
+                            var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(parsedLine.Operand, CONTLOC, allowUndefinedSymbols: true);
+                            if (evalErr != null)
+                            {
+                                intermediateLine.Error = evalErr;
+                                Errors.Add(new SICXEError(antlrLine, 0, evalErr, SICXEErrorType.Semantico));
+                            }
+                            else
+                            {
+                                // Cambiar CONTLOC al nuevo valor
+                                CONTLOC = evalVal;
+                                intermediateLine.SemanticValue = $"{evalVal:X4}h";
+                            }
+                        }
+
+                        intermediateLine.Increment = 0;  // ORG no incrementa
+                        IntermediateLines.Add(intermediateLine);
+                        return;
+                    }
+
+                    // Si es WORD/BYTE con expresión, procesarlo
+                    if (isWordOrByteWithExpression)
+                    {
+                        // Crear intermediateLine similar a lo normal
+                        var intermediateLine = new IntermediateLine
+                        {
+                            LineNumber = IntermediateLines.Count + 1,
+                            SourceLine = antlrLine,
+                            Address = CONTLOC,
+                            Label = parsedLine.Label,
+                            Operation = parsedLine.Operation,
+                            Operand = parsedLine.Operand,
+                            Comment = parsedLine.Comment,
+                            Format = 0,
+                            AddressingMode = "-"
+                        };
+
+                        // Intentar evaluar la expresión
+                        if (!string.IsNullOrEmpty(parsedLine.Operand))
+                        {
+                            var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(parsedLine.Operand, CONTLOC, allowUndefinedSymbols: true);
+                            if (evalErr == null && parsedLine.Operation.Equals("WORD", StringComparison.OrdinalIgnoreCase))
+                            {
+                                intermediateLine.SemanticValue = $"{evalVal:X4}h";
+                            }
+                            else if (evalErr != null)
+                            {
+                                intermediateLine.Error = evalErr;
+                                Errors.Add(new SICXEError(antlrLine, 0, evalErr, SICXEErrorType.Semantico));
+                            }
+                        }
+
+                        // Calcular incremento
+                        int wordByteIncrement = 0;
+                        string baseOp = parsedLine.Operation.TrimStart('+');
+                        if (baseOp.Equals("BYTE", StringComparison.OrdinalIgnoreCase))
+                            wordByteIncrement = CalculateByteSize(parsedLine.Operand);
+                        else if (baseOp.Equals("WORD", StringComparison.OrdinalIgnoreCase))
+                            wordByteIncrement = 3;
+
+                        intermediateLine.Increment = wordByteIncrement;
+                        IntermediateLines.Add(intermediateLine);
+
+                        // Incrementar CONTLOC
+                        CONTLOC += wordByteIncrement;
+                        return;
+                    }
+
+                    // Si es instrucción con expresión, procesarlo
+                    if (isInstructionWithExpression)
+                    {
+                        string baseOp = parsedLine.Operation.TrimStart('+');
+                        if (OPTAB.TryGetValue(baseOp, out var opCodeInfo))
+                        {
+                            var intermediateLine = new IntermediateLine
+                            {
+                                LineNumber = IntermediateLines.Count + 1,
+                                SourceLine = antlrLine,
+                                Address = CONTLOC,
+                                Label = parsedLine.Label,
+                                Operation = parsedLine.Operation,
+                                Operand = parsedLine.Operand,
+                                Comment = parsedLine.Comment,
+                                Format = opCodeInfo.Format,
+                                AddressingMode = DetermineAddressingMode(parsedLine.Operand)
+                            };
+
+                            // Intentar evaluar la expresión del operando
+                            if (!string.IsNullOrEmpty(parsedLine.Operand))
+                            {
+                                // Quitar prefijos de modo de direccionamiento si existen
+                                string operandForEvaluation = parsedLine.Operand;
+                                if (operandForEvaluation.StartsWith("#", StringComparison.Ordinal))
+                                    operandForEvaluation = operandForEvaluation.Substring(1);
+                                else if (operandForEvaluation.StartsWith("@", StringComparison.Ordinal))
+                                    operandForEvaluation = operandForEvaluation.Substring(1);
+
+                                var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operandForEvaluation, CONTLOC, allowUndefinedSymbols: true);
+                                if (evalErr != null)
+                                {
+                                    intermediateLine.Error = evalErr;
+                                    Errors.Add(new SICXEError(antlrLine, 0, evalErr, SICXEErrorType.Semantico));
+                                }
+                                else
+                                {
+                                    intermediateLine.SemanticValue = $"{evalVal:X4}h";
+                                }
+                            }
+
+                            // Calcular incremento basado en el formato
+                            int instructionIncrement = 0;
+                            if (opCodeInfo.Format == 1)
+                                instructionIncrement = 1;
+                            else if (opCodeInfo.Format == 2)
+                                instructionIncrement = 2;
+                            else if (opCodeInfo.Format == 3 || opCodeInfo.Format == 4)
+                            {
+                                // Determinar si es formato 3 o 4 basándose en el prefijo '+'
+                                instructionIncrement = parsedLine.Operation.StartsWith("+", StringComparison.OrdinalIgnoreCase) ? 4 : 3;
+                            }
+
+                            intermediateLine.Increment = instructionIncrement;
+                            IntermediateLines.Add(intermediateLine);
+
+                            // Incrementar CONTLOC
+                            CONTLOC += instructionIncrement;
+                            return;
+                        }
+                    }
+
                     var errorLine = ParseErrorLine(originalLine, lineErrors);
                     errorLine.SourceLine = antlrLine;
                     IntermediateLines.Add(errorLine);
-                    // Agregar errores al listado
                     foreach (var err in lineErrors)
                         Errors.Add(err);
-                    // NO incrementar CONTLOC para errores sintácticos
                 }
                 return;
             }
@@ -342,12 +523,9 @@ namespace laboratorioPractica3
                 CONTLOC = START_ADDRESS;
                 intermediateLine2.Address = CONTLOC;
                 ProgramStarted = true;
-                
-                // Para START, insertar etiqueta en TABSIM si existe
-                if (!string.IsNullOrEmpty(label) && !TABSIM_EXT.ContainsKey(label))
-                {
-                    TABSIM_EXT.AddSymbol(label, CONTLOC, SymbolType.Relative);
-                }
+
+                // NOTA: La etiqueta en START es el nombre del programa, NO se inserta en TABSIM
+                // según especificación SIC/XE
 
                 intermediateLine2.SemanticValue = $"{START_ADDRESS:X4}h";
                 IntermediateLines.Add(intermediateLine2);
@@ -370,24 +548,44 @@ namespace laboratorioPractica3
             }
 
             // Si hay error sintáctico/léxico en esta línea:
-            // - NO insertar etiqueta en TABSIM
-            // - NO incrementar CONTLOC
-            // - Marcar error en archivo intermedio
+            // EXCEPCIÓN: WORD y BYTE con operandos complejos (expresiones) son válidos sintácticamente
+            // solo que el parser ANTLR no puede reconocerlos. Intentamos evaluarlos de todas formas.
             if (hasSyntaxError)
             {
-                // NO insertar etiqueta en TABSIM cuando hay error sintáctico
-                intermediateLine2.Increment = 0;  // NO incrementar CONTLOC
-                IntermediateLines.Add(intermediateLine2);
-                
-                // Agregar errores a la lista de errores del Paso 1
-                foreach (var err in lineErrors)
+                // Verificar si es WORD o BYTE con expresión como operando
+                bool isWordOrByteWithExpression = false;
+                if (!string.IsNullOrEmpty(operation))
                 {
-                    Errors.Add(err);
+                    string baseOp = operation.TrimStart('+');
+                    if ((baseOp.Equals("WORD", StringComparison.OrdinalIgnoreCase) || 
+                         baseOp.Equals("BYTE", StringComparison.OrdinalIgnoreCase)) &&
+                        !string.IsNullOrEmpty(operand) &&
+                        (operand.Contains('*') || operand.Contains('/') || operand.Contains('+') || 
+                         operand.Contains('-') || operand.Contains('(') || operand.Contains(')')))
+                    {
+                        isWordOrByteWithExpression = true;
+                    }
                 }
-                
-                
-                // NO incrementar CONTLOC para errores sintácticos
-                return;
+
+                // Si NO es WORD/BYTE con expresión, retorna sin incrementar
+                if (!isWordOrByteWithExpression)
+                {
+                    // NO insertar etiqueta en TABSIM cuando hay error sintáctico
+                    intermediateLine2.Increment = 0;  // NO incrementar CONTLOC
+                    IntermediateLines.Add(intermediateLine2);
+
+                    // Agregar errores a la lista de errores del Paso 1
+                    foreach (var err in lineErrors)
+                    {
+                        Errors.Add(err);
+                    }
+
+                    // NO incrementar CONTLOC para errores sintácticos
+                    return;
+                }
+                // Si es WORD/BYTE con expresión, CONTINÚA PROCESANDO (NO retorna)
+                // Limpia el error sintáctico porque se va a intentar evaluar como expresión
+                intermediateLine2.Error = "";
             }
 
             // ═══════════════════ VALIDACIONES ARQUITECTURALES SIC/XE ═══════════════════
@@ -439,7 +637,7 @@ namespace laboratorioPractica3
                     }
                     else
                     {
-                        var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operand, CONTLOC);
+                        var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operand, CONTLOC, allowUndefinedSymbols: false);
                         if (evalErr != null)
                         {
                             var errEq = new SICXEError(antlrLine, 0, evalErr, SICXEErrorType.Semantico);
@@ -461,6 +659,103 @@ namespace laboratorioPractica3
                 return;
             }
 
+            // Directiva ORG: cambiar la ubicación actual a un nuevo valor
+            if (operationContext?.directive()?.ORG() != null || 
+                (!string.IsNullOrEmpty(operation) && operation.Equals("ORG", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (!string.IsNullOrEmpty(operand))
+                {
+                    // Evaluar la expresión del operando ORG
+                    var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operand, CONTLOC, allowUndefinedSymbols: true);
+                    if (evalErr != null)
+                    {
+                        var errOrg = new SICXEError(antlrLine, 0, evalErr, SICXEErrorType.Semantico);
+                        Errors.Add(errOrg);
+                        if (string.IsNullOrEmpty(intermediateLine2.Error))
+                            intermediateLine2.Error = evalErr;
+                        else if (!intermediateLine2.Error.Contains(evalErr))
+                            intermediateLine2.Error += "; " + evalErr;
+                    }
+                    else
+                    {
+                        // Cambiar CONTLOC al nuevo valor (ORG establece una ubicación absoluta)
+                        CONTLOC = evalVal;
+                        intermediateLine2.SemanticValue = $"{evalVal:X4}h";
+                    }
+                }
+                intermediateLine2.Increment = 0;  // ORG no incrementa, reestablece el contador
+                IntermediateLines.Add(intermediateLine2);
+                return;
+            }
+
+            // Directiva WORD o BYTE: intentar evaluar como expresión si es necesario
+            // Verifica tanto operationContext (para casos normales) como operation (para casos con error sintáctico)
+            bool isWordDirective = operationContext?.directive()?.WORD() != null;
+            bool isByteDirective = operationContext?.directive()?.BYTE() != null;
+
+            // Si no se detectó por contexto, verifica por el texto de operation extraído manualmente
+            if (!isWordDirective && !isByteDirective && !string.IsNullOrEmpty(operation))
+            {
+                string baseOp = operation.TrimStart('+');
+                isWordDirective = baseOp.Equals("WORD", StringComparison.OrdinalIgnoreCase);
+                isByteDirective = baseOp.Equals("BYTE", StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (isWordDirective || isByteDirective)
+            {
+                // Intentar evaluar el operando como expresión (puede contener *, +, -, símbolos, etc.)
+                if (!string.IsNullOrEmpty(operand))
+                {
+                    // Si contiene caracteres de expresión, intentar evaluarla
+                    // Incluye: operadores (+, -, *, /), paréntesis, o comienza con letra (símbolo) pero no es literal C'/X'
+                    bool hasExpressionOperators = operand.Contains('*') || operand.Contains('/') || operand.Contains('+') || 
+                                                 operand.Contains('-') || operand.Contains('(') || operand.Contains(')');
+                    bool startsWithSymbol = char.IsLetter(operand[0]) && !operand.StartsWith("C'") && !operand.StartsWith("X'");
+
+                    if (hasExpressionOperators || startsWithSymbol)
+                    {
+                        var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operand, CONTLOC, allowUndefinedSymbols: true);
+                        if (evalErr != null)
+                        {
+                            var errExpr = new SICXEError(antlrLine, 0, evalErr, SICXEErrorType.Semantico);
+                            Errors.Add(errExpr);
+                            if (string.IsNullOrEmpty(intermediateLine2.Error))
+                                intermediateLine2.Error = evalErr;
+                            else if (!intermediateLine2.Error.Contains(evalErr))
+                                intermediateLine2.Error += "; " + evalErr;
+                        }
+                        else if (isWordDirective)
+                        {
+                            intermediateLine2.SemanticValue = $"{evalVal:X4}h";
+                        }
+                    }
+                }
+            }
+
+            // Para instrucciones con expresiones, evaluar el operando sin prefijos de modo
+            if (!string.IsNullOrEmpty(operand) && 
+                (operand.Contains('*') || operand.Contains('/') || operand.Contains('+') || 
+                 operand.Contains('-') || operand.Contains('(') || operand.Contains(')')))
+            {
+                // Quitar prefijos de modo de direccionamiento si existen
+                string operandForEvaluation = operand;
+                if (operand.StartsWith("#", StringComparison.Ordinal))
+                    operandForEvaluation = operand.Substring(1);
+                else if (operand.StartsWith("@", StringComparison.Ordinal))
+                    operandForEvaluation = operand.Substring(1);
+
+                // Si la expresión aún contiene operadores después de quitar el prefijo
+                if (operandForEvaluation.Contains('*') || operandForEvaluation.Contains('/') || operandForEvaluation.Contains('+') || 
+                    operandForEvaluation.Contains('-') || operandForEvaluation.Contains('(') || operandForEvaluation.Contains(')'))
+                {
+                    var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operandForEvaluation, CONTLOC, allowUndefinedSymbols: true);
+                    if (evalErr == null && string.IsNullOrEmpty(intermediateLine2.Error))
+                    {
+                        intermediateLine2.SemanticValue = $"{evalVal:X4}h";
+                    }
+                }
+            }
+
             // Para otras instrucciones/directivas, si hay etiqueta y no está duplicada, insertar
             if (!string.IsNullOrEmpty(label))
             {
@@ -475,11 +770,8 @@ namespace laboratorioPractica3
                 }
             }
 
-            // Guardar el CONTLOC actual en la línea intermedio ANTES de incrementarlo
-            IntermediateLines.Add(intermediateLine2);
-
             // Cálculo del incremento usando la gramática
-            int increment = CalculateIncrementFromGrammar(operationContext, operand);
+            int increment = CalculateIncrementFromGrammar(operationContext, operand, operation);
             intermediateLine2.Increment = increment;
             intermediateLine2.SemanticValue = CalculateSemanticValue(operationContext, operand);
             IntermediateLines.Add(intermediateLine2);
@@ -489,6 +781,23 @@ namespace laboratorioPractica3
             {
                 CONTLOC_FINAL = CONTLOC;
                 PROGRAM_LENGTH = CONTLOC - START_ADDRESS;
+
+                // Extraer la dirección de inicio de ejecución del operando de END
+                if (!string.IsNullOrEmpty(operand))
+                {
+                    // Buscar el símbolo en TABSIM para obtener su dirección
+                    if (TABSIM_EXT.TryGetValue(operand, out var entrySymbol))
+                    {
+                        EXECUTION_ENTRY_POINT = entrySymbol.Value;
+                    }
+                    else
+                    {
+                        // Si no está definido, usar 0 como valor por defecto
+                        EXECUTION_ENTRY_POINT = 0;
+                        Errors.Add(new SICXEError(antlrLine, 0, $"Símbolo de entrada no definido: {operand}", SICXEErrorType.Semantico));
+                    }
+                }
+
                 CheckUndefinedSymbols();
                 return;
             }
@@ -727,56 +1036,79 @@ namespace laboratorioPractica3
 
         /// <summary>
         /// CALCULA EL INCREMENTO USANDO LA GRAMÁTICA
+        /// Parámetro adicional `operation` (string) para casos con error sintáctico donde operationContext es null
         /// </summary>
-        private int CalculateIncrementFromGrammar(SICXEParser.OperationContext? operationContext, string? operand)
+        private int CalculateIncrementFromGrammar(SICXEParser.OperationContext? operationContext, string? operand, string? operation = null)
         {
-            if (operationContext == null)
-                return 0;
-            
-            var directive = operationContext.directive();
-            if (directive != null)
+            // Primero intenta usar operationContext (caso normal)
+            if (operationContext != null)
             {
-                // Directivas usando la gramática
-                if (directive.END() != null || directive.BASE() != null || 
-                    directive.NOBASE() != null || directive.LTORG() != null)
+                var directive = operationContext.directive();
+                if (directive != null)
+                {
+                    // Directivas usando la gramática
+                    if (directive.END() != null || directive.BASE() != null || 
+                        directive.NOBASE() != null || directive.LTORG() != null)
+                        return 0;
+
+                    if (directive.BYTE() != null)
+                        return CalculateByteSize(operand);
+
+                    if (directive.WORD() != null)
+                        return 3;
+
+                    if (directive.RESB() != null)
+                        return ParseOperand(operand);
+
+                    if (directive.RESW() != null)
+                        return ParseOperand(operand) * 3;
+
                     return 0;
-                
-                if (directive.BYTE() != null)
-                    return CalculateByteSize(operand);
-                
-                if (directive.WORD() != null)
-                    return 3;
-                
-                if (directive.RESB() != null)
-                    return ParseOperand(operand);
-                
-                if (directive.RESW() != null)
-                    return ParseOperand(operand) * 3;
-                
-                return 0;
+                }
+
+                var instruction = operationContext.instruction();
+                if (instruction != null)
+                {
+                    // Formato 4 tiene prefijo +
+                    if (operationContext.FORMAT4_PREFIX() != null)
+                        return 4;
+
+                    // Usar las reglas de la gramática
+                    if (instruction.format1Instruction() != null)
+                        return 1;
+
+                    if (instruction.format2Instruction() != null)
+                        return 2;
+
+                    if (instruction.format34Instruction() != null)
+                        return 3;
+                }
             }
-            
-            var instruction = operationContext.instruction();
-            if (instruction != null)
+
+            // Si operationContext es null o no hay instrucción, intenta usar operation (string)
+            // Esto es para casos con error sintáctico donde se extrajo manualmente
+            if (!string.IsNullOrEmpty(operation))
             {
-                // Formato 4 tiene prefijo +
-                if (operationContext.FORMAT4_PREFIX() != null)
-                    return 4;
-                
-                // Usar las reglas de la gramática
-                if (instruction.format1Instruction() != null)
-                    return 1;
-                
-                if (instruction.format2Instruction() != null)
-                    return 2;
-                
-                if (instruction.format34Instruction() != null)
+                string baseOp = operation.TrimStart('+');
+                if (baseOp.Equals("BYTE", StringComparison.OrdinalIgnoreCase))
+                    return CalculateByteSize(operand);
+                else if (baseOp.Equals("WORD", StringComparison.OrdinalIgnoreCase))
                     return 3;
+                else if (baseOp.Equals("RESB", StringComparison.OrdinalIgnoreCase))
+                    return ParseOperand(operand);
+                else if (baseOp.Equals("RESW", StringComparison.OrdinalIgnoreCase))
+                    return ParseOperand(operand) * 3;
+                else if (baseOp.Equals("END", StringComparison.OrdinalIgnoreCase) || 
+                         baseOp.Equals("BASE", StringComparison.OrdinalIgnoreCase) ||
+                         baseOp.Equals("NOBASE", StringComparison.OrdinalIgnoreCase) ||
+                         baseOp.Equals("LTORG", StringComparison.OrdinalIgnoreCase))
+                    return 0;
+                // TODO: Agregar detección de instrucciones si es necesario
             }
-            
+
             return 0;
         }
-        
+
         /// <summary>
         /// Registra los símbolos referenciados en un operando y la línea donde se usan
         /// </summary>
@@ -866,6 +1198,27 @@ namespace laboratorioPractica3
             }
 
             return 1;
+        }
+
+        /// <summary>
+        /// Determina el modo de direccionamiento de una instrucción basándose en el operando.
+        /// Modos soportados: Inmediato (#), Indirecto (@), Indexado (,X), Simple
+        /// </summary>
+        private string DetermineAddressingMode(string operand)
+        {
+            if (string.IsNullOrEmpty(operand))
+                return "Simple";
+
+            if (operand.StartsWith("#", StringComparison.Ordinal))
+                return "Inmediato";
+
+            if (operand.StartsWith("@", StringComparison.Ordinal))
+                return "Indirecto";
+
+            if (operand.Contains(",X", StringComparison.OrdinalIgnoreCase))
+                return "Indexado";
+
+            return "Simple";
         }
 
         /// <summary>
