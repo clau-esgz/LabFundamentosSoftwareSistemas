@@ -475,13 +475,12 @@ namespace laboratorioPractica3
                 }
             }
 
-            // Guardar el CONTLOC actual en la línea intermedio ANTES de incrementarlo
-            IntermediateLines.Add(intermediateLine2);
-
             // Cálculo del incremento usando la gramática
             int increment = CalculateIncrementFromGrammar(operationContext, operand);
             intermediateLine2.Increment = increment;
             intermediateLine2.SemanticValue = CalculateSemanticValue(operationContext, operand);
+
+            // Guardar el CONTLOC actual en la línea intermedio
             IntermediateLines.Add(intermediateLine2);
 
             // Directiva END
