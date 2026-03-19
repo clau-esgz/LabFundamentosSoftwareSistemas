@@ -71,7 +71,7 @@ namespace laboratorioPractica3
                     }
 
                     string operacion = linea.IntermLine.Operation?.Trim().ToUpperInvariant() ?? "";
-                    if (operacion == "RESB" || operacion == "RESW" || operacion == "EQU" || operacion == "ORG" || operacion == "END")
+                    if (operacion == "RESB" || operacion == "RESW" || operacion == "ORG" || operacion == "END")
                     {
                         vaciarTexto();
                     }

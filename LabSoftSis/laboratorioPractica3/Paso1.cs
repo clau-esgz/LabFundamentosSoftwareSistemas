@@ -654,7 +654,9 @@ namespace laboratorioPractica3
                     }
                     else
                     {
-                        // Evalua expresion para EQU y obtiene tipo (absoluto/relativo)
+                        // Evalua expresión para EQU y obtiene tipo (absoluto/relativo).
+                        // Regla de este ensamblador: EQU NO permite referencias adelantadas;
+                        // todos los símbolos usados deben estar previamente definidos en TABSIM.
                         var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operand, CONTLOC, allowUndefinedSymbols: false);
                         if (evalErr != null)
                         {
@@ -1162,6 +1164,16 @@ namespace laboratorioPractica3
                 
             // Remover prefijos y sufijos
             string cleanOperand = operand.TrimStart('#', '@', '=').Split(',')[0].Trim();
+            
+            // IMPORTANTE: Si el operando contiene OPERADORES DE EXPRESIÓN (*, +, -, /, paréntesis),
+            // NO registrarlo como símbolo porque las expresiones se evalúan en Paso 2.
+            // Solo registrar símbolos simples (referencias directas).
+            bool isExpression = cleanOperand.Contains('*') || cleanOperand.Contains('/') || 
+                              cleanOperand.Contains('+') || cleanOperand.Contains('-') || 
+                              cleanOperand.Contains('(') || cleanOperand.Contains(')');
+            
+            if (isExpression)
+                return;  // Ignorar expresiones - Paso 2 las evaluará
             
             // Si no es un número ni un literal, es una referencia a símbolo
             if (!string.IsNullOrEmpty(cleanOperand) && 

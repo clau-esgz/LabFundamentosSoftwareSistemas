@@ -73,14 +73,26 @@ namespace laboratorioPractica3
                 var tokens = Tokenize(expression);
                 int pos = 0;
 
-                var (value, type, error) = ParseAddSub(tokens, ref pos, currentAddress, allowUndefinedSymbols);
+                var (value, relCount, error) = ParseAddSubInternal(tokens, ref pos, currentAddress, allowUndefinedSymbols);
                 if (error != null)
                     return (-1, SymbolType.Absolute, error);
 
                 if (pos < tokens.Count)
                     return (-1, SymbolType.Absolute, "Tokens adicionales inesperados");
 
-                return (value, type, null);
+                // Regla final SIC/XE:
+                // relCount == 0 -> Absolute
+                // relCount == 1 -> Relative
+                // relCount < 0  -> ERROR (relativo negativo sin cancelar)
+                // relCount > 1  -> ERROR (múltiples relativos positivos)
+                if (relCount == 0)
+                    return (value, SymbolType.Absolute, null);
+                if (relCount == 1)
+                    return (value, SymbolType.Relative, null);
+                if (relCount < 0)
+                    return (-1, SymbolType.Absolute, "La expresión deja un término relativo negativo sin cancelar");
+
+                return (-1, SymbolType.Absolute, "La expresión contiene más de un término relativo positivo sin cancelar");
             }
             catch (Exception ex)
             {
@@ -118,79 +130,50 @@ namespace laboratorioPractica3
             return tokens;
         }
 
-        private (int val, SymbolType type, string? err) ParseAddSub(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols)
+        private (int val, int relCount, string? err) ParseAddSubInternal(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols)
         {
-            var (leftVal, leftType, err) = ParseMulDiv(tokens, ref pos, pc, allowUndefinedSymbols);
+            var (leftVal, leftRelCount, err) = ParseMulDivInternal(tokens, ref pos, pc, allowUndefinedSymbols);
             if (err != null)
-                return (leftVal, leftType, err);
+                return (leftVal, leftRelCount, err);
 
             while (pos < tokens.Count && (tokens[pos] == "+" || tokens[pos] == "-"))
             {
                 string op = tokens[pos++];
-                var (rightVal, rightType, rightErr) = ParseMulDiv(tokens, ref pos, pc, allowUndefinedSymbols);
+                var (rightVal, rightRelCount, rightErr) = ParseMulDivInternal(tokens, ref pos, pc, allowUndefinedSymbols);
                 if (rightErr != null)
-                    return (-1, SymbolType.Absolute, rightErr);
+                    return (-1, 0, rightErr);
 
                 if (op == "+")
                 {
-                    if (leftType == SymbolType.Relative && rightType == SymbolType.Relative)
-                        return (-1, SymbolType.Absolute, "No se permite sumar dos términos relativos");
-
                     leftVal += rightVal;
-                    leftType = (leftType == SymbolType.Relative || rightType == SymbolType.Relative)
-                        ? SymbolType.Relative
-                        : SymbolType.Absolute;
+                    leftRelCount += rightRelCount;
                 }
                 else
                 {
-                    if (leftType == SymbolType.Relative && rightType == SymbolType.Relative)
-                    {
-                        leftVal -= rightVal;
-                        leftType = SymbolType.Absolute;
-                    }
-                    else if (leftType == SymbolType.Absolute && rightType == SymbolType.Absolute)
-                    {
-                        leftVal -= rightVal;
-                        leftType = SymbolType.Absolute;
-                    }
-                    else if (leftType == SymbolType.Relative && rightType == SymbolType.Absolute)
-                    {
-                        leftVal -= rightVal;
-                        leftType = SymbolType.Relative;
-                    }
-                    else
-                    {
-                        if (rightVal < 0)
-                        {
-                            leftVal -= rightVal;
-                            leftType = SymbolType.Relative;
-                        }
-                        else
-                        {
-                            return (-1, SymbolType.Absolute, "No se permite restar un término relativo de uno absoluto (Absoluto - Relativo)");
-                        }
-                    }
+                    leftVal -= rightVal;
+                    leftRelCount -= rightRelCount;
                 }
             }
 
-            return (leftVal, leftType, null);
+            return (leftVal, leftRelCount, null);
         }
 
-        private (int val, SymbolType type, string? err) ParseMulDiv(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols)
+        private (int val, int relCount, string? err) ParseMulDivInternal(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols)
         {
-            var (leftVal, leftType, err) = ParseFactor(tokens, ref pos, pc, allowUndefinedSymbols);
+            var (leftVal, leftRelCount, err) = ParseFactorInternal(tokens, ref pos, pc, allowUndefinedSymbols);
             if (err != null)
-                return (leftVal, leftType, err);
+                return (leftVal, leftRelCount, err);
 
             while (pos < tokens.Count && (tokens[pos] == "*" || tokens[pos] == "/"))
             {
                 string op = tokens[pos++];
-                var (rightVal, rightType, rightErr) = ParseFactor(tokens, ref pos, pc, allowUndefinedSymbols);
+                var (rightVal, rightRelCount, rightErr) = ParseFactorInternal(tokens, ref pos, pc, allowUndefinedSymbols);
                 if (rightErr != null)
-                    return (-1, SymbolType.Absolute, rightErr);
+                    return (-1, 0, rightErr);
 
-                if (leftType == SymbolType.Relative || rightType == SymbolType.Relative)
-                    return (-1, SymbolType.Absolute, "Los términos en multiplicaciones y divisiones deben ser absolutos");
+                // Regla SIC/XE: relativos no pueden participar en * ni /
+                if (leftRelCount != 0 || rightRelCount != 0)
+                    return (-1, 0, "Los términos en multiplicaciones y divisiones deben ser absolutos");
 
                 if (op == "*")
                 {
@@ -199,65 +182,76 @@ namespace laboratorioPractica3
                 else
                 {
                     if (rightVal == 0)
-                        return (-1, SymbolType.Absolute, "División por cero");
+                        return (-1, 0, "División por cero");
 
                     leftVal /= rightVal;
                 }
             }
 
-            return (leftVal, leftType, null);
+            return (leftVal, leftRelCount, null);
         }
 
-        private (int val, SymbolType type, string? err) ParseFactor(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols)
+        private (int val, int relCount, string? err) ParseFactorInternal(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols)
         {
             if (pos >= tokens.Count)
-                return (-1, SymbolType.Absolute, "Expresión mal formada");
+                return (-1, 0, "Expresión mal formada");
 
             string token = tokens[pos];
 
+            // Procesar unario + o -
             if (token == "+" || token == "-")
             {
                 string unary = token;
                 pos++;
 
-                var (value, type, err) = ParseFactor(tokens, ref pos, pc, allowUndefinedSymbols);
+                var (value, relCount, err) = ParseFactorInternal(tokens, ref pos, pc, allowUndefinedSymbols);
                 if (err != null)
-                    return (value, type, err);
+                    return (value, relCount, err);
 
                 if (unary == "-")
+                {
                     value = -value;
+                    relCount = -relCount;
+                }
 
-                return (value, type, null);
+                return (value, relCount, null);
             }
 
             pos++;
 
+            // Paréntesis
             if (token == "(")
             {
-                var (exprValue, exprType, exprErr) = ParseAddSub(tokens, ref pos, pc, allowUndefinedSymbols);
+                var (exprValue, exprRelCount, exprErr) = ParseAddSubInternal(tokens, ref pos, pc, allowUndefinedSymbols);
                 if (exprErr != null)
-                    return (exprValue, exprType, exprErr);
+                    return (exprValue, exprRelCount, exprErr);
 
                 if (pos >= tokens.Count || tokens[pos++] != ")")
-                    return (-1, SymbolType.Absolute, "Se esperaba ')'");
+                    return (-1, 0, "Se esperaba ')'");
 
-                return (exprValue, exprType, null);
+                return (exprValue, exprRelCount, null);
             }
 
+            // Contador de ubicación
             if (token == "*")
-                return (pc, SymbolType.Relative, null);
+                return (pc, 1, null);
 
+            // Símbolo
             if (_symbolTable.TryGetValue(token, out var symbolInfo))
-                return (symbolInfo.Value, symbolInfo.Type, null);
+                return (symbolInfo.Value, symbolInfo.Type == SymbolType.Relative ? 1 : 0, null);
 
+            // Número
             if (TryParseTokenAsNumber(token, out int parsed))
-                return (parsed, SymbolType.Absolute, null);
+                return (parsed, 0, null);
 
+            // Símbolo indefinido
             if (allowUndefinedSymbols)
-                return (0, SymbolType.Relative, null);
+                return (0, 0, null);
 
-            return (-1, SymbolType.Absolute, $"Símbolo no definido o valor inválido: {token}");
+            return (-1, 0, $"Símbolo no definido o valor inválido: {token}");
         }
+
+
 
         private static bool TryParseTokenAsNumber(string token, out int value)
         {

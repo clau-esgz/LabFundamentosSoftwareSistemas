@@ -54,7 +54,15 @@ class Program
 
         while (!exit)
         {
-            Console.Clear();
+            try
+            {
+                Console.Clear();
+            }
+            catch
+            {
+                // En algunos terminales, Clear() puede fallar
+                Console.WriteLine("\n\n\n\n\n\n\n\n\n\n");
+            }
             PrintHeader();
 
             // Obtener archivos .asm y .txt del directorio del proyecto
