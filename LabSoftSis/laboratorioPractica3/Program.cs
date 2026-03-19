@@ -242,6 +242,9 @@ class Program
     /// </summary>
     static void AnalyzePaso1(string inputFile)
     {
+        // Método orquestador del ensamblado completo en dos pasadas.
+        // Flujo: parseo ANTLR -> Paso 1 (TABSIM/intermedio) -> Paso 2 (código objeto)
+        // -> generación de registros H/T/M/E -> exportación de reportes.
         Console.WriteLine("═══════════════════════════════════════════════════════════════════");
         Console.WriteLine("               EJECUTANDO PASO 1 DEL ENSAMBLADOR");
         Console.WriteLine("═══════════════════════════════════════════════════════════════════");
@@ -293,20 +296,13 @@ class Program
         semanticAnalyzer.AddExternalErrors(parserErrorListener.Errors);
         walker.Walk(semanticAnalyzer, tree);
         
-        // Combinar errores de ambas fuentes
+        // Combinar errores solo de Paso 1 (se omiten los del analizador semantico por ahora)
         var allErrors = paso1.ErrorList
-            .Concat(semanticAnalyzer.Errors)
             .GroupBy(e => new { e.Line, e.Message })  // Evitar duplicados
             .Select(g => g.First())
             .OrderBy(e => e.Line)
             .ThenBy(e => e.Column)
             .ToList();
-
-        // ═══════════════ MOSTRAR REPORTE DEL PASO 1 ═══════════════
-        Console.WriteLine("\n═══════════════════════════════════════════════════════════════════");
-        Console.WriteLine("             EJECUTANDO PASO 1 DEL ENSAMBLADOR");
-        Console.WriteLine("═══════════════════════════════════════════════════════════════════\n");
-        Console.WriteLine(paso1.GenerateReport());
 
         // ═══════════════ EJECUTAR PASO 2 ═══════════════
         var paso2 = new Paso2(
@@ -316,25 +312,28 @@ class Program
             paso1.ProgramSize,
             paso1.ProgramName,
             paso1.BaseValue);
+
+        // Paso 2: resuelve direccionamiento y genera código objeto por línea.
         paso2.ObjectCodeGeneration();
 
-        // Mostrar reporte del Paso 2 (incluye código objeto y errores del Paso 2)
-        Console.WriteLine(paso2.GenerateReport());
+        // ═══════════════ MOSTRAR REPORTE COMBINADO ═══════════════
+        // Se muestra UNA sola vez el archivo intermedio con TABSIM, COD_OBJ y errores fusionados
+        var objectCodes = paso2.ObjectCodeLines
+            .Where(l => !string.IsNullOrEmpty(l.ObjectCode))
+            .ToDictionary(l => l.IntermLine.LineNumber, l => l.ObjectCode);
 
-        // Mostrar errores semánticos adicionales si los hay
-        var additionalErrors = semanticAnalyzer.Errors
-            .Where(e => !paso1.ErrorList.Any(p => p.Line == e.Line && p.Message == e.Message))
+        // Unificar errores: Paso 1 + Paso 2 (se omiten los del analizador semantico)
+        var erroresUnificados = paso1.ErrorList
+            .Concat(paso2.Errors)
+            .GroupBy(e => new { e.Line, e.Message })
+            .Select(g => g.First())
+            .OrderBy(e => e.Line)
+            .ThenBy(e => e.Column)
             .ToList();
-            
-        if (additionalErrors.Count > 0)
-        {
-            Console.WriteLine("═══════════════════ ERRORES DE VALIDACIÓN ADICIONALES ═══════════");
-            foreach (var error in additionalErrors.OrderBy(e => e.Line))
-            {
-                Console.WriteLine($"  • {error}");
-            }
-            Console.WriteLine();
-        }
+
+        Console.WriteLine(paso1.GenerateReport(objectCodes, erroresUnificados));
+
+        // Nota: el reporte detallado del Paso 2 se omite para evitar duplicar el archivo intermedio
 
         string projectDir = GetProjectDirectory();
         string reportesDir = Path.Combine(projectDir, "reportes_paso1");
@@ -362,8 +361,11 @@ class Program
         var progObjeto = new ProgramaObjeto(
             paso2.ObjectCodeLines,
             paso1.ProgramName,
-            paso1.ExecutionEntryPoint,
-            paso1.ProgramSize);
+            paso1.ProgramStartAddress,
+            paso1.ProgramSize,
+            paso1.ExecutionEntryPoint);
+
+        // Programa objeto final: registros H/T/M/E según reglas SIC/XE.
 
         Console.WriteLine("\n═══════════════════════════════════════════════════════════════════");
         Console.WriteLine("                    PROGRAMA OBJETO GENERADO");
@@ -471,6 +473,8 @@ class Program
     /// </summary>
     static AnalysisResult AnalyzeFile(string filePath)
     {
+        // Análisis "completo" (léxico/sintáctico/semántico) usado fuera del modo Paso 1.
+        // No genera objeto; se usa para reporte general del archivo fuente.
         // Leer contenido del archivo
         string input = File.ReadAllText(filePath);
         

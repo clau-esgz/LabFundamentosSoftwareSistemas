@@ -32,11 +32,14 @@ namespace laboratorioPractica3
         private int START_ADDRESS = 0;
         private int CONTLOC_FINAL = 0;
         private int EXECUTION_ENTRY_POINT = 0;  // Dirección de inicio de ejecución (del operando de END)
+        private int? FIRST_EXECUTABLE_ADDRESS = null;  // Primera instrucción ejecutable que genera código objeto
         private string PROGRAM_NAME = "";
         private int PROGRAM_LENGTH = 0;
         private int? BASE_VALUE = null;
         private string BASE_OPERAND = "";
         
+        // TABSIM_EXT guarda valor y tipo (absoluto/relativo) por simbolo
+        // Requisito 1: la tabla indica si cada simbolo es absoluto o relativo
         private SimbolosYExpresiones TABSIM_EXT = new SimbolosYExpresiones();
         private Dictionary<string, int> TABSIM => TABSIM_EXT.GetAllSymbols().ToDictionary(k => k.Key, v => v.Value.Value, StringComparer.OrdinalIgnoreCase);
         
@@ -228,6 +231,9 @@ namespace laboratorioPractica3
         /// </summary>
         public override void EnterLine([NotNull] SICXEParser.LineContext context)
         {
+            // Núcleo del Paso 1: procesa cada línea fuente y decide:
+            // 1) si entra a TABSIM, 2) cuánto incrementa CONTLOC,
+            // 3) qué se registra en archivo intermedio y errores.
             CurrentLine++;
             
             // Obtener la línea real del contexto de ANTLR
@@ -422,6 +428,12 @@ namespace laboratorioPractica3
                             intermediateLine.Increment = instructionIncrement;
                             IntermediateLines.Add(intermediateLine);
 
+                            // Guardar la primera instrucción ejecutable encontrada.
+                            if (!FIRST_EXECUTABLE_ADDRESS.HasValue && instructionIncrement > 0)
+                            {
+                                FIRST_EXECUTABLE_ADDRESS = intermediateLine.Address;
+                            }
+
                             // Incrementar CONTLOC
                             CONTLOC += instructionIncrement;
                             return;
@@ -521,6 +533,7 @@ namespace laboratorioPractica3
                 PROGRAM_NAME = label ?? "NONAME";
                 START_ADDRESS = ParseOperand(operand);
                 CONTLOC = START_ADDRESS;
+                EXECUTION_ENTRY_POINT = START_ADDRESS;
                 intermediateLine2.Address = CONTLOC;
                 ProgramStarted = true;
 
@@ -621,6 +634,10 @@ namespace laboratorioPractica3
             }
 
             // Directiva EQU
+            // Requisitos 3, 4 y 7:
+            // - EQU con * toma el CONTLOC (relativo)
+            // - EQU con constante define simbolo absoluto
+            // - EQU con expresion usa evaluador aritmetico y valida reglas de apareamiento
             if (operationContext?.directive()?.EQU() != null)
             {
                 if (!string.IsNullOrEmpty(label))
@@ -637,6 +654,7 @@ namespace laboratorioPractica3
                     }
                     else
                     {
+                        // Evalua expresion para EQU y obtiene tipo (absoluto/relativo)
                         var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operand, CONTLOC, allowUndefinedSymbols: false);
                         if (evalErr != null)
                         {
@@ -688,7 +706,8 @@ namespace laboratorioPractica3
                 return;
             }
 
-            // Directiva WORD o BYTE: intentar evaluar como expresión si es necesario
+            // Directiva WORD o BYTE: intentar evaluar como expresion si es necesario
+            // Requisito 9: WORD soporta expresiones en el operando
             // Verifica tanto operationContext (para casos normales) como operation (para casos con error sintáctico)
             bool isWordDirective = operationContext?.directive()?.WORD() != null;
             bool isByteDirective = operationContext?.directive()?.BYTE() != null;
@@ -733,6 +752,7 @@ namespace laboratorioPractica3
             }
 
             // Para instrucciones con expresiones, evaluar el operando sin prefijos de modo
+            // Requisito 8: expresiones en operandos de instrucciones formato 3 y 4
             if (!string.IsNullOrEmpty(operand) && 
                 (operand.Contains('*') || operand.Contains('/') || operand.Contains('+') || 
                  operand.Contains('-') || operand.Contains('(') || operand.Contains(')')))
@@ -775,12 +795,26 @@ namespace laboratorioPractica3
             intermediateLine2.Increment = increment;
             intermediateLine2.SemanticValue = CalculateSemanticValue(operationContext, operand);
 
+            // Si es instrucción ejecutable válida, registrar su dirección como candidata al registro E.
+            bool isInstructionLine = operationContext?.instruction() != null;
+            if (isInstructionLine && !FIRST_EXECUTABLE_ADDRESS.HasValue && increment > 0)
+            {
+                FIRST_EXECUTABLE_ADDRESS = intermediateLine2.Address;
+            }
+
             // Guardar el CONTLOC actual en la línea intermedio
             IntermediateLines.Add(intermediateLine2);
 
             // Directiva END
             if (operationContext?.directive()?.END() != null)
             {
+                // END cierra el Paso 1:
+                // - fija tamaño de programa
+                // - determina punto de ejecución (operando END)
+                // Prioridad para registro E:
+                // 1) Si END tiene operando y existe en TABSIM -> usar esa dirección.
+                // 2) Si END no tiene operando -> usar primera instrucción ejecutable.
+                // 3) Si END tiene operando pero no existe -> error en Paso 2 y E=FFFFFF.
                 CONTLOC_FINAL = CONTLOC;
                 PROGRAM_LENGTH = CONTLOC - START_ADDRESS;
 
@@ -794,10 +828,15 @@ namespace laboratorioPractica3
                     }
                     else
                     {
-                        // Si no está definido, usar 0 como valor por defecto
-                        EXECUTION_ENTRY_POINT = 0;
-                        Errors.Add(new SICXEError(antlrLine, 0, $"Símbolo de entrada no definido: {operand}", SICXEErrorType.Semantico));
+                        // Etiqueta de END no definida: marcar FFFFFF y reportar error en Paso 2
+                        EXECUTION_ENTRY_POINT = 0xFFFFFF;
                     }
+                }
+                else
+                {
+                    // Si END no tiene operando, usar primera instrucción ejecutable.
+                    // Si no existe ninguna, usar START como respaldo.
+                    EXECUTION_ENTRY_POINT = FIRST_EXECUTABLE_ADDRESS ?? START_ADDRESS;
                 }
 
                 CheckUndefinedSymbols();
@@ -1042,6 +1081,8 @@ namespace laboratorioPractica3
         /// </summary>
         private int CalculateIncrementFromGrammar(SICXEParser.OperationContext? operationContext, string? operand, string? operation = null)
         {
+            // Política de CP: aquí se define exactamente cuánto avanza CONTLOC
+            // por instrucción/directiva. Este método es la fuente de verdad del incremento.
             // Primero intenta usar operationContext (caso normal)
             if (operationContext != null)
             {
@@ -1146,6 +1187,8 @@ namespace laboratorioPractica3
         /// </summary>
         private void CheckUndefinedSymbols()
         {
+            // Validación de referencias diferidas:
+            // revisa símbolos usados en operandos que nunca se definieron en TABSIM.
             foreach (var symbol in ReferencedSymbols)
             {
                 if (!TABSIM_EXT.ContainsKey(symbol) && !REGISTERS.Contains(symbol))
@@ -1286,6 +1329,8 @@ namespace laboratorioPractica3
         /// </summary>
         private int ParseOperand(string? operand)
         {
+            // Parser numérico auxiliar para directivas y valores inmediatos.
+            // Soporta decimal, hex con sufijo H, prefijo 0x y X'..'.
             if (string.IsNullOrEmpty(operand))
                 return 0;
 
@@ -1320,8 +1365,10 @@ namespace laboratorioPractica3
             }
         }
 
-        public string GenerateReport(Dictionary<int, string>? objectCodes = null)
+        public string GenerateReport(Dictionary<int, string>? objectCodes = null, IEnumerable<SICXEError>? extraErrors = null)
         {
+            // Reporte consolidado de ensamblado:
+            // TABSIM + intermedio + errores unificados (Paso 1 / Paso 2).
             var sb = new StringBuilder();
             
             sb.AppendLine("╔════════════════════════════════════════════════════════════════════╗");
@@ -1366,7 +1413,23 @@ namespace laboratorioPractica3
             {
                 string loc = (line.Address >= 0) ? $"{line.Address:X4}h" : "";
                 string fmt = (line.Format > 0) ? $"{line.Format}" : "-";
+                // Fusionar errores del Paso 1 con errores externos (Paso 2 y Validacion)
                 string errorDisplay = line.Error ?? "";
+                if (extraErrors != null)
+                {
+                    var lineErrors = extraErrors.Where(e => e.Line == line.SourceLine || e.Line == line.LineNumber);
+                    if (lineErrors.Any())
+                    {
+                        string extraMsg = string.Join("; ", lineErrors.Select(e => e.Message));
+                        if (!string.IsNullOrEmpty(extraMsg))
+                        {
+                            if (string.IsNullOrEmpty(errorDisplay))
+                                errorDisplay = extraMsg;
+                            else if (!errorDisplay.Contains(extraMsg))
+                                errorDisplay += "; " + extraMsg;
+                        }
+                    }
+                }
                 
                 // Truncar error si es muy largo para la consola
                 if (errorDisplay.Length > 40)
@@ -1380,14 +1443,18 @@ namespace laboratorioPractica3
             }
             sb.AppendLine();
 
-            if (Errors.Count > 0)
+            var allErrors = Errors.AsEnumerable();
+            if (extraErrors != null)
+                allErrors = allErrors.Concat(extraErrors);
+
+            if (allErrors.Any())
             {
                 sb.AppendLine("═══════════════════ ERRORES DETECTADOS ══════════════════════════");
                 
                 // Agrupar errores por tipo
-                var lexicalErrors = Errors.Where(e => e.Type == SICXEErrorType.Lexico).OrderBy(e => e.Line);
-                var syntaxErrors = Errors.Where(e => e.Type == SICXEErrorType.Sintactico).OrderBy(e => e.Line);
-                var semanticErrors = Errors.Where(e => e.Type == SICXEErrorType.Semantico).OrderBy(e => e.Line);
+                var lexicalErrors = allErrors.Where(e => e.Type == SICXEErrorType.Lexico).OrderBy(e => e.Line);
+                var syntaxErrors = allErrors.Where(e => e.Type == SICXEErrorType.Sintactico).OrderBy(e => e.Line);
+                var semanticErrors = allErrors.Where(e => e.Type == SICXEErrorType.Semantico).OrderBy(e => e.Line);
                 
                 if (lexicalErrors.Any())
                 {
@@ -1419,7 +1486,7 @@ namespace laboratorioPractica3
                     sb.AppendLine();
                 }
                 
-                sb.AppendLine($"  Total errores: {Errors.Count}");
+                sb.AppendLine($"  Total errores: {allErrors.Count()}");
             }
 
             // ═══════════════════ RESUMEN DEL ANÁLISIS ═══════════════════
@@ -1439,7 +1506,8 @@ namespace laboratorioPractica3
         }
 
         /// <summary>
-        /// Exporta la tabla de símbolos a un archivo CSV
+        /// Exporta la tabla de símbolos a un archivo CSV (salida simple, sin tipo)
+        /// Nota: el archivo "TABSIMXE" con tipo se genera en ExportToSingleCSV
         /// </summary>
         public void ExportSymbolTableToCSV(string outputPath)
         {
@@ -1556,12 +1624,15 @@ namespace laboratorioPractica3
         /// </summary>
         public void ExportToSingleCSV(string outputPath, List<SICXEError>? allErrors = null)
         {
+            // Exportación canónica de resultados del Paso 1 en un solo CSV:
+            // Sección TABSIM + Sección intermedia + Resumen.
             var sb = new StringBuilder();
             
             // UTF-8 BOM para mejor compatibilidad con Excel
             var utf8WithBom = new UTF8Encoding(true);
             
             // ═══════════════════ SECCIÓN 1: TABLA DE SÍMBOLOS (TABSIM) ═══════════════════
+            // Requisito 2: imprimir TABSIM con tipo absoluto/relativo
             sb.AppendLine("=== TABLA DE SIMBOLOS (TABSIM) ===");
             sb.AppendLine("SIMBOLO,DIRECCION_HEX,DIRECCION_DEC,TIPO");
             

@@ -32,6 +32,8 @@ namespace laboratorioPractica3
     {
         private readonly Dictionary<string, SymbolInfo> _tabsim = new(StringComparer.OrdinalIgnoreCase);
         
+        // Tabla de simbolos extendida: guarda valor y tipo (absoluto/relativo)
+        // Requisito 1: cada simbolo queda marcado con su tipo.
         public IReadOnlyDictionary<string, SymbolInfo> GetAllSymbols() => _tabsim;
 
         public bool ContainsKey(string name) => _tabsim.ContainsKey(name);
@@ -51,16 +53,21 @@ namespace laboratorioPractica3
         // Limpiar la tabla
         public void Clear() => _tabsim.Clear();
 
-        // Evaluador de expresiones
-        // allowUndefinedSymbols: si true, permite símbolos no definidos (útil para Paso 1)
+        // Evaluador de expresiones aritmeticas (+, -, *, /, ()).
+        // Requisitos 5-7: soporta simbolos y constantes, valida reglas de apareamiento
+        // y permite EQU con expresion o con * (contador actual).
+        // allowUndefinedSymbols: si true, permite simbolos no definidos (para Paso 1)
         public (int value, SymbolType type, string? error) EvaluateExpression(string? expression, int currentAddress, bool allowUndefinedSymbols = false)
         {
+            // Punto único para evaluar expresiones SIC/XE.
+            // Retorna: valor numérico + tipo del término resultante (Absolute/Relative).
             if (string.IsNullOrWhiteSpace(expression)) return (0, SymbolType.Absolute, "Expresión vacía");
 
             // TODO: Un parser simple de la expresión para calcular su valor evaluando *, símbolos, y constantes
             return ParseExpressionTokens(expression, currentAddress, allowUndefinedSymbols);
         }
 
+        // Parser de expresiones: devuelve valor + tipo (absoluto/relativo) o error
         private (int value, SymbolType type, string? error) ParseExpressionTokens(string expr, int currentAddress, bool allowUndefinedSymbols = false)
         {
             // Implementa un parser recursivo descendente simple o un evaluador postfix aquí.
@@ -102,8 +109,11 @@ namespace laboratorioPractica3
             return tokens;
         }
 
+        // Suma/Resta: valida reglas SIC/XE de combinacion de simbolos
         private (int val, SymbolType type, string? err) ParseAddSub(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols = false)
         {
+            // Implementa reglas de apareamiento A/R en suma-resta.
+            // Aquí se decide si el resultado final es absoluto o relativo.
             var (leftVal, leftType, err) = ParseMulDiv(tokens, ref pos, pc, allowUndefinedSymbols);
             if (err != null) return (leftVal, leftType, err);
 
@@ -178,8 +188,10 @@ namespace laboratorioPractica3
             return (leftVal, leftType, null);
         }
 
+        // Multiplicacion/Division: solo valores absolutos (regla SIC/XE)
         private (int val, SymbolType type, string? err) ParseMulDiv(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols = false)
         {
+            // Regla SIC/XE: en * y / solo participan términos absolutos.
             var (leftVal, leftType, err) = ParseFactor(tokens, ref pos, pc, allowUndefinedSymbols);
             if (err != null) return (leftVal, leftType, err);
 
@@ -208,8 +220,11 @@ namespace laboratorioPractica3
             return (leftVal, leftType, null);
         }
 
+        // Factor: simbolo, constante, paréntesis o '*' (contador actual)
         private (int val, SymbolType type, string? err) ParseFactor(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols = false)
         {
+            // Factor elemental: número, símbolo, '*', paréntesis u operador unario.
+            // '*' representa el valor actual del contador de ubicación (relativo).
             if (pos >= tokens.Count) return (-1, SymbolType.Absolute, "Expresión mal formada");
 
             string token = tokens[pos];

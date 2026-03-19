@@ -8,114 +8,143 @@ namespace laboratorioPractica3
 {
     public class ProgramaObjeto
     {
-        private readonly IReadOnlyList<ObjectCodeLine> _lineas;
+        private readonly IReadOnlyList<ObjectCodeLine> _lineasCodigoObjeto;
         private readonly string _nombrePrograma;
-        private readonly int _dirInicio;
-        private readonly int _longPrograma;
+        private readonly int _direccionInicio;
+        private readonly int _direccionEjecucion;
+        private readonly int _longitudPrograma;
 
         public ProgramaObjeto(
             IReadOnlyList<ObjectCodeLine> lineas,
             string nombrePrograma,
             int dirInicio,
-            int longPrograma)
+            int longPrograma,
+            int dirEjecucion)
         {
-            _lineas = lineas;
+            _lineasCodigoObjeto = lineas;
             _nombrePrograma = nombrePrograma;
-            _dirInicio = dirInicio;
-            _longPrograma = longPrograma;
+            _direccionInicio = dirInicio;
+            _longitudPrograma = longPrograma;
+            _direccionEjecucion = dirEjecucion;
         }
 
         public List<string> GenerarRegistros()
         {
+            // Ensambla la salida final del módulo objeto:
+            // H (header), T (texto), M (modificación) y E (fin/entrada).
+            // Aquí se aplican reglas de corte de T y relocalización.
             var registros = new List<string>();
-            var mRecords = new List<string>();
+            var registrosModificacion = new List<RegistroModificacion>();
 
-            // 1. Registro H (Encabezado)
+            // 1) Registro H (Encabezado): nombre + direccion inicio + longitud
             // Nombre justificado a la izquierda con espacios (6 caracteres)
-            string nombre = (_nombrePrograma ?? "").PadRight(6).Substring(0, 6);
-            registros.Add($"H{nombre}{_dirInicio:X6}{_longPrograma:X6}");
+            string nombrePrograma = (_nombrePrograma ?? "").PadRight(6).Substring(0, 6);
+            registros.Add($"H{nombrePrograma}{_direccionInicio:X6}{_longitudPrograma:X6}");
 
-            // 2. Registros T (Texto) y M (Modificación)
-            int tStart = -1;
-            string tCode = "";
-            int tByteCount = 0;
+            // 2) Registros T (Texto) y M (Modificacion)
+            int inicioTexto = -1;
+            string codigoTexto = "";
+            int conteoBytesTexto = 0;
 
-            Action flushT = () =>
+            Action vaciarTexto = () =>
             {
-                if (tByteCount > 0)
+                // Cierra un bloque T en construcción respetando formato:
+                // T + dirección inicio + longitud + bytes objeto concatenados.
+                if (conteoBytesTexto > 0)
                 {
-                    registros.Add($"T{tStart:X6}{tByteCount:X2}{tCode}");
-                    tCode = "";
-                    tByteCount = 0;
-                    tStart = -1;
+                    registros.Add($"T{inicioTexto:X6}{conteoBytesTexto:X2}{codigoTexto}");
+                    codigoTexto = "";
+                    conteoBytesTexto = 0;
+                    inicioTexto = -1;
                 }
             };
 
-            foreach (var line in _lineas)
+            foreach (var linea in _lineasCodigoObjeto)
             {
-                if (string.IsNullOrWhiteSpace(line.ObjectCode))
-                    continue; // Skip directivas como BASE o líneas sin obj code
-
-                string rawCode = line.ObjectCode;
-                bool isRelocatable = rawCode.EndsWith("*");
-                string cleanCode = rawCode.Replace("*", "");
-                
-                int bytesInLine = cleanCode.Length / 2;
-
-                bool isContiguous = (tStart != -1) && ((tStart + tByteCount) == line.IntermLine.Address);
-                bool wouldExceedLimit = (tByteCount + bytesInLine) > 30;
-
-                // Si se rompe contigüidad de memoria o excede 30 bytes (60 caracteres hex), cerramos registro
-                if (tStart != -1 && (!isContiguous || wouldExceedLimit))
+                if (string.IsNullOrWhiteSpace(linea.ObjectCode))
                 {
-                    flushT();
-                }
-
-                if (tStart == -1)
-                {
-                    tStart = line.IntermLine.Address;
-                }
-
-                tCode += cleanCode;
-                tByteCount += bytesInLine;
-
-                // Generar registro de Modificación si es relocalizable (*)
-                if (isRelocatable)
-                {
-                    int mAddress;
-                    string lengthField;
-
-                    // Si es una directiva WORD, modificamos los 3 bytes completos (06 medios bytes)
-                    if (line.IntermLine.Operation.Equals("WORD", StringComparison.OrdinalIgnoreCase))
+                    // 3) Si hay error o directiva que no genera código y corta bloque, cerrar T vigente
+                    if (!string.IsNullOrWhiteSpace(linea.ErrorPaso2) || !string.IsNullOrWhiteSpace(linea.IntermLine.Error))
                     {
-                        mAddress = line.IntermLine.Address;
-                        lengthField = "06";
-                    }
-                    else // Si es instrucción Formato 4, modificamos los 20 bits de dirección (05 medios bytes)
-                    {
-                        mAddress = line.IntermLine.Address + 1;
-                        lengthField = "05";
+                        vaciarTexto();
+                        continue;
                     }
 
-                    // Símbolo externo (tomamos el nombre del programa inicial, 6 chars)
-                    string mName = nombre;
-                    mRecords.Add($"M{mAddress:X6}{lengthField}+{mName}");
+                    string operacion = linea.IntermLine.Operation?.Trim().ToUpperInvariant() ?? "";
+                    if (operacion == "RESB" || operacion == "RESW" || operacion == "EQU" || operacion == "ORG" || operacion == "END")
+                    {
+                        vaciarTexto();
+                    }
+                    continue; // Directivas sin codigo objeto
+                }
+
+                string codigoCrudo = linea.ObjectCode;
+                bool esRelocalizable = codigoCrudo.EndsWith("*");
+                string codigoLimpio = codigoCrudo.Replace("*", "");
+
+                int bytesLinea = codigoLimpio.Length / 2;
+
+                bool esContiguo = (inicioTexto != -1) && ((inicioTexto + conteoBytesTexto) == linea.IntermLine.Address);
+                bool excedeLimite = (conteoBytesTexto + bytesLinea) > 30;
+
+                // 3) Si se rompe contigüidad de memoria o excede 30 bytes, se cierra el registro de texto
+                if (inicioTexto != -1 && (!esContiguo || excedeLimite))
+                {
+                    vaciarTexto();
+                }
+
+                if (inicioTexto == -1)
+                {
+                    inicioTexto = linea.IntermLine.Address;
+                }
+
+                // 2) El codigo objeto se envia directamente al registro de texto
+                codigoTexto += codigoLimpio;
+                conteoBytesTexto += bytesLinea;
+
+                // 6) Estructura para almacenar informacion de registros de modificacion
+                if (esRelocalizable)
+                {
+                    int direccionMod;
+                    int longitudMediosBytes;
+
+                    // WORD: 3 bytes completos (06 medios bytes)
+                    if (linea.IntermLine.Operation.Equals("WORD", StringComparison.OrdinalIgnoreCase))
+                    {
+                        direccionMod = linea.IntermLine.Address;
+                        longitudMediosBytes = 0x06;
+                    }
+                    else // Formato 4: modificar 20 bits de direccion (05 medios bytes)
+                    {
+                        direccionMod = linea.IntermLine.Address + 1;
+                        longitudMediosBytes = 0x05;
+                    }
+
+                    registrosModificacion.Add(new RegistroModificacion(
+                        direccionMod,
+                        longitudMediosBytes,
+                        nombrePrograma));
                 }
             }
 
-            flushT(); // Vaciar remanentes
+            vaciarTexto(); // 9) Al final se escribe el ultimo registro de texto
 
-            // Agregar registros M posteriores a los registros T
-            registros.AddRange(mRecords);
+            // 9) Generar registros de modificacion antes del registro de fin
+            foreach (var registro in registrosModificacion)
+            {
+                registros.Add($"M{registro.Direccion:X6}{registro.LongitudMediosBytes:X2}+{registro.Nombre}");
+            }
 
-            // 3. Registro E (Fin)
-            registros.Add($"E{_dirInicio:X6}");
+            // 4) Registro E (Fin)
+            registros.Add($"E{_direccionEjecucion:X6}");
 
             return registros;
         }
 
         public void ExportarACSV(string filePath)
         {
+            // Exporta los registros objeto a CSV (1 registro por línea)
+            // para facilitar inspección y apertura en Excel.
             var registros = GenerarRegistros();
             // Aseguramos que la carpeta exista
             var dir = Path.GetDirectoryName(filePath);
@@ -136,6 +165,7 @@ namespace laboratorioPractica3
 
         public string ObtenerReporteConsola()
         {
+            // Construye un reporte textual simple de los registros objeto generados.
             var sb = new StringBuilder();
             sb.AppendLine("╔════════════════════════════════════════════════════════════════════╗");
             sb.AppendLine("║                     PROGRAMA OBJETO                                ║");
@@ -147,6 +177,20 @@ namespace laboratorioPractica3
             }
 
             return sb.ToString();
+        }
+
+        private readonly struct RegistroModificacion
+        {
+            public RegistroModificacion(int direccion, int longitudMediosBytes, string nombre)
+            {
+                Direccion = direccion;
+                LongitudMediosBytes = longitudMediosBytes;
+                Nombre = nombre;
+            }
+
+            public int Direccion { get; }
+            public int LongitudMediosBytes { get; }
+            public string Nombre { get; }
         }
     }
 }

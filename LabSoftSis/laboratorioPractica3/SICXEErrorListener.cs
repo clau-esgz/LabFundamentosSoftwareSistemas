@@ -16,6 +16,7 @@ namespace laboratorioPractica3
         public override void SyntaxError(TextWriter output, IRecognizer recognizer, IToken offendingSymbol, 
             int line, int charPositionInLine, string msg, RecognitionException e)
         {
+            // Captura errores del parser (estructura de línea/instrucción).
             string errorMsg = TranslateErrorMessage(msg, offendingSymbol);
             Errors.Add(new SICXEError(line, charPositionInLine, errorMsg, SICXEErrorType.Sintactico));
         }
@@ -26,6 +27,7 @@ namespace laboratorioPractica3
         public void SyntaxError(TextWriter output, IRecognizer recognizer, int offendingSymbol, 
             int line, int charPositionInLine, string msg, RecognitionException e)
         {
+            // Captura errores del lexer (caracteres/tokens inválidos).
             string errorMsg = TranslateErrorMessage(msg, null);
             Errors.Add(new SICXEError(line, charPositionInLine, errorMsg, SICXEErrorType.Lexico));
         }
@@ -35,6 +37,8 @@ namespace laboratorioPractica3
         /// </summary>
         private string TranslateErrorMessage(string msg, IToken? offendingSymbol)
         {
+            // Normaliza mensajes crudos de ANTLR a mensajes entendibles
+            // para el reporte del ensamblador.
             if (msg.Contains("token recognition error"))
             {
                 // Extraer el carácter problemático

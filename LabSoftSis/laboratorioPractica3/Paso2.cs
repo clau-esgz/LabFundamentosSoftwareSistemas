@@ -34,10 +34,10 @@ namespace laboratorioPractica3
     internal class Paso2
     {
         //paso1
-        private readonly IReadOnlyList<IntermediateLine> _lineas;
-        private readonly SimbolosYExpresiones _tabSimExt;
-        private readonly int _dirInicio;
-        private readonly int _longPrograma;
+        private readonly IReadOnlyList<IntermediateLine> _lineasIntermedias;
+        private readonly SimbolosYExpresiones _tablaSimbolos;
+        private readonly int _direccionInicio;
+        private readonly int _longitudPrograma;
         private readonly string _nombrePrograma;
 
         private int? _baseActual; //Valor actual de BASE, se actualiza al procesar directivas BASE/NOBASE
@@ -55,10 +55,10 @@ namespace laboratorioPractica3
             string nombrePrograma,
             int? valorBase)
         {
-            _lineas = lineas;
-            _tabSimExt = tablaSimExt;
-            _dirInicio = dirInicio;
-            _longPrograma = longPrograma;
+            _lineasIntermedias = lineas;
+            _tablaSimbolos = tablaSimExt;
+            _direccionInicio = dirInicio;
+            _longitudPrograma = longPrograma;
             _nombrePrograma = nombrePrograma;
             _baseActual = valorBase;
         }
@@ -70,26 +70,29 @@ namespace laboratorioPractica3
 
         public void ObjectCodeGeneration()
         {
-            foreach (var line in _lineas)
+            // Motor principal del Paso 2:
+            // recorre el intermedio, genera código por formato y conserva trazabilidad
+            // de errores semánticos por línea.
+            foreach (var linea in _lineasIntermedias)
             {
-                string codObj = "";
-                string errPaso2 = "";
+                string codigoObjeto = "";
+                string errorPaso2 = "";
 
                 // si la línea ya tiene error del Paso 1, no generar código objeto 
-                if (!string.IsNullOrWhiteSpace(line.Error)) 
+                if (!string.IsNullOrWhiteSpace(linea.Error)) 
                 {
-                    ObjectCodeLines.Add(new ObjectCodeLine(line, "", line.Error));
+                    ObjectCodeLines.Add(new ObjectCodeLine(linea, "", linea.Error));
                     continue;
                 }
 
                 //líneas de comentario o sin operación: sin código objeto ──
-                if (line.Address < 0 || string.IsNullOrWhiteSpace(line.Operation))
+                if (linea.Address < 0 || string.IsNullOrWhiteSpace(linea.Operation))
                 {
-                    ObjectCodeLines.Add(new ObjectCodeLine(line, "", ""));
+                    ObjectCodeLines.Add(new ObjectCodeLine(linea, "", ""));
                     continue;
                 }
 
-                string oper = line.Operation.TrimStart('+').ToUpperInvariant();
+                string operacion = linea.Operation.TrimStart('+').ToUpperInvariant();
 
                 //DIRECTIVAS ,si la operación es una directiva, se procesa con ProcessDirective,
                 //  que genera el código objeto correspondiente (si aplica) y 
@@ -97,53 +100,53 @@ namespace laboratorioPractica3
                 //  Luego se actualiza el valor de BASE si la directiva es BASE 
                 //  Finalmente, se agrega la línea al resultado con su código objeto y error del Paso 2.
                 //  Se continúa al siguiente ciclo sin procesar como instrucción.
-                if (Paso1.DIRECTIVES.Contains(oper))
+                if (Paso1.DIRECTIVES.Contains(operacion))
                 {
-                    (codObj, errPaso2) = ProcessDirective(line, oper);
+                    (codigoObjeto, errorPaso2) = ProcessDirective(linea, operacion);
 
                     //actualizar el valor de la base 
-                    if (oper == "BASE" && !string.IsNullOrEmpty(line.Operand))
+                    if (operacion == "BASE" && !string.IsNullOrEmpty(linea.Operand))
                     {
-                        if (_tabSimExt.TryGetValue(line.Operand, out var symInfo))
+                        if (_tablaSimbolos.TryGetValue(linea.Operand, out var symInfo))
                             _baseActual = symInfo.Value;
-                        else if (TryParseNumeric(line.Operand, out int numVal))
+                        else if (TryParseNumeric(linea.Operand, out int numVal))
                             _baseActual = numVal;
                     }
-                    else if (oper == "NOBASE") 
+                    else if (operacion == "NOBASE") 
                     {
                         _baseActual = null;
                     }
 
-                    if (!string.IsNullOrEmpty(errPaso2))
-                        Errors.Add(new SICXEError(line.SourceLine, 0, errPaso2, SICXEErrorType.Semantico));
+                    if (!string.IsNullOrEmpty(errorPaso2))
+                        Errors.Add(new SICXEError(linea.SourceLine, 0, errorPaso2, SICXEErrorType.Semantico));
 
-                    ObjectCodeLines.Add(new ObjectCodeLine(line, codObj, errPaso2));
+                    ObjectCodeLines.Add(new ObjectCodeLine(linea, codigoObjeto, errorPaso2));
                     continue;
                 }
 
                 //paso 1, aqui se asume que la operación es una instrucción válida, porque si no lo fuera, ya tendría error del Paso 1 y se saltaría esta parte
-                if (!Paso1.OPTAB.TryGetValue(oper, out var opInfo)) //pero va, aqui lo que se hace es si "si la operación no se encuentra en la tabla de opcodes,
+                if (!Paso1.OPTAB.TryGetValue(operacion, out var infoOp)) //pero va, aqui lo que se hace es si "si la operación no se encuentra en la tabla de opcodes,
                                                                    // entonces es un error de instrucción desconocida"
                 {
-                    errPaso2 = "Error: Instrucción desconocida";
-                    Errors.Add(new SICXEError(line.SourceLine, 0, errPaso2, SICXEErrorType.Semantico)); //agregamos a la lista de errores del Paso 2
-                    ObjectCodeLines.Add(new ObjectCodeLine(line, "", errPaso2));
+                    errorPaso2 = "Error: Instrucción desconocida";
+                    Errors.Add(new SICXEError(linea.SourceLine, 0, errorPaso2, SICXEErrorType.Semantico)); //agregamos a la lista de errores del Paso 2
+                    ObjectCodeLines.Add(new ObjectCodeLine(linea, "", errorPaso2));
                     continue;
                 }
                 //Generar código objeto según formato 
-                (codObj, errPaso2) = line.Format switch
+                (codigoObjeto, errorPaso2) = linea.Format switch
                 {
-                    1 => GenerateFormat1(opInfo),
-                    2 => GenerateFormat2(line, opInfo),
-                    3 => GenerateFormat3(line, opInfo),
-                    4 => GenerateFormat4(line, opInfo),
+                    1 => GenerateFormat1(infoOp),
+                    2 => GenerateFormat2(linea, infoOp),
+                    3 => GenerateFormat3(linea, infoOp),
+                    4 => GenerateFormat4(linea, infoOp),
                     _ => ("", "")
                 };
 
-                if (!string.IsNullOrEmpty(errPaso2)) //si hubo error en la generación del código objeto, agregarlo a la lista de errores del Paso 2
-                    Errors.Add(new SICXEError(line.SourceLine, 0, errPaso2, SICXEErrorType.Semantico));
+                if (!string.IsNullOrEmpty(errorPaso2)) //si hubo error en la generación del código objeto, agregarlo a la lista de errores del Paso 2
+                    Errors.Add(new SICXEError(linea.SourceLine, 0, errorPaso2, SICXEErrorType.Semantico));
 
-                ObjectCodeLines.Add(new ObjectCodeLine(line, codObj, errPaso2));
+                ObjectCodeLines.Add(new ObjectCodeLine(linea, codigoObjeto, errorPaso2));
             }
         }
 
@@ -159,77 +162,77 @@ namespace laboratorioPractica3
         // Estructura: [opcode 8][r1 4][r2 4] = 2 bytes                      
         // Usa Paso1.REGISTER_NUMBERS para convertir nombres de registros a números              
       
-        private (string ObjCode, string Error) GenerateFormat2(IntermediateLine line, OpCodeInfo opInfo) //devuelve el código objeto de formato 2, junto con el mensaje de error
+        private (string ObjCode, string Error) GenerateFormat2(IntermediateLine linea, OpCodeInfo infoOp) //devuelve el código objeto de formato 2, junto con el mensaje de error
         {
-            string operand = line.Operand.Trim(); //obtenemos el operando, que puede ser uno o dos registros separados por coma, dependiendo de la instrucción
-            string[] parts = operand.Split(',');//separamos por coma para obtener los registros, si es que hay dos, por ejemplo "A,X" se separa en ["A", "X"], pero si es solo un registro como "A", se queda como ["A"]
-            string opName = line.Operation.ToUpperInvariant(); //obtenemos el nombre de la operacion
+            string operando = linea.Operand.Trim(); //obtenemos el operando, que puede ser uno o dos registros separados por coma
+            string[] partes = operando.Split(','); //separamos por coma para obtener los registros
+            string nombreOp = linea.Operation.ToUpperInvariant(); //obtenemos el nombre de la operacion
 
-            int r1 = 0, r2 = 0; //r1/r2: identificadores de registro codificados en nibbles dentro de los 16 bits de formato 2.
+            int registro1 = 0, registro2 = 0; //identificadores de registro codificados en nibbles dentro de 16 bits
 
             //casos especiales: SVC (un solo operando numérico), CLEAR y TIXR (un solo operando registro), 
             // SHIFTL y SHIFTR (registro + número de posiciones)
-            if (opName == "SVC")
+            if (nombreOp == "SVC")
             {
-                if (parts.Length >= 1 && int.TryParse(parts[0].Trim(), out int svcNum))
-                    r1 = svcNum;
-                r2 = 0;
+                if (partes.Length >= 1 && int.TryParse(partes[0].Trim(), out int svcNum))
+                    registro1 = svcNum;
+                registro2 = 0;
             }
-            else if (opName == "CLEAR" || opName == "TIXR") //checamos que estas intrucciones tengan registros validos 
+            else if (nombreOp == "CLEAR" || nombreOp == "TIXR") //checamos que estas intrucciones tengan registros validos 
             {
-                if (parts.Length >= 1 && !Paso1.REGISTER_NUMBERS.TryGetValue(parts[0].Trim(), out r1))
+                if (partes.Length >= 1 && !Paso1.REGISTER_NUMBERS.TryGetValue(partes[0].Trim(), out registro1))
                 {
                     string err = "Error: Registro inválido";
-                    r1 = 0xF;
-                    r2 = 0xF;
-                    int objCodeErr = (opInfo.Opcode << 8) | (r1 << 4) | r2;
+                    registro1 = 0xF;
+                    registro2 = 0xF;
+                    int objCodeErr = (infoOp.Opcode << 8) | (registro1 << 4) | registro2;
                     return (objCodeErr.ToString("X4"), err);
                 }
-                r2 = 0;
+                registro2 = 0;
             }
             // SHIFTL, SHIFTR
-            else if (opName == "SHIFTL" || opName == "SHIFTR")
+            else if (nombreOp == "SHIFTL" || nombreOp == "SHIFTR")
             {
-                if (parts.Length >= 1 && !Paso1.REGISTER_NUMBERS.TryGetValue(parts[0].Trim(), out r1))//si al menos tiene un registro y ese registro no es válido, entonces error de registro inválido
+                if (partes.Length >= 1 && !Paso1.REGISTER_NUMBERS.TryGetValue(partes[0].Trim(), out registro1))//si al menos tiene un registro y ese registro no es válido, entonces error de registro inválido
                 {
                     string err = "Error: Registro inválido";
                     // ERROR: Generar código objeto con registro=0xF (todos 1s en 4 bits)
-                    r1 = 0xF;
-                    r2 = 0xF;
-                    int objCodeErr = (opInfo.Opcode << 8) | (r1 << 4) | r2;
+                    registro1 = 0xF;
+                    registro2 = 0xF;
+                    int objCodeErr = (infoOp.Opcode << 8) | (registro1 << 4) | registro2;
                     return (objCodeErr.ToString("X4"), err);
                 }
-                if (parts.Length >= 2 && int.TryParse(parts[1].Trim(), out int shiftN))
-                    r2 = shiftN - 1;  
+                if (partes.Length >= 2 && int.TryParse(partes[1].Trim(), out int shiftN))
+                    registro2 = shiftN - 1;  
             }
             // Dos registros: ADDR, COMPR, DIVR, MULR, RMO, SUBR
             else
             {
                 string err = ""; //variable para acumular el mensaje de error, si es que hay error en alguno de los registros, se asigna el mensaje de error y se marca el registro inválido con 0xF
-                if (parts.Length >= 1)
+                if (partes.Length >= 1)
                 {
-                    if (!Paso1.REGISTER_NUMBERS.TryGetValue(parts[0].Trim(), out r1))
+                    if (!Paso1.REGISTER_NUMBERS.TryGetValue(partes[0].Trim(), out registro1))
                     {
                         err = "Error: Registro inválido";
-                        r1 = 0xF;  // ERROR: usar 0xF
+                        registro1 = 0xF;  // ERROR: usar 0xF
                     }
                 }
-                if (parts.Length >= 2)
+                if (partes.Length >= 2)
                 {
-                    if (!Paso1.REGISTER_NUMBERS.TryGetValue(parts[1].Trim(), out r2))
+                    if (!Paso1.REGISTER_NUMBERS.TryGetValue(partes[1].Trim(), out registro2))
                     {
                         err = "Error: Registro inválido";
-                        r2 = 0xF;  // ERROR: usar 0xF
+                        registro2 = 0xF;  // ERROR: usar 0xF
                     }
                 }
                 if (!string.IsNullOrEmpty(err))
                 {
-                    int objCodeErr = (opInfo.Opcode << 8) | (r1 << 4) | r2;
+                    int objCodeErr = (infoOp.Opcode << 8) | (registro1 << 4) | registro2;
                     return (objCodeErr.ToString("X4"), err);
                 }
             }
 
-            int objCode = (opInfo.Opcode << 8) | (r1 << 4) | r2;
+            int objCode = (infoOp.Opcode << 8) | (registro1 << 4) | registro2;
             return (objCode.ToString("X4"), "");
         }
 
@@ -249,15 +252,20 @@ namespace laboratorioPractica3
         //  3. Si ninguno funciona → ERROR de Paso 2                         
     
 
-        private (string ObjCode, string Error) GenerateFormat3(IntermediateLine line, OpCodeInfo opInfo)
+        private (string ObjCode, string Error) GenerateFormat3(IntermediateLine linea, OpCodeInfo infoOp)
         {
-            string operand = line.Operand.Trim();
-            string op = line.Operation.TrimStart('+').ToUpperInvariant();
+            // Formato 3:
+            // - calcula n/i/x según modo
+            // - resuelve TA
+            // - intenta PC-relativo, luego BASE-relativo
+            // - si falla, emite FFF y error "No relativo al CP/B".
+            string operando = linea.Operand.Trim();
+            string operacion = linea.Operation.TrimStart('+').ToUpperInvariant();
 
             // Caso especial: RSUB no tiene operando → n=1,i=1, disp=0 
-            if (op == "RSUB")
+            if (operacion == "RSUB")
             {
-                int firstByte = (opInfo.Opcode & 0xFC) | 0x03; // n=1, i=1
+                int firstByte = (infoOp.Opcode & 0xFC) | 0x03; // n=1, i=1
                 int rsub = firstByte << 16; // xbpe=0000, disp=000
                 return (rsub.ToString("X6"), "");
             }
@@ -265,21 +273,22 @@ namespace laboratorioPractica3
             // Determinar bits n, i, x según modo de direccionamiento
             // (El modo ya fue determinado por la gramática en Paso 1)
             int n = 1, i = 1, x = 0;
-            string cleanOperand = operand;
+            string operandoLimpio = operando;
 
-            switch (line.AddressingMode)
+            // 7) Calculo de banderas n/i/x segun el modo de direccionamiento
+            switch (linea.AddressingMode)
             {
                 case "Inmediato":   //gramática: PREFIX_IMMEDIATE operandValue
                     n = 0; i = 1;
-                    cleanOperand = operand.TrimStart('#');
+                    operandoLimpio = operando.TrimStart('#');
                     break;
                 case "Indirecto":  //gramática: PREFIX_INDIRECT operandValue
                     n = 1; i = 0;
-                    cleanOperand = operand.TrimStart('@');
+                    operandoLimpio = operando.TrimStart('@');
                     break;
                 case "Indexado": // gramática: operandValue indexing (COMMA IDENT)
                     n = 1; i = 1; x = 1;
-                    cleanOperand = operand.Split(',')[0].Trim();
+                    operandoLimpio = operando.Split(',')[0].Trim();
                     break;
                 default:            // Simple: operandValue sin prefijo
                     n = 1; i = 1;
@@ -292,14 +301,14 @@ namespace laboratorioPractica3
 
             // Validar modo de direccionamiento según tabla 
             // Verificar si el operando es constante o etiqueta
-            bool isNumericOperand = TryParseNumeric(cleanOperand, out int _);
+            bool esOperandoNumerico = TryParseNumeric(operandoLimpio, out int _);
             
             // FORMATO 3: Validaciones según tabla de modos de direccionamiento
             // Indirecto con constante NO existe en la tabla
-            if (isIndirect && isNumericOperand)
+            if (isIndirect && esOperandoNumerico)
             {
                 string err = "Error: Modo de direccionamiento no existe";
-                int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
                 int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
                 int objError = (fbError << 16) | (xbpeError << 12) | 0xFFF;
                 return (objError.ToString("X6"), err);
@@ -309,13 +318,13 @@ namespace laboratorioPractica3
             int targetAddress;
             SymbolType targetType;
 
-            var (evalVal, evalType, evalErr) = _tabSimExt.EvaluateExpression(cleanOperand, line.Address);
+            var (evalVal, evalType, evalErr) = _tablaSimbolos.EvaluateExpression(operandoLimpio, linea.Address);
             
             if (evalErr != null)
             {
                 string err = "Error: Símbolo no encontrado en TABSIM";
-                // ERROR 1: Símbolo no encontrado - Generar código objeto con b=1, p=1, disp=0xFFF
-                int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                // 5) Si no existe etiqueta, se marca el error y se usa disp=-1 (0xFFF)
+                int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
                 int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
                 int objError = (fbError << 16) | (xbpeError << 12) | 0xFFF; // disp=-1 (complemento a 2)
                 return (objError.ToString("X6"), err);
@@ -331,19 +340,20 @@ namespace laboratorioPractica3
                 if (targetAddress < 0 || targetAddress > 4095)
                 {
                     string err = "Error: Operando fuera de rango";
-                    int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                    int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
                     int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
                     int objError = (fbError << 16) | (xbpeError << 12) | 0xFFF; // disp=-1 (complemento a 2)
                     return (objError.ToString("X6"), err);
                 }
-                int fb = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                int fb = (infoOp.Opcode & 0xFC) | (n << 1) | i;
                 int xbpe = (x << 3); // b=0, p=0, e=0
                 int obj = (fb << 16) | (xbpe << 12) | (targetAddress & 0xFFF);
                 return (obj.ToString("X6"), "");
             }
 
             // Calcular desplazamiento (PC-relativo o BASE-relativo) 
-            int pc = line.Address + line.Increment; // PC = dirección actual + tamaño instrucción
+            // 7) Calculo de banderas b/p y desplazamiento (PC o BASE)
+            int pc = linea.Address + linea.Increment; // PC = dirección actual + tamaño instrucción
             int bBit = 0, pBit = 0;
             int displacement;
 
@@ -365,7 +375,7 @@ namespace laboratorioPractica3
                 {
                     // ERROR 4: desplazamiento no cabe en BASE-relativo → instrucción no relativa al CP ni a la B
                     string err = "Error: No relativo al CP/B";
-                    int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                    int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
                     int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
                     int objError = (fbError << 16) | (xbpeError << 12) | 0xFFF; // disp=-1 (complemento a 2)
                     return (objError.ToString("X6"), err);
@@ -375,7 +385,7 @@ namespace laboratorioPractica3
             {
                 // ERROR 4: BASE no definida (NOBASE activo) → instrucción no relativa al CP ni a la B
                 string err = "Error: No relativo al CP/B";
-                int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
                 int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
                 int objError = (fbError << 16) | (xbpeError << 12) | 0xFFF; // disp=-1 (complemento a 2)
                 return (objError.ToString("X6"), err);
@@ -383,7 +393,8 @@ namespace laboratorioPractica3
 
             // Construir código objeto 
             {
-                int firstByte = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                // 8) Con n/i/x/b/p/e y desplazamiento calculados, se ensambla la instruccion
+                int firstByte = (infoOp.Opcode & 0xFC) | (n << 1) | i;
                 int xbpe = (x << 3) | (bBit << 2) | (pBit << 1) | 0; // e=0
                 int objCode = (firstByte << 16) | (xbpe << 12) | (displacement & 0xFFF);
                 return (objCode.ToString("X6"), "");
@@ -398,15 +409,19 @@ namespace laboratorioPractica3
         // NO válidos: +op c, +op #c, +op c,X (genera error modo no existe)  
         //
 
-        private (string ObjCode, string Error) GenerateFormat4(IntermediateLine line, OpCodeInfo opInfo)
+        private (string ObjCode, string Error) GenerateFormat4(IntermediateLine linea, OpCodeInfo infoOp)
         {
-            string operand = line.Operand.Trim();
-            string op = line.Operation.TrimStart('+').ToUpperInvariant();
+            // Formato 4:
+            // - campo de dirección de 20 bits
+            // - si operando relativo, marca '*' para registro M
+            // - para errores, usa dirección 0xFFFFF y reporta mensaje semántico.
+            string operando = linea.Operand.Trim();
+            string operacion = linea.Operation.TrimStart('+').ToUpperInvariant();
 
             // Caso especial: +RSUB
-            if (op == "RSUB")
+            if (operacion == "RSUB")
             {
-                int firstByte = (opInfo.Opcode & 0xFC) | 0x03; // n=1, i=1
+                int firstByte = (infoOp.Opcode & 0xFC) | 0x03; // n=1, i=1
                 int xbpe = 1; // e=1
                 int rsub = (firstByte << 24) | (xbpe << 20); // addr=0
                 return (rsub.ToString("X8"), "");
@@ -414,21 +429,22 @@ namespace laboratorioPractica3
 
             // Determinar bits n, i, x
             int n = 1, i = 1, x = 0;
-            string cleanOperand = operand;
+            string operandoLimpio = operando;
 
-            switch (line.AddressingMode)
+            // 7) Calculo de banderas n/i/x segun el modo de direccionamiento
+            switch (linea.AddressingMode)
             {
                 case "Inmediato":
                     n = 0; i = 1;
-                    cleanOperand = operand.TrimStart('#');
+                    operandoLimpio = operando.TrimStart('#');
                     break;
                 case "Indirecto":
                     n = 1; i = 0;
-                    cleanOperand = operand.TrimStart('@');
+                    operandoLimpio = operando.TrimStart('@');
                     break;
                 case "Indexado":
                     n = 1; i = 1; x = 1;
-                    cleanOperand = operand.Split(',')[0].Trim();
+                    operandoLimpio = operando.Split(',')[0].Trim();
                     break;
                 default:
                     n = 1; i = 1;
@@ -437,63 +453,60 @@ namespace laboratorioPractica3
 
             bool isImmediate = (n == 0 && i == 1);
 
-            // Verificar si el operando es constante hexadecimal 000H o cualquier otro numérico
-            bool isHexConstant = cleanOperand.EndsWith("H", StringComparison.OrdinalIgnoreCase);
+            var (evalVal, evalType, evalErr) = _tablaSimbolos.EvaluateExpression(operandoLimpio, linea.Address);
 
-            var (evalVal, evalType, evalErr) = _tabSimExt.EvaluateExpression(cleanOperand, line.Address);
-
-            bool isNumericOperand = TryParseNumeric(cleanOperand, out int numericValue);
-
-            if (isImmediate && evalType == SymbolType.Absolute)
-            {
-                // Constante hex 000H: válida en formato 4 solo si su valor decimal > 4095
-                if (isHexConstant && evalVal > 4095)
-                {
-                    int firstByte = (opInfo.Opcode & 0xFC) | (n << 1) | i;
-                    int xbpe = (x << 3) | 1; // b=0, p=0, e=1
-                    int objCode = (firstByte << 24) | (xbpe << 20) | (evalVal & 0xFFFFF);
-                    return (objCode.ToString("X8"), "");
-                }
-                else if (isHexConstant) // isHexConstant && evalVal <= 4095
-                {
-                    // ERROR 2: constante hex ≤ 4095 en formato 4 → operando fuera de rango
-                    string err = "Error: Operando fuera de rango";
-                    int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
-                    int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
-                    int objError = (fbError << 24) | (xbpeError << 20) | 0xFFFFF;
-                    return (objError.ToString("X8"), err);
-                }
-                else
-                {
-                    // Cualquier otra constante (decimal, 0x...) → modo no existe en formato 4
-                    // O expresiones evaluadas absolutas:
-                    // De hecho, si es expresión absoluta simple #MAXLEN, y MAXLEN=2000, entonces debe generar error de modo no existe
-                    string err = "Error: Modo de direccionamiento no existe";
-                    int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
-                    int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
-                    int objError = (fbError << 24) | (xbpeError << 20) | 0xFFFFF;
-                    return (objError.ToString("X8"), err);
-                }
-            }
-
-            // Operando es etiqueta o expresión (m) → resolver en TABSIM
-            // Se antepone * para indicar registro relocalizable
-            int targetAddress;
-
+            // Si no se puede resolver el operando, reportar símbolo/operando inválido.
             if (evalErr != null)
             {
                 string err = "Error: Símbolo no encontrado en TABSIM u operando inválido";
-                int fbError = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
                 int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
                 int objError = (fbError << 24) | (xbpeError << 20) | 0xFFFFF;
                 return (objError.ToString("X8"), err);
             }
-            targetAddress = evalVal;
+
+            // Regla del modelo: si se pasa una constante literal 'c' (0..4095)
+            // en formato 4, se marca como operando fuera de rango.
+            // (ejemplo: +SUB 350)
+            if (TryParseNumeric(operandoLimpio, out int valorConstante) && valorConstante >= 0 && valorConstante <= 4095)
+            {
+                string err = "Error: Operando fuera de rango";
+                int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
+                int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
+                int objError = (fbError << 24) | (xbpeError << 20) | 0xFFFFF;
+                return (objError.ToString("X8"), err);
+            }
+
+            // Formato 4 con valor absoluto (constante o expresión absoluta):
+            // permitido mientras quepa en 20 bits.
+            // Ejemplo esperado: +SUB 350 -> 1F10015E (sin registro M).
+            if (evalType == SymbolType.Absolute)
+            {
+                if (evalVal < 0 || evalVal > 0xFFFFF)
+                {
+                    string err = "Error: Operando fuera de rango";
+                    int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
+                    int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
+                    int objError = (fbError << 24) | (xbpeError << 20) | 0xFFFFF;
+                    return (objError.ToString("X8"), err);
+                }
+
+                int firstByte = (infoOp.Opcode & 0xFC) | (n << 1) | i;
+                int xbpe = (x << 3) | 1; // b=0, p=0, e=1
+                int objCode = (firstByte << 24) | (xbpe << 20) | (evalVal & 0xFFFFF);
+                return (objCode.ToString("X8"), "");
+            }
+
+            // Operando es etiqueta o expresión (m) → resolver en TABSIM
+            // Se antepone * para indicar registro relocalizable
+            int targetAddress = evalVal;
 
             // Construir código objeto: dirección absoluta 20 bits, e=1
-            // * al final indica que la dirección es relocalizable (depende de dónde se cargue el programa y si es relativa)
+            // Requisito 10: '*' al final marca que se debe generar registro M
+            // (relocalizacion del simbolo en ProgramaObjeto)
             {
-                int firstByte = (opInfo.Opcode & 0xFC) | (n << 1) | i;
+                // 7) En formato 4 se prepara info para registro de modificacion (se marca con *)
+                int firstByte = (infoOp.Opcode & 0xFC) | (n << 1) | i;
                 int xbpe = (x << 3) | 1; // b=0, p=0, e=1
                 int objCode = (firstByte << 24) | (xbpe << 20) | (targetAddress & 0xFFFFF);
                 string suffix = (evalType == SymbolType.Relative) ? "*" : "";
@@ -506,14 +519,30 @@ namespace laboratorioPractica3
 
         private (string ObjCode, string Error) ProcessDirective(IntermediateLine line, string op)
         {
+            // Directivas tratadas en Paso 2:
+            // BYTE/WORD generan objeto, END se valida para punto de entrada.
             return op switch
             {
                 "BYTE" => GenerateByteObjCode(line.Operand),
                 "WORD" => GenerateWordObjCode(line.Operand, line.Address),
+                "END" => ValidateEndDirective(line),
                 _ => ("", "") // START, END, BASE, NOBASE, RESB, RESW, etc.
             };
         }
 
+        private (string ObjCode, string Error) ValidateEndDirective(IntermediateLine line)
+        {
+            // Verifica operando de END contra TABSIM.
+            // Si no existe, se reporta error de Paso 2 y el registro E usa FFFFFF.
+            string operando = line.Operand?.Trim() ?? "";
+            if (string.IsNullOrEmpty(operando))
+                return ("", "");
+
+            if (_tablaSimbolos.TryGetValue(operando, out _))
+                return ("", "");
+
+            return ("", "Error: Símbolo no encontrado en directiva END");
+        }
         
         /// BYTE C'texto' → código ASCII concatenado (gramática: CHARCONST → C'...')
         /// BYTE X'hex'   → valor hexadecimal directo (gramática: HEXCONST → X'...')
@@ -537,6 +566,9 @@ namespace laboratorioPractica3
             if (operand.StartsWith("X'", StringComparison.OrdinalIgnoreCase) && operand.EndsWith("'"))
             {
                 string content = operand.Substring(2, operand.Length - 3).ToUpperInvariant();
+                // Asegurar número par de dígitos (múltiplo de 2 para bytes completos)
+                if (content.Length % 2 != 0)
+                    content = "0" + content;
                 return (content, "");
             }
 
@@ -547,7 +579,9 @@ namespace laboratorioPractica3
         /// Ejemplo: WORD 3 → 000003, WORD BUFFER-BUFEND
         private (string ObjCode, string Error) GenerateWordObjCode(string operand, int pc)
         {
-            var (val, type, err) = _tabSimExt.EvaluateExpression(operand, pc);
+            // WORD: empaqueta valor en 24 bits.
+            // Si la expresión es relativa, agrega '*' para generar registro M en objeto.
+            var (val, type, err) = _tablaSimbolos.EvaluateExpression(operand, pc);
             if (err != null)
                 return ("FFFFFF", "Error: " + err); // O reportar algún error base especial
 
@@ -567,6 +601,8 @@ namespace laboratorioPractica3
         
         private bool TryParseNumeric(string operand, out int value)
         {
+            // Parser numérico uniforme para operandos en Paso 2.
+            // Permite comparar rangos sin depender del tipo de notación del fuente.
             value = 0;
             if (string.IsNullOrEmpty(operand)) return false;
 
@@ -607,8 +643,8 @@ namespace laboratorioPractica3
             sb.AppendLine();
 
             sb.AppendLine($"Programa        : {_nombrePrograma}");
-            sb.AppendLine($"Dir. inicio     : {_dirInicio:X4}h  ({_dirInicio})");
-            sb.AppendLine($"Long. programa  : {_longPrograma:X4}h  ({_longPrograma} bytes)");
+            sb.AppendLine($"Dir. inicio     : {_direccionInicio:X4}h  ({_direccionInicio})");
+            sb.AppendLine($"Long. programa  : {_longitudPrograma:X4}h  ({_longitudPrograma} bytes)");
             if (_baseActual.HasValue)
                 sb.AppendLine($"Valor BASE      : {_baseActual.Value:X4}h  ({_baseActual.Value})");
             sb.AppendLine();
@@ -679,8 +715,8 @@ namespace laboratorioPractica3
             sb.AppendLine("=== RESUMEN DEL PASO 2 ===");
             sb.AppendLine("PROPIEDAD,VALOR");
             sb.AppendLine($"\"NOMBRE_PROGRAMA\",\"{_nombrePrograma}\"");
-            sb.AppendLine($"\"DIR_INICIO\",\"{_dirInicio:X4}\"");
-            sb.AppendLine($"\"LONGITUD_PROGRAMA\",\"{_longPrograma:X4}\"");
+            sb.AppendLine($"\"DIR_INICIO\",\"{_direccionInicio:X4}\"");
+            sb.AppendLine($"\"LONGITUD_PROGRAMA\",\"{_longitudPrograma:X4}\"");
             sb.AppendLine($"\"LINEAS_CON_CODIGO\",{ObjectCodeLines.Count(l => !string.IsNullOrEmpty(l.ObjectCode))}");
             sb.AppendLine($"\"ERRORES_PASO2\",{Errors.Count}");
 
