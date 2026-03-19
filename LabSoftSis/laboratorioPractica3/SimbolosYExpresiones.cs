@@ -9,6 +9,10 @@ namespace laboratorioPractica3
         Relative
     }
 
+    /// <summary>
+    /// Almacena información sobre un símbolo (etiqueta) en la tabla de símbolos
+    /// Incluye: nombre, valor numérico (dirección o constante), tipo (absoluto o relativo)
+    /// </summary>
     public class SymbolInfo
     {
         public string Name { get; set; }
@@ -28,6 +32,39 @@ namespace laboratorioPractica3
         }
     }
 
+    /// <summary>
+    /// ╔═══════════════════════════════════════════════════════════════════════════════╗
+    /// ║ CLASE: SimbolosYExpresiones - EVALUADOR DE EXPRESIONES Y GESTOR DE SÍMBOLOS  ║
+    /// ╚═══════════════════════════════════════════════════════════════════════════════╝
+    /// 
+    /// RESPONSABILIDADES:
+    /// 1. Almacenar y gestionar tabla de símbolos (etiquetas con valores absolutos/relativos)
+    /// 2. Evaluar expresiones aritméticas complejas con operadores: +, -, *, /
+    /// 3. Validar reglas SIC/XE para combinaciones de símbolos relativos/absolutos
+    /// 4. Soportar operadores unarios (-x, +x) y paréntesis
+    /// 5. Reconocer múltiples formatos numéricos (decimal, hexadecimal H, 0x, X'...')
+    /// 6. Permitir referencias adelantadas (forward references) en Paso 1
+    /// 
+    /// TIPOS DE SÍMBOLOS:
+    /// - Absoluto (Absolute): Constante con valor fijo (ej: 256, 0FFH)
+    /// - Relativo (Relative): Dirección de memoria (ej: etiqueta, símbolo)
+    /// 
+    /// REGLAS DE OPERACIÓN (SIC/XE):
+    /// SUMA:
+    ///   • Absoluto + Absoluto → Absoluto (suma de constantes)
+    ///   • Relativo + Absoluto → Relativo (desplazar dirección)
+    ///   • Relativo + Relativo → ERROR (no se suman direcciones)
+    /// 
+    /// RESTA:
+    ///   • Relativo - Relativo → Absoluto (diferencia de direcciones)
+    ///   • Absoluto - Absoluto → Absoluto
+    ///   • Relativo - Absoluto → Relativo
+    ///   • Absoluto - Relativo → ERROR (excepto si Relativo es negativo)
+    /// 
+    /// MULTIPLICACIÓN/DIVISIÓN:
+    ///   • Requiere: ambos operandos sean Absolutos
+    ///   • Restricción: "ETIQ * 2" es INVÁLIDO
+    /// </summary>
     public class SimbolosYExpresiones
     {
         private readonly Dictionary<string, SymbolInfo> _tabsim = new(StringComparer.OrdinalIgnoreCase);
@@ -36,22 +73,22 @@ namespace laboratorioPractica3
         // Requisito 1: cada simbolo queda marcado con su tipo.
         public IReadOnlyDictionary<string, SymbolInfo> GetAllSymbols() => _tabsim;
 
-        public bool ContainsKey(string name) => _tabsim.ContainsKey(name);
-        
+        public bool ContainsKey(string name) => _tablaSímbolos.ContainsKey(name);
+
         public void AddSymbol(string name, int value, SymbolType type)
         {
-            _tabsim[name] = new SymbolInfo(name, value, type);
+            _tablaSímbolos[name] = new SymbolInfo(name, value, type);
         }
 
         public bool TryGetValue(string name, out SymbolInfo info)
         {
-            return _tabsim.TryGetValue(name, out info);
+            return _tablaSímbolos.TryGetValue(name, out info);
         }
 
-        public int Count => _tabsim.Count;
+        public int Count => _tablaSímbolos.Count;
 
-        // Limpiar la tabla
-        public void Clear() => _tabsim.Clear();
+        /// Limpia todos los símbolos de la tabla
+        public void Clear() => _tablaSímbolos.Clear();
 
         // Evaluador de expresiones aritmeticas (+, -, *, /, ()).
         // Requisitos 5-7: soporta simbolos y constantes, valida reglas de apareamiento
@@ -70,16 +107,21 @@ namespace laboratorioPractica3
         // Parser de expresiones: devuelve valor + tipo (absoluto/relativo) o error
         private (int value, SymbolType type, string? error) ParseExpressionTokens(string expr, int currentAddress, bool allowUndefinedSymbols = false)
         {
-            // Implementa un parser recursivo descendente simple o un evaluador postfix aquí.
-            // Para simplificar, tokenize and evaluate.
             try
             {
-                var tokens = Tokenize(expr);
-                int pos = 0;
-                var (val, type, err) = ParseAddSub(tokens, ref pos, currentAddress, allowUndefinedSymbols);
-                if (err != null) return (-1, SymbolType.Absolute, err);
-                if (pos < tokens.Count) return (-1, SymbolType.Absolute, "Tokens adicionales inesperados");
-                return (val, type, null);
+                // Paso 1: Tokenizar la expresión (dividir en símbolos reconocibles)
+                var tokens = Tokenizar(expression);
+                int posición = 0;
+
+                // Paso 2: Parsear respetando precedencia de operadores
+                var (valor, tipo, error) = AnalizarSumResta(tokens, ref posición, currentAddress, allowUndefinedSymbols);
+                if (error != null) return (-1, SymbolType.Absolute, error);
+
+                // Paso 3: Verificar que se consumieron todos los tokens
+                if (posición < tokens.Count) 
+                    return (-1, SymbolType.Absolute, "Tokens adicionales inesperados");
+
+                return (valor, tipo, null);
             }
             catch (Exception ex)
             {
@@ -87,25 +129,41 @@ namespace laboratorioPractica3
             }
         }
 
-        private List<string> Tokenize(string expr)
+        /// <summary>
+        /// ═══════════════════════════════════════════════════════════════════════
+        /// TOKENIZACIÓN: Tokenizar
+        /// ═══════════════════════════════════════════════════════════════════════
+        /// 
+        /// Divide una expresión en tokens individuales, descartando espacios en blanco.
+        /// 
+        /// ENTRADA:  "10 + ETIQ * 2"
+        /// SALIDA:   ["10", "+", "ETIQ", "*", "2"]
+        /// 
+        /// REGLAS:
+        /// - Los operadores (+, -, *, /, (, )) son tokens separados
+        /// - Los espacios en blanco se ignoran
+        /// - Las secuencias de dígitos/letras/números forman un único token
+        ///   (ej: "ETIQ" es un token, "0FFH" es un token, "100" es un token)
+        /// </summary>
+        private List<string> Tokenizar(string expression)
         {
             var tokens = new List<string>();
-            string current = "";
-            foreach (char c in expr)
+            string actual = "";
+            foreach (char carácter in expression)
             {
-                if (char.IsWhiteSpace(c)) continue;
-                if ("+-*/()".Contains(c))
+                if (char.IsWhiteSpace(carácter)) continue;
+                if ("+-*/()".Contains(carácter))
                 {
-                    if (current != "") tokens.Add(current);
-                    tokens.Add(c.ToString());
-                    current = "";
+                    if (actual != "") tokens.Add(actual);
+                    tokens.Add(carácter.ToString());
+                    actual = "";
                 }
                 else
                 {
-                    current += c;
+                    actual += carácter;
                 }
             }
-            if (current != "") tokens.Add(current);
+            if (actual != "") tokens.Add(actual);
             return tokens;
         }
 
@@ -117,69 +175,67 @@ namespace laboratorioPractica3
             var (leftVal, leftType, err) = ParseMulDiv(tokens, ref pos, pc, allowUndefinedSymbols);
             if (err != null) return (leftVal, leftType, err);
 
-            while (pos < tokens.Count && (tokens[pos] == "+" || tokens[pos] == "-"))
+            while (posición < tokens.Count && (tokens[posición] == "+" || tokens[posición] == "-"))
             {
-                string op = tokens[pos++];
-                var (rightVal, rightType, rightErr) = ParseMulDiv(tokens, ref pos, pc, allowUndefinedSymbols);
-                if (rightErr != null) return (-1, SymbolType.Absolute, rightErr);
+                string operador = tokens[posición++];
+                var (valorDer, tipoDer, errorDer) = AnalizarMultDiv(tokens, ref posición, pc, allowUndefinedSymbols);
+                if (errorDer != null) return (-1, SymbolType.Absolute, errorDer);
 
-                // Reglas de apareamiento de expresiones absolutas y relativas según SIC/XE
-                // Solo se permiten ciertas combinaciones válidas
-                if (op == "+")
+                // ════════════════ REGLAS DE SUMA (SIC/XE) ════════════════
+                if (operador == "+")
                 {
-                    if (leftType == SymbolType.Relative && rightType == SymbolType.Relative)
+                    // Regla 1: Relative + Relative = ERROR (no se puede sumar dos direcciones relativas)
+                    if (tipoIzq == SymbolType.Relative && tipoDer == SymbolType.Relative)
                         return (-1, SymbolType.Absolute, "No se permite sumar dos términos relativos");
-                    if (leftType == SymbolType.Absolute && rightType == SymbolType.Absolute)
+
+                    // Regla 2: Absolute + Absolute = Absolute
+                    if (tipoIzq == SymbolType.Absolute && tipoDer == SymbolType.Absolute)
                     {
-                        leftVal += rightVal;
-                        leftType = SymbolType.Absolute;
+                        valorIzq += valorDer;
+                        tipoIzq = SymbolType.Absolute;
                     }
-                    else // Uno absoluto y uno relativo
+                    else // Regla 3: Uno absoluto y uno relativo = Relativo (resultado es una dirección)
                     {
-                        leftVal += rightVal;
-                        leftType = SymbolType.Relative;
+                        valorIzq += valorDer;
+                        tipoIzq = SymbolType.Relative;
                     }
                 }
-                else if (op == "-")
+                // ════════════════ REGLAS DE RESTA (SIC/XE) ════════════════
+                else if (operador == "-")
                 {
-                    // Reglas válidas de resta en SIC/XE:
-                    // Absolute - Absolute = Absolute
-                    // Relative - Relative = Absolute (se cancelan las componentes)
-                    // Relative - Absolute = Relative (restar offset a dirección)
-                    // Absolute - (-Relative) = Relative (restar un relativo negado = sumar, ej: A - (-B) = A + B)
-                    // INVÁLIDO: Absolute - Relative (si el relativo es positivo)
-
-                    if (leftType == SymbolType.Relative && rightType == SymbolType.Relative)
+                    // Regla 1: Relative - Relative = Absolute (se cancelan componentes relativas)
+                    // Ejemplo: ETIQ1 - ETIQ2 = diferencia en bytes (distancia)
+                    if (tipoIzq == SymbolType.Relative && tipoDer == SymbolType.Relative)
                     {
-                        leftVal -= rightVal;
-                        leftType = SymbolType.Absolute; // Se cancelan las componentes relativas
+                        valorIzq -= valorDer;
+                        tipoIzq = SymbolType.Absolute;
                     }
-                    else if (leftType == SymbolType.Absolute && rightType == SymbolType.Absolute)
+                    // Regla 2: Absolute - Absolute = Absolute
+                    else if (tipoIzq == SymbolType.Absolute && tipoDer == SymbolType.Absolute)
                     {
-                        leftVal -= rightVal;
-                        leftType = SymbolType.Absolute;
+                        valorIzq -= valorDer;
+                        tipoIzq = SymbolType.Absolute;
                     }
-                    else if (leftType == SymbolType.Relative && rightType == SymbolType.Absolute)
+                    // Regla 3: Relative - Absolute = Relative
+                    // Ejemplo: ETIQ - 10 (mover una dirección 10 bytes atrás)
+                    else if (tipoIzq == SymbolType.Relative && tipoDer == SymbolType.Absolute)
                     {
-                        // Relative - Absolute = Relative (restar offset a dirección, ej: ETIQ - 10)
-                        leftVal -= rightVal;
-                        leftType = SymbolType.Relative;
+                        valorIzq -= valorDer;
+                        tipoIzq = SymbolType.Relative;
                     }
-                    else if (leftType == SymbolType.Absolute && rightType == SymbolType.Relative)
+                    // Regla 4: Absolute - Relative solo es válido si es una resta de número negado
+                    // A - (-B) = A + B (restar un negativo = sumar)
+                    else if (tipoIzq == SymbolType.Absolute && tipoDer == SymbolType.Relative)
                     {
-                        // Absolute - Relative es válido solo si el relativo es negado
-                        // Razón: A - (-B) = A + B (restar un negativo = sumar su opuesto)
-                        // Si rightVal < 0, entonces fue negado por operador unario, es válido
-                        // Si rightVal >= 0, es un error porque sería Absoluto - Relativo positivo
-                        if (rightVal < 0)
+                        if (valorDer < 0)
                         {
-                            // Es Absolute - (-Relative), que es equivalente a Absolute + Relative
-                            leftVal -= rightVal;  // Esto realiza la resta correctamente: A - (-B) = A + B
-                            leftType = SymbolType.Relative;
+                            // Es válido: Absolute - (-Relative) → A + (-B) con B negativo
+                            valorIzq -= valorDer;
+                            tipoIzq = SymbolType.Relative;
                         }
                         else
                         {
-                            // INVÁLIDO: Absolute - Relative positivo no está permitido en SIC/XE
+                            // INVÁLIDO: No se puede restar una dirección relativa de un valor absoluto
                             return (-1, SymbolType.Absolute, "No se permite restar un término relativo de uno absoluto (Absoluto - Relativo)");
                         }
                     }
@@ -195,21 +251,23 @@ namespace laboratorioPractica3
             var (leftVal, leftType, err) = ParseFactor(tokens, ref pos, pc, allowUndefinedSymbols);
             if (err != null) return (leftVal, leftType, err);
 
-            while (pos < tokens.Count && (tokens[pos] == "*" || tokens[pos] == "/"))
+            while (posición < tokens.Count && (tokens[posición] == "*" || tokens[posición] == "/"))
             {
-                string op = tokens[pos++];
-                var (rightVal, rightType, rightErr) = ParseFactor(tokens, ref pos, pc, allowUndefinedSymbols);
-                if (rightErr != null) return (-1, SymbolType.Absolute, rightErr);
+                string operador = tokens[posición++];
+                var (valorDer, tipoDer, errorDer) = AnalizarFactor(tokens, ref posición, pc, allowUndefinedSymbols);
+                if (errorDer != null) return (-1, SymbolType.Absolute, errorDer);
 
-                // En multiplicación/división los operandos DEBEN ser absolutos
-                if (leftType == SymbolType.Relative || rightType == SymbolType.Relative)
+                // ════════════════ RESTRICCIÓN MULTIPLICACIÓN/DIVISIÓN ════════════════
+                // Ambos operandos DEBEN ser absolutos (constantes o valores definidos como absolutos)
+                // No puedes multiplicar una dirección: "ETIQ * 2" es INVÁLIDO en SIC/XE
+                if (tipoIzq == SymbolType.Relative || tipoDer == SymbolType.Relative)
                 {
                     return (-1, SymbolType.Absolute, "Los términos en multiplicaciones y divisiones deben ser absolutos");
                 }
 
-                if (op == "*")
+                if (operador == "*")
                 {
-                    leftVal *= rightVal;
+                    valorIzq *= valorDer;
                 }
                 else
                 {
@@ -227,71 +285,80 @@ namespace laboratorioPractica3
             // '*' representa el valor actual del contador de ubicación (relativo).
             if (pos >= tokens.Count) return (-1, SymbolType.Absolute, "Expresión mal formada");
 
-            string token = tokens[pos];
+            string token = tokens[posición];
 
-            // Manejar operadores unarios (+ y -)
+            // ════════════════ OPERADORES UNARIOS ════════════════
+            // Maneja +x y -x (ej: -10, +ETIQ, -(3*2))
             if (token == "+" || token == "-")
             {
-                string unaryOp = token;
-                pos++;  // Consumir el operador
+                string operadorUnario = token;
+                posición++;  // Consumir el operador
 
-                // Recursivamente parsear el siguiente factor
-                var (val, type, err) = ParseFactor(tokens, ref pos, pc, allowUndefinedSymbols);
-                if (err != null) return (val, type, err);
+                var (valorResultado, tipoResultado, errorResultado) = AnalizarFactor(tokens, ref posición, pc, allowUndefinedSymbols);
+                if (errorResultado != null) return (valorResultado, tipoResultado, errorResultado);
 
-                // Aplicar el operador unario
-                if (unaryOp == "-")
-                {
-                    val = -val;  // Negar el valor
-                }
-                // El + unario no hace nada, solo retorna el valor
+                // Aplicar negación si es - unario
+                if (operadorUnario == "-")
+                    valorResultado = -valorResultado;
 
-                return (val, type, null);
+                return (valorResultado, tipoResultado, null);
             }
 
-            pos++;  // Consumir el token (ya no es operador unario)
+            posición++;  // Consumir el token
 
+            // ════════════════ PARÉNTESIS ════════════════
+            // Recursivamente evalúa expresión dentro de paréntesis
             if (token == "(")
             {
-                var (val, type, err) = ParseAddSub(tokens, ref pos, pc, allowUndefinedSymbols);
-                if (err != null) return (val, type, err);
-                if (pos >= tokens.Count || tokens[pos++] != ")") return (-1, SymbolType.Absolute, "Se esperaba ')'");
-                return (val, type, null);
+                var (valorExpr, tipoExpr, errorExpr) = AnalizarSumResta(tokens, ref posición, pc, allowUndefinedSymbols);
+                if (errorExpr != null) return (valorExpr, tipoExpr, errorExpr);
+                if (posición >= tokens.Count || tokens[posición++] != ")") 
+                    return (-1, SymbolType.Absolute, "Se esperaba ')'");
+                return (valorExpr, tipoExpr, null);
             }
 
+            // ════════════════ CONTLOC ACTUAL "*" ════════════════
+            // En SIC/XE: "*" significa "dirección actual del location counter"
+            // Se usa en expresiones como: TAM EQU * (marca la dirección actual como final)
             if (token == "*")
                 return (pc, SymbolType.Relative, null);
 
-            if (_tabsim.TryGetValue(token, out var symInfo))
-                return (symInfo.Value, symInfo.Type, null);
+            // ════════════════ BÚSQUEDA DE SÍMBOLO EN TABLA ════════════════
+            if (_tablaSímbolos.TryGetValue(token, out var infoSímbolo))
+                return (infoSímbolo.Value, infoSímbolo.Type, null);
 
-            // Es un número
-            int value;
+            // ════════════════ PARSING DE NÚMEROS ════════════════
+            int valorParsed;
+
+            // Formato hexadecimal con sufijo H: "0FFH", "100H"
             if (token.EndsWith("H", StringComparison.OrdinalIgnoreCase))
             {
-                if (int.TryParse(token.Substring(0, token.Length - 1), System.Globalization.NumberStyles.HexNumber, null, out value))
-                    return (value, SymbolType.Absolute, null);
+                if (int.TryParse(token.Substring(0, token.Length - 1), System.Globalization.NumberStyles.HexNumber, null, out valorParsed))
+                    return (valorParsed, SymbolType.Absolute, null);
             }
+            // Formato hexadecimal con prefijo 0x: "0x100", "0xFF"
             else if (token.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
             {
-                if (int.TryParse(token.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out value))
-                    return (value, SymbolType.Absolute, null);
+                if (int.TryParse(token.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out valorParsed))
+                    return (valorParsed, SymbolType.Absolute, null);
             }
+            // Formato SIC/XE hexadecimal: X'0F0F'
             else if (token.StartsWith("X'", StringComparison.OrdinalIgnoreCase) && token.EndsWith("'"))
             {
-                if (int.TryParse(token.Substring(2, token.Length - 3), System.Globalization.NumberStyles.HexNumber, null, out value))
-                    return (value, SymbolType.Absolute, null);
+                if (int.TryParse(token.Substring(2, token.Length - 3), System.Globalization.NumberStyles.HexNumber, null, out valorParsed))
+                    return (valorParsed, SymbolType.Absolute, null);
             }
-            else if (int.TryParse(token, out value))
+            // Formato decimal: "100", "255"
+            else if (int.TryParse(token, out valorParsed))
             {
-                return (value, SymbolType.Absolute, null);
+                return (valorParsed, SymbolType.Absolute, null);
             }
 
-            // Si allowUndefinedSymbols es true, retorna un valor temporal (0) para símbolos no definidos
-            // Esto permite forward references en Paso 1
+            // ════════════════ SÍMBOLO NO DEFINIDO ════════════════
             if (allowUndefinedSymbols)
             {
-                // Retorna 0 como valor placeholder, pero marca como Relative para indicar que puede cambiar
+                // En Paso 1, permite forward references (referencias a símbolos no definidos aún)
+                // Retorna 0 como placeholder relativo (será calculado después en Paso 2)
                 return (0, SymbolType.Relative, null);
             }
 
