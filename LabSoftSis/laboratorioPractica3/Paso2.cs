@@ -6,101 +6,10 @@ using System.Text;
 
 namespace laboratorioPractica3
 {
-    // <summary>
-    // Implementa el Paso 2 del ensamblador SIC/XE de dos pasadas.
-    // OBJETIVO DEL PASO 2:
-    // - Generar el c�digo objeto para cada l�nea del archivo intermedio
-    // - Detectar errores propios del Paso 2:
-    //  S�mbolo no definido en TABSIM al resolver operando
-    //  Desplazamiento fuera de rango para PC-relativo / BASE-relativo
-    //  BASE no definido cuando se necesita BASE-relativo
-    //  Registro inv�lido en formato 2
-    //  Valor inmediato fuera de rango para formato 3
-    //  Modo de direccionamiento no existe seg�n tabla de modos
-    // DATOS COMPARTIDOS CON PASO 1 :
-    // - Paso1.OPTAB:opcodes y formatos (gram�tica: instruction)
-    // - Paso1.DIRECTIVES:directivas (gram�tica: directive)
-    // - Paso1.REGISTER_NUMBERS: n�mero de registro SIC/XE
-    // - Paso1.REGISTERS :nombres de registros v�lidos
-   
-    /// Formato � Estructura de bits                                           
-   
-    ///    1    � [opcode 8 bits] = 1 byte  
-    ///    2    � [opcode 8][r1 4][r2 4] = 2 bytes 
-    ///    3    � [opcode 6][n][i][x][b][p][e=0][disp 12 bits] = 3 bytes 
-    ///    4    � [opcode 6][n][i][x][b=0][p=0][e=1][addr 20 bits]  = 4 bytes 
-    
+    /// <summary>
+    /// Paso 2 del ensamblador SIC/XE.
+    /// Genera codigo objeto (formatos 1-4), procesa directivas y reporta errores.
     /// </summary>
-    /// <remarks>
-    /// ??????????????????????????????????????????????????????????????????????????????????
-    /// ? CLASE: Paso2 - GENERADOR DE C�DIGO OBJETO Y REGISTROS SIC/XE                 ?
-    /// ??????????????????????????????????????????????????????????????????????????????????
-    /// 
-    /// RESPONSABILIDADES:
-    /// 1. Generar c�digo objeto en 4 formatos (1, 2, 3, 4)
-    /// 2. Crear registros de control: H (Header), T (Text), M (Modification), E (End)
-    /// 3. Procesar directivas (BYTE, WORD, RESB, RESW, BASE, NOBASE)
-    /// 4. Resolver operandos y validar rangos de desplazamientos
-    /// 5. Detectar errores sem�nticos del Paso 2
-    /// 
-    /// REGISTROS SIC/XE:
-    /// ???????????????????????????????????????????????????????????????
-    /// ? H RECORD (HEADER):    Encabezado del programa               ?
-    /// ?  Formato: H ^ NOMBRE ^ DIR_INICIO ^ LONGITUD_PROGRAMA       ?
-    /// ?  Ejemplo: H ^ PROG001 ^ 002048 ^ 008000                     ?
-    /// ?  - Marca inicio del programa                                 ?
-    /// ?  - Especifica nombre, direcci�n inicial y longitud           ?
-    /// ?                                                              ?
-    /// ? T RECORD (TEXT):      C�digo y datos del programa           ?
-    /// ?  Formato: T ^ DIR ^ LONGITUD ^ BYTECODE(S)                  ?
-    /// ?  Ejemplo: T ^ 002048 ^ 0F ^ 14202D ^ 69202D ^ ...           ?
-    /// ?  - Contiene el c�digo objeto generado                       ?
-    /// ?  - Agrupa m�ltiples bytes (m�x 60 bytes/30 bytes hex)        ?
-    /// ?  - Direcci�n es PC-relativo (direcci�n de inicio del grupo)  ?
-    /// ?                                                              ?
-    /// ? M RECORD (MODIFICATION): Instrucciones para modificaci�n     ?
-    /// ?  Formato: M ^ DIR ^ LONGITUD ^ S�MBOLO ^ SIGNO              ?
-    /// ?  Ejemplo: M ^ 002048 ^ 05 ^ INICIO ^ +                      ?
-    /// ?  - Marcas para que el cargador resuelva referencias         ?
-    /// ?  - Usado para PC-relativo, BASE-relativo y direccionamientos?
-    /// ?  - Signo: + (suma) o - (resta)                              ?
-    /// ?                                                              ?
-    /// ? E RECORD (END):       Fin del programa                      ?
-    /// ?  Formato: E ^ PUNTO_ENTRADA                                 ?
-    /// ?  Ejemplo: E ^ 002048                                        ?
-    /// ?  - Marca fin del programa                                   ?
-    /// ?  - Especifica punto de entrada para ejecuci�n               ?
-    /// ???????????????????????????????????????????????????????????????
-    /// 
-    /// FORMATOS DE INSTRUCCI�N:
-    /// ????????????????????????????????????????????????????????????????
-    /// ? FORMATO 1: [opcode 8 bits]                = 1 byte           ?
-    /// ?  Ejemplo: 18 (opcode de ADD)                                ?
-    /// ?                                                              ?
-    /// ? FORMATO 2: [opcode 8][r1 4][r2 4]        = 2 bytes          ?
-    /// ?  Ejemplo: 18 A0 (ADD A,0)                                  ?
-    /// ?  r1, r2: n�meros de registro (0=A, 1=X, 2=L, 3=B, etc)     ?
-    /// ?                                                              ?
-    /// ? FORMATO 3: [opcode 6][modes 6][disp 12]  = 3 bytes          ?
-    /// ?  Modos: n,i,x,b,p,e  (bits especiales)                     ?
-    /// ?  Ejemplo: 4C 0000 (LDA 0 [PC-relativo])                    ?
-    /// ?                                                              ?
-    /// ? FORMATO 4: [opcode 6][modes 6][addr 20]  = 4 bytes          ?
-    /// ?  Usa direccionamiento extendido (e=1)                       ?
-    /// ?  Ejemplo: +4C 000000 (LDA [direcci�n completa])            ?
-    /// ????????????????????????????????????????????????????????????????
-    /// 
-    /// MODOS DE DIRECCIONAMIENTO:
-    /// ????????????????????????????????????????????????????????????????
-    /// ? n=1, i=1: Indexado simple (s�mbolo directo)                 ?
-    /// ? n=0, i=1: Inmediato (#s�mbolo)                              ?
-    /// ? n=1, i=0: Indirecto (@s�mbolo)                              ?
-    /// ? x=1:      Indexado con registro X                           ?
-    /// ? b=1:      BASE-relativo                                     ?
-    /// ? p=1:      PC-relativo                                       ?
-    /// ? e=1:      Formato extendido (4 bytes)                       ?
-    /// ????????????????????????????????????????????????????????????????
-    /// </remarks>
     internal class Paso2
     {
         //paso1
@@ -113,8 +22,8 @@ namespace laboratorioPractica3
         private int? _baseActual; //Valor actual de BASE, se actualiza al procesar directivas BASE/NOBASE
 
         /// RESULTADOS DEL PASO 2:
-        public List<SICXEError> Errors { get; } = new();                   // Lista de errores sem�nticos
-        public List<ObjectCodeLine> ObjectCodeLines { get; } = new();      // L�neas con c�digo objeto generado
+        public List<SICXEError> Errors { get; } = new();                   // Lista de errores semanticos
+        public List<ObjectCodeLine> ObjectCodeLines { get; } = new();      // Lineas con codigo objeto generado
 
         /// <summary>
         /// Constructor: recibe datos compartidos del Paso 1
@@ -136,34 +45,8 @@ namespace laboratorioPractica3
         }
 
         /// <summary>
-        /// ???????????????????????????????????????????????????????????????????????????????
-        /// M�TODO PRINCIPAL: ObjectCodeGeneration() - GENERADOR DE C�DIGO OBJETO
-        /// ???????????????????????????????????????????????????????????????????????????????
-        /// 
-        /// ALGORITMO PRINCIPAL:
-        /// Para cada l�nea del archivo intermedio:
-        ///   1. Si la l�nea YA TIENE ERROR del Paso 1 ? copiar error, NO generar c�digo
-        ///   2. Si es l�nea de comentario o sin operaci�n ? agregar sin c�digo objeto
-        ///   3. Si la operaci�n es DIRECTIVA ? procesar con ProcessDirective()
-        ///   4. Si la operaci�n es INSTRUCCI�N ? generar c�digo seg�n formato (1-4)
-        ///   5. Agregar resultado a ObjectCodeLines con c�digo objeto y errores
-        /// 
-        /// MANEJO DE ERRORES:
-        /// - Errores del Paso 1: se heredan sin procesar nuevamente
-        /// - Errores del Paso 2: se detectan durante generaci�n de c�digo objeto
-        ///   � Instrucci�n desconocida
-        ///   � S�mbolo no definido
-        ///   � Desplazamiento fuera de rango
-        ///   � Registro inv�lido
-        ///   � BASE no definido cuando se necesita
-        /// 
-        /// DIRECTIVAS SOPORTADAS:
-        /// - BYTE: genera c�digo para constante byte
-        /// - WORD: genera c�digo para palabra (3 bytes)
-        /// - RESB: reserva bytes (sin c�digo objeto)
-        /// - RESW: reserva palabras (sin c�digo objeto)
-        /// - BASE: define registro base para desplazamientos
-        /// - NOBASE: deshabilita BASE-relativo
+        /// Metodo principal del Paso 2.
+        /// Recorre el intermedio, genera codigo objeto y registra errores por linea.
         /// </summary>
         public void ObjectCodeGeneration()
         {
@@ -175,14 +58,14 @@ namespace laboratorioPractica3
                 string codigoObjeto = "";
                 string errorPaso2 = "";
 
-                // si la línea ya tiene error del Paso 1, no generar código objeto 
+                // Si la linea ya tiene error del Paso 1, no generar codigo objeto.
                 if (!string.IsNullOrWhiteSpace(linea.Error)) 
                 {
                     ObjectCodeLines.Add(new ObjectCodeLine(linea, "", linea.Error));
                     continue;
                 }
 
-                //líneas de comentario o sin operación: sin código objeto ──
+                // Linea de comentario o sin operacion: sin codigo objeto.
                 if (linea.Address < 0 || string.IsNullOrWhiteSpace(linea.Operation))
                 {
                     ObjectCodeLines.Add(new ObjectCodeLine(linea, "", ""));
@@ -191,17 +74,12 @@ namespace laboratorioPractica3
 
                 string operacion = linea.Operation.TrimStart('+').ToUpperInvariant();
 
-                //DIRECTIVAS ,si la operaci�n es una directiva, se procesa con ProcessDirective,
-                //  que genera el c�digo objeto correspondiente (si aplica) y 
-                // el mensaje de error del Paso 2 (si hubo error).
-                //  Luego se actualiza el valor de BASE si la directiva es BASE 
-                //  Finalmente, se agrega la línea al resultado con su código objeto y error del Paso 2.
-                //  Se continúa al siguiente ciclo sin procesar como instrucción.
+                // Directivas: procesar con ProcessDirective y actualizar BASE si aplica.
                 if (Paso1.DIRECTIVES.Contains(operacion))
                 {
                     (codigoObjeto, errorPaso2) = ProcessDirective(linea, operacion);
 
-                    //actualizar el valor de la base 
+                    // Actualizar el valor actual de BASE.
                     if (operacion == "BASE" && !string.IsNullOrEmpty(linea.Operand))
                     {
                         if (_tablaSimbolos.TryGetValue(linea.Operand, out var symInfo))
@@ -221,16 +99,15 @@ namespace laboratorioPractica3
                     continue;
                 }
 
-                //paso 1, aqui se asume que la operación es una instrucción válida, porque si no lo fuera, ya tendría error del Paso 1 y se saltaría esta parte
-                if (!Paso1.OPTAB.TryGetValue(operacion, out var infoOp)) //pero va, aqui lo que se hace es si "si la operación no se encuentra en la tabla de opcodes,
-                                                                   // entonces es un error de instrucción desconocida"
+                // Validar que la instruccion exista en OPTAB.
+                if (!Paso1.OPTAB.TryGetValue(operacion, out var infoOp))
                 {
                     errorPaso2 = "Error: Instrucción desconocida";
-                    Errors.Add(new SICXEError(linea.SourceLine, 0, errorPaso2, SICXEErrorType.Semantico)); //agregamos a la lista de errores del Paso 2
+                    Errors.Add(new SICXEError(linea.SourceLine, 0, errorPaso2, SICXEErrorType.Semantico));
                     ObjectCodeLines.Add(new ObjectCodeLine(linea, "", errorPaso2));
                     continue;
                 }
-                //Generar código objeto según formato 
+                // Generar codigo objeto segun formato.
                 (codigoObjeto, errorPaso2) = linea.Format switch
                 {
                     1 => GenerateFormat1(infoOp),
@@ -240,37 +117,16 @@ namespace laboratorioPractica3
                     _ => ("", "")
                 };
 
-                if (!string.IsNullOrEmpty(errorPaso2)) //si hubo error en la generación del código objeto, agregarlo a la lista de errores del Paso 2
+                if (!string.IsNullOrEmpty(errorPaso2))
                     Errors.Add(new SICXEError(linea.SourceLine, 0, errorPaso2, SICXEErrorType.Semantico));
 
                 ObjectCodeLines.Add(new ObjectCodeLine(linea, codigoObjeto, errorPaso2));
             }
         }
 
-        // FORMATO 1 
-        // ????????????????????????????????????????????????????????????????????????
+        // FORMATO 1: [opcode] (1 byte)
         /// <summary>
-        /// GENERADOR FORMATO 1: [opcode 8 bits] = 1 byte
-        /// 
-        /// Usado para instrucciones SIN OPERANDOS:
-        /// - ADD, SUB, MUL, DIV (requieren registros en Formato 2)
-        /// - RSUB (Return from Subroutine) - no tiene operandos
-        /// 
-        /// ESTRUCTURA:
-        /// Bits 0-7: c�digo de operaci�n (8 bits)
-        /// 
-        /// EJEMPLO:
-        /// Instrucci�n: RSUB
-        /// Opcode:      3C (hexadecimal)
-        /// C�digo obj:  3C
-        /// 
-        /// PAR�METROS:
-        /// - opInfo: informaci�n del opcode (opInfo.Opcode contiene el valor num�rico)
-        /// 
-        /// RETORNA:
-        /// - (c�digo_objeto_hex, error)
-        ///   � c�digo_objeto_hex: string con 2 d�gitos hexadecimales (ej: "3C")
-        ///   � error: cadena vac�a (nunca hay error en Formato 1)
+        /// Genera codigo objeto para formato 1.
         /// </summary>
         private (string ObjCode, string Error) GenerateFormat1(OpCodeInfo opInfo) //no hay operandos, solo el opcode
         {
@@ -301,7 +157,7 @@ namespace laboratorioPractica3
             {
                 if (partes.Length >= 1 && !Paso1.REGISTER_NUMBERS.TryGetValue(partes[0].Trim(), out registro1))
                 {
-                    string err = "Error: Registro inválido";
+                    string err = "Error: Registro invalido";
                     registro1 = 0xF;
                     registro2 = 0xF;
                     int objCodeErr = (infoOp.Opcode << 8) | (registro1 << 4) | registro2;
@@ -314,7 +170,7 @@ namespace laboratorioPractica3
             {
                 if (partes.Length >= 1 && !Paso1.REGISTER_NUMBERS.TryGetValue(partes[0].Trim(), out registro1))//si al menos tiene un registro y ese registro no es válido, entonces error de registro inválido
                 {
-                    string err = "Error: Registro inválido";
+                    string err = "Error: Registro invalido";
                     // ERROR: Generar código objeto con registro=0xF (todos 1s en 4 bits)
                     registro1 = 0xF;
                     registro2 = 0xF;
@@ -332,7 +188,7 @@ namespace laboratorioPractica3
                 {
                     if (!Paso1.REGISTER_NUMBERS.TryGetValue(partes[0].Trim(), out registro1))
                     {
-                        err = "Error: Registro inválido";
+                        err = "Error: Registro invalido";
                         registro1 = 0xF;  // ERROR: usar 0xF
                     }
                 }
@@ -340,7 +196,7 @@ namespace laboratorioPractica3
                 {
                     if (!Paso1.REGISTER_NUMBERS.TryGetValue(partes[1].Trim(), out registro2))
                     {
-                        err = "Error: Registro inválido";
+                        err = "Error: Registro invalido";
                         registro2 = 0xF;  // ERROR: usar 0xF
                     }
                 }
@@ -389,23 +245,23 @@ namespace laboratorioPractica3
                 return (rsub.ToString("X6"), "");
             }
 
-            // Determinar bits n, i, x seg�n modo de direccionamiento
-            // (El modo ya fue determinado por la gram�tica en Paso 1)
+            // Determinar bits n, i, x segun modo de direccionamiento.
+            // El modo ya fue determinado por la gramatica en Paso 1.
             int n = 1, i = 1, x = 0;
             string operandoLimpio = operando;
 
             // 7) Calculo de banderas n/i/x segun el modo de direccionamiento
             switch (linea.AddressingMode)
             {
-                case "Inmediato":   //gram�tica: PREFIX_IMMEDIATE operandValue
+                case "Inmediato":   // gramatica: PREFIX_IMMEDIATE operandValue
                     n = 0; i = 1;
                     operandoLimpio = operando.TrimStart('#');
                     break;
-                case "Indirecto":  //gram�tica: PREFIX_INDIRECT operandValue
+                case "Indirecto":  // gramatica: PREFIX_INDIRECT operandValue
                     n = 1; i = 0;
                     operandoLimpio = operando.TrimStart('@');
                     break;
-                case "Indexado": // gram�tica: operandValue indexing (COMMA IDENT)
+                case "Indexado": // gramatica: operandValue indexing (COMMA IDENT)
                     n = 1; i = 1; x = 1;
                     operandoLimpio = operando.Split(',')[0].Trim();
                     break;
@@ -418,11 +274,11 @@ namespace laboratorioPractica3
             bool isIndirect = (n == 1 && i == 0);
             bool isIndexed = (x == 1);
 
-            // Validar modo de direccionamiento seg�n tabla 
+            // Validar modo de direccionamiento segun tabla.
             // Verificar si el operando es constante o etiqueta
             bool esOperandoNumerico = TryParseNumeric(operandoLimpio, out int _);
             
-            // FORMATO 3: Validaciones seg�n tabla de modos de direccionamiento
+            // FORMATO 3: validaciones segun tabla de modos de direccionamiento.
             // Indirecto con constante NO existe en la tabla
             if (isIndirect && esOperandoNumerico)
             {
@@ -433,7 +289,7 @@ namespace laboratorioPractica3
                 return (objError.ToString("X6"), err);
             }
 
-            // Resolver direcci�n objetivo
+            // Resolver direccion objetivo.
             int targetAddress;
             SymbolType targetType;
 
@@ -441,7 +297,7 @@ namespace laboratorioPractica3
             
             if (evalErr != null)
             {
-                string err = "Error: Símbolo no encontrado en TABSIM";
+                string err = "Error: Simbolo no encontrado en TABSIM";
                 // 5) Si no existe etiqueta, se marca el error y se usa disp=-1 (0xFFF)
                 int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
                 int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
@@ -452,7 +308,7 @@ namespace laboratorioPractica3
             targetAddress = evalVal;
             targetType = evalType;
             
-            // Si el operando result� ser una constante absoluta (ej: #3 o #100 o #MAXLEN si MAXLEN es EQU 100 absoluto)
+            // Si el operando resulta una constante absoluta (ej: #3 o #100).
             // Y estamos en Inmediato (n=0, i=1), usamos disp directo al valor:
             if (isImmediate && targetType == SymbolType.Absolute)
             {
@@ -492,7 +348,7 @@ namespace laboratorioPractica3
                 }
                 else
                 {
-                    // ERROR 4: desplazamiento no cabe en BASE-relativo ? instrucci�n no relativa al CP ni a la B
+                    // ERROR 4: desplazamiento no cabe en BASE-relativo -> instruccion no relativa al CP ni a la B.
                     string err = "Error: No relativo al CP/B";
                     int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
                     int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
@@ -502,7 +358,7 @@ namespace laboratorioPractica3
             }
             else
             {
-                // ERROR 4: BASE no definida (NOBASE activo) ? instrucci�n no relativa al CP ni a la B
+                // ERROR 4: BASE no definida (NOBASE activo) -> instruccion no relativa al CP ni a la B.
                 string err = "Error: No relativo al CP/B";
                 int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
                 int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
@@ -510,7 +366,7 @@ namespace laboratorioPractica3
                 return (objError.ToString("X6"), err);
             }
 
-            // Construir c�digo objeto 
+            // Construir codigo objeto.
             {
                 // 8) Con n/i/x/b/p/e y desplazamiento calculados, se ensambla la instruccion
                 int firstByte = (infoOp.Opcode & 0xFC) | (n << 1) | i;
@@ -520,7 +376,7 @@ namespace laboratorioPractica3
             }
         }
  
-        // FORMATO 4 gram�tica: FORMAT4_PREFIX instruction ? +LDA, +JSUB)    
+        // FORMATO 4 gramatica: FORMAT4_PREFIX instruction (+LDA, +JSUB)
         // Estructura: [opcode 6][n][i][x][b=0][p=0][e=1][addr 20 bits]      
         // Dirección ABSOLUTA de 20 bits, sin PC/BASE relativo.                                                                                    
         // VALIDACIÓN: Formato 4 SOLO acepta etiquetas (m), NO constantes (c) 
@@ -577,7 +433,7 @@ namespace laboratorioPractica3
             // Si no se puede resolver el operando, reportar símbolo/operando inválido.
             if (evalErr != null)
             {
-                string err = "Error: Símbolo no encontrado en TABSIM u operando inválido";
+                string err = "Error: Simbolo no encontrado en TABSIM u operando invalido";
                 int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
                 int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
                 int objError = (fbError << 24) | (xbpeError << 20) | 0xFFFFF;
@@ -616,7 +472,7 @@ namespace laboratorioPractica3
                 return (objCode.ToString("X8"), "");
             }
 
-            // Operando es etiqueta o expresi�n (m) ? resolver en TABSIM
+            // Operando es etiqueta o expresion (m) -> resolver en TABSIM.
             // Se antepone * para indicar registro relocalizable
             int targetAddress = evalVal;
 
@@ -633,41 +489,11 @@ namespace laboratorioPractica3
             }
         }
 
-        // DIRECTIVAS CON C�DIGO OBJETO (Paso1.DIRECTIVES, gram�tica: directive)
+            // DIRECTIVAS CON CODIGO OBJETO (Paso1.DIRECTIVES, gramatica: directive)
         // ????????????????????????????????????????????????????????????????????????
         /// <summary>
-        /// PROCESADOR DE DIRECTIVAS: ProcessDirective()
-        /// 
-        /// Procesa directivas SIC/XE que pueden generar c�digo objeto:
-        /// 
-        /// DIRECTIVAS QUE GENERAN C�DIGO OBJETO:
-        /// ??????????????????????????????????????????????????????????????
-        /// ? BYTE:  Define constante byte (1 byte)                      ?
-        /// ?  Formato: BYTE X'FF'  ?  c�digo: FF                       ?
-        /// ?           BYTE C'ABC' ?  c�digo: 414243 (ASCII)          ?
-        /// ?  Rango: 0-255 (1 byte)                                    ?
-        /// ?                                                            ?
-        /// ? WORD:  Define palabra SIC (3 bytes)                       ?
-        /// ?  Formato: WORD 256    ?  c�digo: 000100                  ?
-        /// ?           WORD TABLA  ?  c�digo: [direcci�n de TABLA]    ?
-        /// ?  Rango: 0-16777215 (3 bytes)                             ?
-        /// ??????????????????????????????????????????????????????????????
-        /// 
-        /// DIRECTIVAS SIN C�DIGO OBJETO:
-        /// ??????????????????????????????????????????????????????????????
-        /// ? START:   Define inicio del programa (solo en l�nea 1)     ?
-        /// ? END:     Define fin del programa                          ?
-        /// ? BASE:    Establece registro base para desplazamientos     ?
-        /// ? NOBASE:  Deshabilita direccionamiento BASE-relativo      ?
-        /// ? RESB:    Reserva N bytes (sin inicializar)               ?
-        /// ? RESW:    Reserva N palabras (sin inicializar)            ?
-        /// ??????????????????????????????????????????????????????????????
-        /// 
-        /// EJEMPLOS:
-        /// - "BYTE X'C1'" ? GenerateByteObjCode("X'C1'") ? "C1"
-        /// - "WORD 1024" ? GenerateWordObjCode("1024") ? "000400"
-        /// - "BASE TABLA" ? ("", "") (sin c�digo objeto, actualiza BASE)
-        /// - "RESB 100" ? ("", "") (reserva espacio, sin c�digo)
+        /// Procesa directivas del Paso 2.
+        /// BYTE y WORD pueden generar codigo objeto; el resto no.
         /// </summary>
         private (string ObjCode, string Error) ProcessDirective(IntermediateLine line, string op)
         {
@@ -693,7 +519,7 @@ namespace laboratorioPractica3
             if (_tablaSimbolos.TryGetValue(operando, out _))
                 return ("", "");
 
-            return ("", "Error: Símbolo no encontrado en directiva END");
+            return ("", "Error: Simbolo no encontrado en directiva END");
         }
         
         /// BYTE C'texto' → código ASCII concatenado (gramática: CHARCONST → C'...')
@@ -702,9 +528,9 @@ namespace laboratorioPractica3
         private (string ObjCode, string Error) GenerateByteObjCode(string operand)
         {
             if (string.IsNullOrEmpty(operand))
-                return ("", "Error: Operando vac�o para BYTE");
+                return ("", "Error: Operando vacio para BYTE");
 
-            // gram�tica: CHARCONST : C '\'' ~[\r\n']+ '\'' ;
+            // gramatica: CHARCONST : C '\'' ~[\r\n']+ '\'' ;
             if (operand.StartsWith("C'", StringComparison.OrdinalIgnoreCase) && operand.EndsWith("'"))
             {
                 string content = operand.Substring(2, operand.Length - 3);
@@ -714,7 +540,7 @@ namespace laboratorioPractica3
                 return (sb.ToString(), "");
             }
 
-            // gram�tica: HEXCONST : X '\'' [0-9A-Fa-f]+ '\'' ;
+            // gramatica: HEXCONST : X '\'' [0-9A-Fa-f]+ '\'' ;
             if (operand.StartsWith("X'", StringComparison.OrdinalIgnoreCase) && operand.EndsWith("'"))
             {
                 string content = operand.Substring(2, operand.Length - 3).ToUpperInvariant();
@@ -724,18 +550,18 @@ namespace laboratorioPractica3
                 return (content, "");
             }
 
-            return ("", "Error: Formato inv�lido para BYTE");
+            return ("", "Error: Formato invalido para BYTE");
         }
 
-        /// WORD expresi�n ? valor entero en 24 bits (6 d�gitos hex)
-        /// Ejemplo: WORD 3 ? 000003, WORD BUFFER-BUFEND
+        /// WORD expresion -> valor entero en 24 bits (6 digitos hex)
+        /// Ejemplo: WORD 3 -> 000003, WORD BUFFER-BUFEND
         private (string ObjCode, string Error) GenerateWordObjCode(string operand, int pc)
         {
             // WORD: empaqueta valor en 24 bits.
             // Si la expresión es relativa, agrega '*' para generar registro M en objeto.
             var (val, type, err) = _tablaSimbolos.EvaluateExpression(operand, pc);
             if (err != null)
-                return ("FFFFFF", "Error: " + err); // O reportar alg�n error base especial
+                return ("FFFFFF", "Error: " + err); // Error base para WORD invalido
 
             string code = (val & 0xFFFFFF).ToString("X6");
             if (type == SymbolType.Relative)
@@ -745,8 +571,8 @@ namespace laboratorioPractica3
         }
 
 
-        /// Intenta parsear un operando como valor num�rico.
-        /// Soporta formatos de la gram�tica:
+        /// Intenta parsear un operando como valor numerico.
+        /// Soporta formatos de la gramatica:
         ///   NUMBER    : [0-9]+  :decimal
         ///   HEXNUMBER : [0-9][0-9A-Fa-f]* H :hex con sufijo H
         ///   HEXCONST  : X '\'' [0-9A-Fa-f]+ '\'' :X'...'
@@ -761,7 +587,7 @@ namespace laboratorioPractica3
             operand = operand.Trim().TrimStart('#', '@');
             if (string.IsNullOrEmpty(operand)) return false;
 
-            // gram�tica: HEXNUMBER ? sufijo H
+            // gramatica: HEXNUMBER -> sufijo H
             if (operand.EndsWith("H", StringComparison.OrdinalIgnoreCase))
             {
                 string hexPart = operand[..^1];
@@ -772,14 +598,14 @@ namespace laboratorioPractica3
             if (operand.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
                 return int.TryParse(operand[2..], NumberStyles.HexNumber, null, out value);
 
-            // gram�tica: HEXCONST ? X'...'
+            // gramatica: HEXCONST -> X'...'
             if (operand.StartsWith("X'", StringComparison.OrdinalIgnoreCase) && operand.EndsWith("'"))
             {
                 string hexPart = operand.Substring(2, operand.Length - 3);
                 return int.TryParse(hexPart, NumberStyles.HexNumber, null, out value);
             }
 
-            // gram�tica: NUMBER ? decimal
+            // gramatica: NUMBER -> decimal
             return int.TryParse(operand, out value);
         }
 
@@ -789,8 +615,8 @@ namespace laboratorioPractica3
             var sb = new StringBuilder();
 
             sb.AppendLine("+--------------------------------------------------------------------+");
-            sb.AppendLine("�              PASO 2 - ENSAMBLADOR SIC/XE                          �");
-            sb.AppendLine("�              GENERACI�N DE C�DIGO OBJETO                          �");
+            sb.AppendLine("|              PASO 2 - ENSAMBLADOR SIC/XE                          |");
+            sb.AppendLine("|              GENERACION DE CODIGO OBJETO                          |");
             sb.AppendLine("+--------------------------------------------------------------------+");
             sb.AppendLine();
 
@@ -801,7 +627,7 @@ namespace laboratorioPractica3
                 sb.AppendLine($"Valor BASE      : {_baseActual.Value:X4}h  ({_baseActual.Value})");
             sb.AppendLine();
 
-            sb.AppendLine("ARCHIVO INTERMEDIO CON C�DIGO OBJETO");
+            sb.AppendLine("ARCHIVO INTERMEDIO CON CODIGO OBJETO");
             sb.AppendLine($"{"#",-4} | {"CONTLOC",-8} | {"ETQ",-10} | {"CODOP",-10} | {"OPR",-15} | {"FMT",-4} | {"MOD",-12} | {"COD_OBJ",-12} | {"ERR"}");
             sb.AppendLine(new string('-', 135));
 
@@ -822,9 +648,9 @@ namespace laboratorioPractica3
             sb.AppendLine("RESUMEN DEL PASO 2 ");
             int linesWithObj = ObjectCodeLines.Count(l => !string.IsNullOrEmpty(l.ObjectCode));
             int linesWithError = ObjectCodeLines.Count(l => !string.IsNullOrEmpty(l.ErrorPaso2));
-            sb.AppendLine($"  * L�neas procesadas        : {ObjectCodeLines.Count}");
-            sb.AppendLine($"  * L�neas con c�digo objeto  : {linesWithObj}");
-            sb.AppendLine($"  * L�neas con error Paso 2   : {linesWithError}");
+            sb.AppendLine($"  * Lineas procesadas        : {ObjectCodeLines.Count}");
+            sb.AppendLine($"  * Lineas con codigo objeto  : {linesWithObj}");
+            sb.AppendLine($"  * Lineas con error Paso 2   : {linesWithError}");
             sb.AppendLine($"  * Errores del Paso 2        : {Errors.Count}");
 
             return sb.ToString();
@@ -894,7 +720,7 @@ namespace laboratorioPractica3
     }
 
     
-    /// Envuelve una IntermediateLine del Paso 1 con su c�digo objeto
+    /// Envuelve una IntermediateLine del Paso 1 con su codigo objeto
     /// y errores generados en el Paso 2
    
     public class ObjectCodeLine

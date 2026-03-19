@@ -1177,7 +1177,12 @@ namespace laboratorioPractica3
                 {
                     SymbolUsageLines[cleanOperand] = new List<int>();
                 }
-                SymbolUsageLines[cleanOperand].Add(lineNumber);
+
+                // Evita repetir la misma línea para el mismo símbolo.
+                if (!SymbolUsageLines[cleanOperand].Contains(lineNumber))
+                {
+                    SymbolUsageLines[cleanOperand].Add(lineNumber);
+                }
             }
         }
         
@@ -1189,6 +1194,8 @@ namespace laboratorioPractica3
         {
             // Validación de referencias diferidas:
             // revisa símbolos usados en operandos que nunca se definieron en TABSIM.
+            var alreadyReported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var symbol in ReferencedSymbols)
             {
                 if (!TABSIM_EXT.ContainsKey(symbol) && !REGISTERS.Contains(symbol))
@@ -1198,14 +1205,23 @@ namespace laboratorioPractica3
                     {
                         foreach (var lineNum in SymbolUsageLines[symbol])
                         {
-                            string errorMsg = $"[Símbolo no definido] La etiqueta '{symbol}' no está definida en TABSIM";
-                            Errors.Add(new SICXEError(lineNum, 0, errorMsg, SICXEErrorType.Semantico));
+                            string errorMsg = $"[Simbolo no definido] La etiqueta '{symbol}' no esta definida en TABSIM";
+                            string key = $"{lineNum}|{errorMsg}|{SICXEErrorType.Semantico}";
+                            if (alreadyReported.Add(key))
+                            {
+                                Errors.Add(new SICXEError(lineNum, 0, errorMsg, SICXEErrorType.Semantico));
+                            }
                         }
                     }
                     else
                     {
                         // Si no tenemos la línea específica, reportar en línea 0
-                        Errors.Add(new SICXEError(0, 0, $"Símbolo no definido: '{symbol}'", SICXEErrorType.Semantico));
+                        string fallbackMsg = $"Símbolo no definido: '{symbol}'";
+                        string key = $"0|{fallbackMsg}|{SICXEErrorType.Semantico}";
+                        if (alreadyReported.Add(key))
+                        {
+                            Errors.Add(new SICXEError(0, 0, fallbackMsg, SICXEErrorType.Semantico));
+                        }
                     }
                 }
             }
@@ -1371,10 +1387,10 @@ namespace laboratorioPractica3
             // TABSIM + intermedio + errores unificados (Paso 1 / Paso 2).
             var sb = new StringBuilder();
             
-            sb.AppendLine("╔════════════════════════════════════════════════════════════════════╗");
-            sb.AppendLine("║              PASO 1 - ENSAMBLADOR SIC/XE                          ║");
-            sb.AppendLine("║              ANÁLISIS Y ASIGNACIÓN DE DIRECCIONES                 ║");
-            sb.AppendLine("╚════════════════════════════════════════════════════════════════════╝");
+            sb.AppendLine("===============================================================");
+            sb.AppendLine("            PASO 1 - ENSAMBLADOR SIC/XE");
+            sb.AppendLine("            ANALISIS Y ASIGNACION DE DIRECCIONES");
+            sb.AppendLine("===============================================================");
             sb.AppendLine();
             
             int finalContloc = CONTLOC_FINAL > 0 ? CONTLOC_FINAL : CONTLOC;
@@ -1382,7 +1398,7 @@ namespace laboratorioPractica3
             sb.AppendLine($"Dir. inicio     : {START_ADDRESS:X4}h  ({START_ADDRESS})");
             sb.AppendLine($"CONTLOC final   : {finalContloc:X4}h  ({finalContloc})");
             sb.AppendLine($"Long. programa  : {PROGRAM_LENGTH:X4}h  ({PROGRAM_LENGTH} bytes)  [= CONTLOC_final({finalContloc:X4}h) - START({START_ADDRESS:X4}h)]");
-            sb.AppendLine($"Total símbolos  : {TABSIM_EXT.Count}");
+            sb.AppendLine($"Total simbolos  : {TABSIM_EXT.Count}");
             if (BASE_VALUE.HasValue)
             {
                 string baseDisplay = string.IsNullOrEmpty(BASE_OPERAND) ? "" : $"'{BASE_OPERAND}' -> ";
@@ -1390,9 +1406,9 @@ namespace laboratorioPractica3
             }
             sb.AppendLine();
 
-            sb.AppendLine("═══════════════════ TABLA DE SÍMBOLOS (TABSIM) ═══════════════════");
-            sb.AppendLine($"{"SÍMBOLO",-20} | {"DIRECCIÓN (HEX)",-18} | {"DIRECCIÓN (DEC)",-18} | {"TIPO",-10}");
-            sb.AppendLine(new string('─', 75));
+            sb.AppendLine("------------------- TABLA DE SIMBOLOS (TABSIM) -------------------");
+            sb.AppendLine($"{"SIMBOLO",-20} | {"DIRECCION (HEX)",-18} | {"DIRECCION (DEC)",-18} | {"TIPO",-10}");
+            sb.AppendLine(new string('-', 75));
             
             foreach (var symbol in TABSIM_EXT.GetAllSymbols().OrderBy(s => s.Value.Value))
             {
@@ -1401,35 +1417,39 @@ namespace laboratorioPractica3
             
             if (TABSIM_EXT.Count == 0)
             {
-                sb.AppendLine("  (No hay símbolos definidos)");
+                sb.AppendLine("  (No hay simbolos definidos)");
             }
             sb.AppendLine();
 
-            sb.AppendLine("═══════════════════ ARCHIVO INTERMEDIO ═══════════════════════════");
+            sb.AppendLine("------------------- ARCHIVO INTERMEDIO -------------------");
             sb.AppendLine($"{"#",-4} | {"CONTLOC",-8} | {"ETQ",-10} | {"CODOP",-10} | {"OPR",-15} | {"VALOR_SEM",-15} | {"FMT",-4} | {"MOD",-12} | {"COD_OBJ",-12} | {"ERR"}");
-            sb.AppendLine(new string('─', 140));
+            sb.AppendLine(new string('-', 140));
             
             foreach (var line in IntermediateLines)
             {
                 string loc = (line.Address >= 0) ? $"{line.Address:X4}h" : "";
                 string fmt = (line.Format > 0) ? $"{line.Format}" : "-";
-                // Fusionar errores del Paso 1 con errores externos (Paso 2 y Validacion)
-                string errorDisplay = line.Error ?? "";
+                // Fusionar errores de la línea sin duplicarlos.
+                var mensajesLinea = new List<string>();
+
+                if (!string.IsNullOrWhiteSpace(line.Error))
+                {
+                    mensajesLinea.AddRange(
+                        line.Error
+                            .Split(';', StringSplitOptions.RemoveEmptyEntries)
+                            .Select(m => m.Trim())
+                    );
+                }
+
                 if (extraErrors != null)
                 {
                     var lineErrors = extraErrors.Where(e => e.Line == line.SourceLine || e.Line == line.LineNumber);
-                    if (lineErrors.Any())
-                    {
-                        string extraMsg = string.Join("; ", lineErrors.Select(e => e.Message));
-                        if (!string.IsNullOrEmpty(extraMsg))
-                        {
-                            if (string.IsNullOrEmpty(errorDisplay))
-                                errorDisplay = extraMsg;
-                            else if (!errorDisplay.Contains(extraMsg))
-                                errorDisplay += "; " + extraMsg;
-                        }
-                    }
+                    mensajesLinea.AddRange(lineErrors.Select(e => e.Message));
                 }
+
+                string errorDisplay = string.Join("; ", mensajesLinea
+                    .Where(m => !string.IsNullOrWhiteSpace(m))
+                    .Distinct(StringComparer.OrdinalIgnoreCase));
                 
                 // Truncar error si es muy largo para la consola
                 if (errorDisplay.Length > 40)
@@ -1443,13 +1463,17 @@ namespace laboratorioPractica3
             }
             sb.AppendLine();
 
-            var allErrors = Errors.AsEnumerable();
-            if (extraErrors != null)
-                allErrors = allErrors.Concat(extraErrors);
+            var baseErrors = extraErrors ?? Errors;
+            var allErrors = baseErrors
+                .GroupBy(e => new { e.Line, e.Column, e.Message, e.Type })
+                .Select(g => g.First())
+                .OrderBy(e => e.Line)
+                .ThenBy(e => e.Column)
+                .ToList();
 
             if (allErrors.Any())
             {
-                sb.AppendLine("═══════════════════ ERRORES DETECTADOS ══════════════════════════");
+                sb.AppendLine("------------------- ERRORES DETECTADOS -------------------");
                 
                 // Agrupar errores por tipo
                 var lexicalErrors = allErrors.Where(e => e.Type == SICXEErrorType.Lexico).OrderBy(e => e.Line);
@@ -1458,30 +1482,30 @@ namespace laboratorioPractica3
                 
                 if (lexicalErrors.Any())
                 {
-                    sb.AppendLine("  [ERRORES LÉXICOS]");
+                    sb.AppendLine("  [ERRORES LEXICOS]");
                     foreach (var error in lexicalErrors)
                     {
-                        sb.AppendLine($"  • {error}");
+                        sb.AppendLine($"  - {error}");
                     }
                     sb.AppendLine();
                 }
                 
                 if (syntaxErrors.Any())
                 {
-                    sb.AppendLine("  [ERRORES SINTÁCTICOS]");
+                    sb.AppendLine("  [ERRORES SINTACTICOS]");
                     foreach (var error in syntaxErrors)
                     {
-                        sb.AppendLine($"  • {error}");
+                        sb.AppendLine($"  - {error}");
                     }
                     sb.AppendLine();
                 }
                 
                 if (semanticErrors.Any())
                 {
-                    sb.AppendLine("  [ERRORES SEMÁNTICOS]");
+                    sb.AppendLine("  [ERRORES SEMANTICOS]");
                     foreach (var error in semanticErrors)
                     {
-                        sb.AppendLine($"  • {error}");
+                        sb.AppendLine($"  - {error}");
                     }
                     sb.AppendLine();
                 }
@@ -1491,16 +1515,16 @@ namespace laboratorioPractica3
 
             // ═══════════════════ RESUMEN DEL ANÁLISIS ═══════════════════
             sb.AppendLine();
-            sb.AppendLine("═══════════════════ RESUMEN DEL ANÁLISIS ════════════════════");
-            sb.AppendLine($"  * Tabla de símbolos (TABSIM): {TABSIM_EXT.Count} símbolo(s) definido(s)");
+            sb.AppendLine("------------------- RESUMEN DEL ANALISIS -------------------");
+            sb.AppendLine($"  * Tabla de simbolos (TABSIM): {TABSIM_EXT.Count} simbolo(s) definido(s)");
             sb.AppendLine($"  * Longitud del programa: CONTLOC_final({finalContloc:X4}h) - START({START_ADDRESS:X4}h) = {PROGRAM_LENGTH:X4}h ({PROGRAM_LENGTH} bytes)");
             if (BASE_VALUE.HasValue)
             {
                 string baseSum = string.IsNullOrEmpty(BASE_OPERAND) ? "" : $"'{BASE_OPERAND}' -> ";
                 sb.AppendLine($"  * BASE almacenado: {baseSum}{BASE_VALUE.Value:X4}h ({BASE_VALUE.Value}) [disponible para Paso 2]");
             }
-            sb.AppendLine($"  * Archivo intermedio: {IntermediateLines.Count} línea(s) generada(s)");
-            sb.AppendLine($"  * Errores detectados: {Errors.Count}");
+            sb.AppendLine($"  * Archivo intermedio: {IntermediateLines.Count} linea(s) generada(s)");
+                sb.AppendLine($"  * Errores detectados: {allErrors.Count}");
 
             return sb.ToString();
         }

@@ -167,9 +167,9 @@ namespace laboratorioPractica3
         {
             // Construye un reporte textual simple de los registros objeto generados.
             var sb = new StringBuilder();
-            sb.AppendLine("╔════════════════════════════════════════════════════════════════════╗");
-            sb.AppendLine("║                     PROGRAMA OBJETO                                ║");
-            sb.AppendLine("╚════════════════════════════════════════════════════════════════════╝");
+            sb.AppendLine("---------------------------------------------------------------");
+            sb.AppendLine("                    PROGRAMA OBJETO");
+            sb.AppendLine("---------------------------------------------------------------");
 
             foreach (var r in GenerarRegistros())
             {

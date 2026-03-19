@@ -4,41 +4,22 @@ using laboratorioPractica3;
 using System.Text;
 
 /// <summary>
-/// Analizador de Lenguaje Ensamblador SIC/XE
-/// Laboratorio Pr�ctica 3 - Fundamentos de Software de Sistemas
-/// 
-/// DESCRIPCI�N GENERAL:
-/// Este programa implementa un ensamblador SIC/XE de dos pasadas.
-/// 
-/// PASO 1 (IMPLEMENTADO):
-/// - Asigna direcciones a todas las instrucciones mediante el CONTLOC
-/// - Construye la TABSIM (Tabla de S�mbolos) con etiquetas y direcciones
-/// - Calcula valores sem�nticos de directivas (BYTE, WORD, RESB, RESW)
-/// - Determina formato y modo de direccionamiento de cada instrucci�n
-/// - Genera archivo intermedio para el Paso 2
-/// - Almacena valor de BASE para uso en Paso 2
-/// - Calcula longitud del programa (CONTLOC_final - START)
-/// - Detecta errores sem�nticos
-/// 
-/// SALIDA DEL PASO 1:
-/// - Archivo CSV con TABSIM + Archivo Intermedio
-/// - Reporte en consola con resumen y errores
+/// Punto de entrada del ensamblador SIC/XE.
+/// Permite ejecutar analisis completo o ensamblado en dos pasadas.
 /// </summary>
 class Program
 {
     static void Main(string[] args)
     {
         Console.OutputEncoding = Encoding.UTF8;
-        
-        PrintHeader();
 
         // Determinar archivo de entrada y modo
         string inputFile;
-        string mode = "0"; // 0 = preguntar, 1 = an�lisis completo, 2 = Paso 1
+        string mode = "0"; // 0 = preguntar, 1 = analisis completo, 2 = Paso 1
         
         if (args.Length > 0)
         {
-            // Si se proporciona archivo por l�nea de comandos
+            // Si se proporciona archivo por linea de comandos
             inputFile = args[0];
             
             // Si se proporciona el modo como segundo argumento
@@ -58,13 +39,14 @@ class Program
         }
         else
         {
-            // Mostrar men� interactivo
+            // Mostrar menu interactivo
+            PrintHeader();
             ShowInteractiveMenu();
         }
     }
 
     /// <summary>
-    /// Muestra un men� interactivo para seleccionar archivos
+    /// Muestra un menu interactivo para seleccionar archivos
     /// </summary>
     static void ShowInteractiveMenu()
     {
@@ -94,7 +76,7 @@ class Program
                 return;
             }
 
-            Console.WriteLine("MEN� DE SELECCI�N DE ARCHIVOS");
+            Console.WriteLine("MENU DE SELECCION DE ARCHIVOS");
             Console.WriteLine($"Directorio: {searchDir}");
             Console.WriteLine();
             Console.WriteLine("Archivos disponibles:");
@@ -110,7 +92,7 @@ class Program
             Console.WriteLine();
             Console.WriteLine($"  {allFiles.Count + 1,2}. [X] Salir");
             Console.WriteLine();
-            Console.Write("Seleccione una opci�n (1-{0}): ", allFiles.Count + 1);
+            Console.Write("Seleccione una opcion (1-{0}): ", allFiles.Count + 1);
 
             string? input = Console.ReadLine();
             
@@ -136,14 +118,14 @@ class Program
                 else
                 {
                     Console.WriteLine();
-                    Console.WriteLine("Opci�n inv�lida. Presione cualquier tecla para continuar...");
+                    Console.WriteLine("Opcion invalida. Presione cualquier tecla para continuar...");
                     Console.ReadKey();
                 }
             }
             else
             {
                 Console.WriteLine();
-                Console.WriteLine("Entrada inv�lida. Presione cualquier tecla para continuar...");
+                Console.WriteLine("Entrada invalida. Presione cualquier tecla para continuar...");
                 Console.ReadKey();
             }
         }
@@ -161,10 +143,10 @@ class Program
         
         if (option == "0")
         {
-            Console.WriteLine("Seleccione el tipo de an�lisis:");
-            Console.WriteLine("  1. An�lisis completo (an�lisis sem�ntico actual)");
-            Console.WriteLine("  2. PASO 1 - Ensamblador (tabla de s�mbolos + direcciones + CSV)");
-            Console.Write("\nOpci�n (1-2): ");
+            Console.WriteLine("Seleccione el tipo de analisis:");
+            Console.WriteLine("  1. Analisis completo (analisis semantico actual)");
+            Console.WriteLine("  2. PASO 1 - Ensamblador (tabla de simbolos + direcciones + CSV)");
+            Console.Write("\nOpcion (1-2): ");
             
             if (Console.IsInputRedirected)
             {
@@ -179,7 +161,7 @@ class Program
         }
         else
         {
-            Console.WriteLine($"Modo seleccionado: {(option == "2" ? "PASO 1 - Ensamblador" : "An�lisis completo")}");
+            Console.WriteLine($"Modo seleccionado: {(option == "2" ? "PASO 1 - Ensamblador" : "Analisis completo")}");
             Console.WriteLine();
         }
 
@@ -192,14 +174,10 @@ class Program
             }
             else
             {
-                // An�lisis completo existente
+                // Analisis completo existente
                 var result = AnalyzeFile(inputFile);
 
                 Console.WriteLine(result.Report);
-
-                Console.WriteLine();
-                Console.WriteLine("ARBOL SINTACTICO:");
-                Console.WriteLine(FormatParseTree(result.ParseTree));
 
                 string outputFile = GenerateOutputFile(inputFile, result);
                 Console.WriteLine();
@@ -208,7 +186,7 @@ class Program
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error durante el an�lisis: {ex.Message}");
+            Console.WriteLine($"Error durante el analisis: {ex.Message}");
             if (ex.InnerException != null)
             {
                 Console.WriteLine($"  Detalles: {ex.InnerException.Message}");
@@ -217,43 +195,22 @@ class Program
     }
 
     /// <summary>
-    /// EJECUTA EL PASO 1 DEL ENSAMBLADOR SIC/XE
-    /// 
-    /// PROCESO:
-    /// 1. Lee el archivo fuente (.asm)
-    /// 2. Ejecuta an�lisis l�xico y sint�ctico con ANTLR
-    /// 3. Ejecuta el Paso 1 del ensamblador:
-    ///    - Construye TABSIM (Tabla de S�mbolos)
-    ///    - Calcula CONTLOC (Contador de Localidades)
-    ///    - Genera archivo intermedio
-    ///    - Almacena valor de BASE
-    ///    - Calcula longitud del programa
-    /// 4. Ejecuta an�lisis sem�ntico para validar:
-    ///    - Operandos v�lidos
-    ///    - Registros v�lidos
-    ///    - Formatos de constantes correctos
-    /// 5. Combina y reporta todos los errores
-    /// 6. Exporta resultados a CSV
-    /// 
-    /// MANEJO DE ERRORES:
-    /// - Error de sintaxis: Se marca error, NO incrementa CP, etiqueta NO se inserta en TABSIM
-    /// - Instrucci�n no existe: Se marca error, NO incrementa CP, etiqueta NO se inserta en TABSIM  
-    /// - S�mbolo duplicado: Se marca error, pero la l�nea puede afectar CP si es correcta
+    /// Ejecuta el flujo de ensamblado: Paso 1, Paso 2 y programa objeto.
     /// </summary>
     static void AnalyzePaso1(string inputFile)
     {
         // Método orquestador del ensamblado completo en dos pasadas.
         // Flujo: parseo ANTLR -> Paso 1 (TABSIM/intermedio) -> Paso 2 (código objeto)
         // -> generación de registros H/T/M/E -> exportación de reportes.
-        Console.WriteLine("═══════════════════════════════════════════════════════════════════");
-        Console.WriteLine("               EJECUTANDO PASO 1 DEL ENSAMBLADOR");
-        Console.WriteLine("-------------------------------------------------------------------");
+        Console.WriteLine("===============================================================");
+        Console.WriteLine("            EJECUTANDO PASO 1 DEL ENSAMBLADOR SIC/XE");
+        Console.WriteLine("===============================================================");
         Console.WriteLine();
 
         string input = File.ReadAllText(inputFile);
         
-        // Guardar las l�neas originales para procesar errores
-        // Usar File.ReadAllLines para obtener las l�neas correctamente sin problemas con \r\n
+        // Guardar las lineas originales para procesar errores.
+        // File.ReadAllLines mantiene correctamente cada linea del archivo fuente.
         string[] sourceLines = File.ReadAllLines(inputFile);
         
         if (!input.EndsWith("\n"))
@@ -262,7 +219,7 @@ class Program
         var inputStream = new AntlrInputStream(input);
         var lexer = new SICXELexer(inputStream);
         
-        // Configurar error listeners para capturar errores l�xicos
+        // Configurar listeners para capturar errores lexicos
         var lexerErrorListener = new SICXEErrorListener();
         lexer.RemoveErrorListeners();
         lexer.AddErrorListener(lexerErrorListener);
@@ -270,27 +227,27 @@ class Program
         var tokenStream = new CommonTokenStream(lexer);
         var parser = new SICXEParser(tokenStream);
         
-        // Configurar error listeners para capturar errores sint�cticos
+        // Configurar listeners para capturar errores sintacticos
         var parserErrorListener = new SICXEErrorListener();
         parser.RemoveErrorListeners();
         parser.AddErrorListener(parserErrorListener);
 
         var tree = parser.program();
         
-        // Combinar errores l�xicos y sint�cticos
+        // Combinar errores lexicos y sintacticos
         var allExternalErrors = lexerErrorListener.Errors.Concat(parserErrorListener.Errors).ToList();
 
-        // Ejecutar Paso 1 (construcci�n de TABSIM y c�lculo de CONTLOC)
+        // Ejecutar Paso 1 (construccion de TABSIM y calculo de CONTLOC)
         var paso1 = new Paso1();
         
-        // Pasar errores externos y l�neas del c�digo fuente al Paso 1
+        // Pasar errores externos y lineas del codigo fuente al Paso 1
         paso1.AddExternalErrors(allExternalErrors);
         paso1.SetSourceLines(sourceLines);
         
         var walker = new ParseTreeWalker();
         walker.Walk(paso1, tree);
         
-        // TAMBI�N ejecutar an�lisis sem�ntico para validar operandos
+        // Tambien ejecutar analisis semantico para validar operandos
         var semanticAnalyzer = new SICXESemanticAnalyzer();
         semanticAnalyzer.AddExternalErrors(lexerErrorListener.Errors);
         semanticAnalyzer.AddExternalErrors(parserErrorListener.Errors);
@@ -345,7 +302,7 @@ class Program
         string baseOutputPath = Path.Combine(reportesDir, baseName);
 
         // Exportar con todos los errores combinados
-        ExportPaso1WithValidation(paso1, allErrors, baseOutputPath);
+        ExportPaso1WithValidation(paso1, erroresUnificados, baseOutputPath);
 
         // Exportar CSV del Paso 2
         string reportesPaso2Dir = Path.Combine(projectDir, "reportes_paso2");
@@ -388,13 +345,13 @@ class Program
         Console.WriteLine($"Directorio de salida Paso 2: {reportesPaso2Dir}");
         Console.WriteLine($"Directorio de salida Programa Objeto: {reportesObjDir}");
         
-        if (allErrors.Count == 0)
+        if (erroresUnificados.Count == 0)
         {
             Console.WriteLine("\nPaso 1 completado exitosamente sin errores!");
         }
         else
         {
-            Console.WriteLine($"\nPaso 1 completado con {allErrors.Count} error(es) detectado(s)");
+            Console.WriteLine($"\nPaso 1 completado con {erroresUnificados.Count} error(es) detectado(s)");
         }
     }
     
@@ -437,16 +394,16 @@ class Program
     static void PrintHeader()
     {
         Console.WriteLine();
-        Console.WriteLine("+-------------------------------------------------------------------+");
-        Console.WriteLine("�        ANALIZADOR DE LENGUAJE ENSAMBLADOR SIC/XE                  �");
-        Console.WriteLine("�        Laboratorio Pr�ctica 3                                     �");
-        Console.WriteLine("�        Fundamentos de Software de Sistemas                        �");
-        Console.WriteLine("+-------------------------------------------------------------------+");
+        Console.WriteLine("===============================================================");
+        Console.WriteLine("   ANALIZADOR DE LENGUAJE ENSAMBLADOR SIC/XE");
+        Console.WriteLine("   Laboratorio Practica 3");
+        Console.WriteLine("   Fundamentos de Software de Sistemas");
+        Console.WriteLine("===============================================================");
         Console.WriteLine();
     }
 
     /// <summary>
-    /// Obtiene el directorio ra�z del proyecto
+    /// Obtiene el directorio raiz del proyecto
     /// Busca hacia arriba desde el directorio actual hasta encontrar el archivo .csproj
     /// </summary>
     static string GetProjectDirectory()
@@ -478,7 +435,7 @@ class Program
         // Leer contenido del archivo
         string input = File.ReadAllText(filePath);
         
-        // Asegurar que el archivo termine con nueva l�nea
+        // Asegurar que el archivo termine con nueva linea
         if (!input.EndsWith("\n"))
         {
             input += "\n";
@@ -509,17 +466,17 @@ class Program
         // Parsear el programa
         var tree = parser.program();
 
-        // Crear el analizador sem�ntico
+        // Crear el analizador semantico
         var semanticAnalyzer = new SICXESemanticAnalyzer();
         
         // Procesar tokens para el reporte
         semanticAnalyzer.ProcessTokens(tokenStream, lexer);
         
-        // Agregar errores l�xicos y sint�cticos
+        // Agregar errores lexicos y sintacticos
         semanticAnalyzer.AddExternalErrors(lexerErrorListener.Errors);
         semanticAnalyzer.AddExternalErrors(parserErrorListener.Errors);
 
-        // Recorrer el �rbol para an�lisis sem�ntico
+        // Recorrer el arbol para analisis semantico
         var walker = new ParseTreeWalker();
         walker.Walk(semanticAnalyzer, tree);
 
@@ -559,7 +516,7 @@ class Program
         // Agregar reporte principal
         sb.AppendLine(result.Report);
 
-        // Agregar secci�n detallada de errores con n�mero de l�nea
+        // Agregar seccion detallada de errores con numero de linea
         if (result.Errors.Count > 0)
         {
             sb.AppendLine();
@@ -572,7 +529,7 @@ class Program
             }
         }
 
-        // Agregar �rbol sint�ctico
+        // Agregar arbol sintactico
         sb.AppendLine();
         sb.AppendLine("ARBOL SINTACTICO:");
         sb.AppendLine(FormatParseTree(result.ParseTree));
@@ -584,7 +541,7 @@ class Program
     }
 
     /// <summary>
-    /// Formatea el �rbol sint�ctico para mejor visualizaci�n
+    /// Formatea el arbol sintactico para mejor visualizacion
     /// </summary>
     static string FormatParseTree(string tree)
     {
@@ -616,7 +573,7 @@ class Program
 }
 
 /// <summary>
-/// Resultado del an�lisis
+/// Resultado del analisis
 /// </summary>
 class AnalysisResult
 {
