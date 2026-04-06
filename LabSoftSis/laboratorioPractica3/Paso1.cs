@@ -28,7 +28,12 @@ namespace laboratorioPractica3
     {
         // ═══════════════════ VARIABLES DEL PASO 1 ═══════════════════
         
-        private int CONTLOC = 0;
+        private readonly Bloques BLOCKS = new Bloques();
+        private int CONTLOC
+        {
+            get => BLOCKS.CurrentLocation;
+            set => BLOCKS.CurrentLocation = value;
+        }
         private int START_ADDRESS = 0;
         private int CONTLOC_FINAL = 0;
         private int EXECUTION_ENTRY_POINT = 0;  // Dirección de inicio de ejecución (del operando de END)
@@ -37,7 +42,8 @@ namespace laboratorioPractica3
         private int PROGRAM_LENGTH = 0;
         private int? BASE_VALUE = null;
         private string BASE_OPERAND = "";
-        
+        private bool BLOCKS_FINALIZED = false;
+
         // TABSIM_EXT guarda valor y tipo (absoluto/relativo) por simbolo
         // Requisito 1: la tabla indica si cada simbolo es absoluto o relativo
         private SimbolosYExpresiones TABSIM_EXT = new SimbolosYExpresiones();
@@ -320,6 +326,7 @@ namespace laboratorioPractica3
                         }
 
                         intermediateLine.Increment = 0;  // ORG no incrementa
+                        SetCurrentBlockOnIntermediateLine(intermediateLine);
                         IntermediateLines.Add(intermediateLine);
                         return;
                     }
@@ -365,6 +372,7 @@ namespace laboratorioPractica3
                             wordByteIncrement = 3;
 
                         intermediateLine.Increment = wordByteIncrement;
+                        SetCurrentBlockOnIntermediateLine(intermediateLine);
                         IntermediateLines.Add(intermediateLine);
 
                         // Incrementar CONTLOC
@@ -394,7 +402,7 @@ namespace laboratorioPractica3
                             // Intentar evaluar la expresión del operando
                             if (!string.IsNullOrEmpty(parsedLine.Operand))
                             {
-                                // Quitar prefijos de modo de direccionamiento si existen
+                                // Quitar prefijos de modo deDireccionamiento si existen
                                 string operandForEvaluation = parsedLine.Operand;
                                 if (operandForEvaluation.StartsWith("#", StringComparison.Ordinal))
                                     operandForEvaluation = operandForEvaluation.Substring(1);
@@ -426,6 +434,7 @@ namespace laboratorioPractica3
                             }
 
                             intermediateLine.Increment = instructionIncrement;
+                            SetCurrentBlockOnIntermediateLine(intermediateLine);
                             IntermediateLines.Add(intermediateLine);
 
                             // Guardar la primera instrucción ejecutable encontrada.
@@ -460,7 +469,9 @@ namespace laboratorioPractica3
                     LineNumber = IntermediateLines.Count + 1,
                     SourceLine = antlrLine,
                     Address = -1,
-                    Comment = commentText
+                    Comment = commentText,
+                    BlockName = BLOCKS.CurrentBlockName,
+                    BlockNumber = BLOCKS.CurrentBlockNumber
                 };
                 IntermediateLines.Add(intermediateLine);
                 return;
@@ -520,7 +531,9 @@ namespace laboratorioPractica3
                 Comment = comment ?? "",
                 Format = format,
                 AddressingMode = addressingMode,
-                Error = errorMsg
+                Error = errorMsg,
+                BlockName = BLOCKS.CurrentBlockName,
+                BlockNumber = BLOCKS.CurrentBlockNumber
             };
             
             // Registrar símbolos referenciados con el número de línea para rastrear errores
@@ -532,11 +545,11 @@ namespace laboratorioPractica3
             {
                 PROGRAM_NAME = label ?? "NONAME";
                 START_ADDRESS = ParseOperand(operand);
-                CONTLOC = START_ADDRESS;
-                EXECUTION_ENTRY_POINT = START_ADDRESS;
+                BLOCKS.SwitchBlock("Por Omision");
+                CONTLOC = 0;
                 intermediateLine2.Address = CONTLOC;
                 ProgramStarted = true;
-
+                
                 // NOTA: La etiqueta en START es el nombre del programa, NO se inserta en TABSIM
                 // según especificación SIC/XE
 
@@ -552,6 +565,37 @@ namespace laboratorioPractica3
                 return;
             }
             
+            // Directiva USE
+            if (operationContext?.directive()?.USE() != null ||
+                (!string.IsNullOrEmpty(operation) && operation.Equals("USE", StringComparison.OrdinalIgnoreCase)))
+            {
+                // Si la línea USE define etiqueta, se registra en el bloque actual antes del cambio
+                if (!string.IsNullOrEmpty(label))
+                {
+                    if (TABSIM_EXT.ContainsKey(label))
+                    {
+                        var dupErr = new SICXEError(antlrLine, 0, $"Símbolo duplicado: {label}", SICXEErrorType.Semantico);
+                        Errors.Add(dupErr);
+                        if (string.IsNullOrEmpty(intermediateLine2.Error))
+                            intermediateLine2.Error = dupErr.Message;
+                        else
+                            intermediateLine2.Error += "; " + dupErr.Message;
+                    }
+                    else
+                    {
+                        TABSIM_EXT.AddSymbol(label, CONTLOC, SymbolType.Relative, BLOCKS.CurrentBlockName, BLOCKS.CurrentBlockNumber);
+                    }
+                }
+
+                var selectedBlock = BLOCKS.SwitchBlock(operand);
+                intermediateLine2.SemanticValue = $"BLQ={selectedBlock.Number}, CP={selectedBlock.LocationCounter:X4}h";
+                intermediateLine2.Increment = 0;
+                intermediateLine2.BlockName = selectedBlock.Name;
+                intermediateLine2.BlockNumber = selectedBlock.Number;
+                IntermediateLines.Add(intermediateLine2);
+                return;
+            }
+
             // Directiva BASE
             if (operationContext?.directive()?.BASE() != null)
             {
@@ -664,12 +708,12 @@ namespace laboratorioPractica3
                             Errors.Add(errEq);
                             intermediateLine2.Error = string.IsNullOrEmpty(intermediateLine2.Error) ? evalErr : intermediateLine2.Error + "; " + evalErr;
                             // Asignar -1 (FFFF) para continuar con el ensamblado (Punto 6)
-                            TABSIM_EXT.AddSymbol(label, -1, SymbolType.Absolute);
+                            TABSIM_EXT.AddSymbol(label, -1, SymbolType.Absolute, BLOCKS.CurrentBlockName, BLOCKS.CurrentBlockNumber);
                             intermediateLine2.SemanticValue = "FFFFh";
                         }
                         else
                         {
-                            TABSIM_EXT.AddSymbol(label, evalVal, evalType);
+                            TABSIM_EXT.AddSymbol(label, evalVal, evalType, BLOCKS.CurrentBlockName, BLOCKS.CurrentBlockNumber);
                             intermediateLine2.SemanticValue = $"{evalVal:X4}h";
                         }
                     }
@@ -704,6 +748,7 @@ namespace laboratorioPractica3
                     }
                 }
                 intermediateLine2.Increment = 0;  // ORG no incrementa, reestablece el contador
+                SetCurrentBlockOnIntermediateLine(intermediateLine2);
                 IntermediateLines.Add(intermediateLine2);
                 return;
             }
@@ -788,7 +833,7 @@ namespace laboratorioPractica3
                 }
                 else
                 {
-                    TABSIM_EXT.AddSymbol(label, CONTLOC, SymbolType.Relative);
+                    TABSIM_EXT.AddSymbol(label, CONTLOC, SymbolType.Relative, BLOCKS.CurrentBlockName, BLOCKS.CurrentBlockNumber);
                 }
             }
 
@@ -811,19 +856,15 @@ namespace laboratorioPractica3
             if (operationContext?.directive()?.END() != null)
             {
                 // END cierra el Paso 1:
-                // - fija tamaño de programa
-                // - determina punto de ejecución (operando END)
-                // Prioridad para registro E:
-                // 1) Si END tiene operando y existe en TABSIM -> usar esa dirección.
-                // 2) Si END no tiene operando -> usar primera instrucción ejecutable.
-                // 3) Si END tiene operando pero no existe -> error en Paso 2 y E=FFFFFF.
-                CONTLOC_FINAL = CONTLOC;
-                PROGRAM_LENGTH = CONTLOC - START_ADDRESS;
+                // - finaliza bloques USE
+                // - reubica símbolos y líneas a direcciones absolutas
+                // - fija tamaño total del programa
+                FinalizeBlocksAndRelocate();
 
                 // Extraer la dirección de inicio de ejecución del operando de END
                 if (!string.IsNullOrEmpty(operand))
                 {
-                    // Buscar el símbolo en TABSIM para obtener su dirección
+                    // Buscar el símbolo en TABSIM para obtener su dirección absoluta
                     if (TABSIM_EXT.TryGetValue(operand, out var entrySymbol))
                     {
                         EXECUTION_ENTRY_POINT = entrySymbol.Value;
@@ -836,7 +877,7 @@ namespace laboratorioPractica3
                 }
                 else
                 {
-                    // Si END no tiene operando, usar primera instrucción ejecutable.
+                    // Si END no tiene operando, usar primera instrucción ejecutable absoluta.
                     // Si no existe ninguna, usar START como respaldo.
                     EXECUTION_ENTRY_POINT = FIRST_EXECUTABLE_ADDRESS ?? START_ADDRESS;
                 }
@@ -919,7 +960,9 @@ namespace laboratorioPractica3
                 Format = 0,
                 AddressingMode = "-",
                 Increment = 0,  // NO incrementar CONTLOC
-                Error = errorMsg
+                Error = errorMsg,
+                BlockName = BLOCKS.CurrentBlockName,
+                BlockNumber = BLOCKS.CurrentBlockNumber
             };
         }
 
@@ -983,7 +1026,7 @@ namespace laboratorioPractica3
         /// <summary>
         /// Determina la etiqueta del tipo de error para la columna ERR del archivo intermedio
         /// según la especificación del Paso 1:
-        /// - "Instrucción no existe": la operación no pertenece al conjunto de instrucciones SIC/XE
+        /// - "Instrucción no existe": la operación no pertenesc al conjunto de instrucciones SIC/XE
         /// - "Error de sintaxis": la estructura de la línea es inválida léxica o sintácticamente
         /// </summary>
         private string GetSyntaxErrorTypeLabel(string operation)
@@ -1397,6 +1440,8 @@ namespace laboratorioPractica3
         {
             // Reporte consolidado de ensamblado:
             // TABSIM + intermedio + errores unificados (Paso 1 / Paso 2).
+            FinalizeBlocksAndRelocate();
+
             var sb = new StringBuilder();
             
             sb.AppendLine("===============================================================");
@@ -1405,11 +1450,11 @@ namespace laboratorioPractica3
             sb.AppendLine("===============================================================");
             sb.AppendLine();
             
-            int finalContloc = CONTLOC_FINAL > 0 ? CONTLOC_FINAL : CONTLOC;
+            int finalContloc = CONTLOC_FINAL > 0 ? CONTLOC_FINAL : (START_ADDRESS + PROGRAM_LENGTH);
             sb.AppendLine($"Programa        : {PROGRAM_NAME}");
             sb.AppendLine($"Dir. inicio     : {START_ADDRESS:X4}h  ({START_ADDRESS})");
             sb.AppendLine($"CONTLOC final   : {finalContloc:X4}h  ({finalContloc})");
-            sb.AppendLine($"Long. programa  : {PROGRAM_LENGTH:X4}h  ({PROGRAM_LENGTH} bytes)  [= CONTLOC_final({finalContloc:X4}h) - START({START_ADDRESS:X4}h)]");
+            sb.AppendLine($"Long. programa  : {PROGRAM_LENGTH:X4}h  ({PROGRAM_LENGTH} bytes)");
             sb.AppendLine($"Total simbolos  : {TABSIM_EXT.Count}");
             if (BASE_VALUE.HasValue)
             {
@@ -1419,12 +1464,13 @@ namespace laboratorioPractica3
             sb.AppendLine();
 
             sb.AppendLine("------------------- TABLA DE SIMBOLOS (TABSIM) -------------------");
-            sb.AppendLine($"{"SIMBOLO",-20} | {"DIRECCION (HEX)",-18} | {"DIRECCION (DEC)",-18} | {"TIPO",-10}");
-            sb.AppendLine(new string('-', 75));
-            
-            foreach (var symbol in TABSIM_EXT.GetAllSymbols().OrderBy(s => s.Value.Value))
+            sb.AppendLine($"{"SIMBOLO",-20} | {"DIRECCION (HEX)",-18} | {"DIRECCION (DEC)",-18} | {"TIPO",-10} | {"BLOQUE",-14}");
+            sb.AppendLine(new string('-', 102));
+
+            foreach (var symbol in TABSIM_EXT.GetAllSymbols())
             {
-                sb.AppendLine($"{symbol.Key,-20} | {symbol.Value.Value:X4}h{"",-13} | {symbol.Value.Value,-18} | {symbol.Value.Type,-10}");
+                string bloque = $"{symbol.Value.BlockName} ({symbol.Value.BlockNumber})";
+                sb.AppendLine($"{symbol.Key,-20} | {symbol.Value.Value:X4}h{"",-13} | {symbol.Value.Value,-18} | {symbol.Value.Type,-10} | {bloque,-14}");
             }
             
             if (TABSIM_EXT.Count == 0)
@@ -1433,10 +1479,19 @@ namespace laboratorioPractica3
             }
             sb.AppendLine();
 
+            sb.AppendLine("------------------- TABLA DE BLOQUES (TABBLK) -------------------");
+            sb.AppendLine($"{"NUM",-6} | {"NOMBRE",-12} | {"DIR_INI_HEX",-12} | {"DIR_INI_DEC",-12} | {"LONG_HEX",-10} | {"LONG_DEC",-10}");
+            sb.AppendLine(new string('-', 80));
+            foreach (var block in BLOCKS.GetAllBlocks())
+            {
+                sb.AppendLine($"{block.Number,-6} | {block.Name,-12} | {block.StartAddress:X4}h{"",-7} | {block.StartAddress,-12} | {block.Length:X4}h{"",-5} | {block.Length,-10}");
+            }
+            sb.AppendLine();
+
             sb.AppendLine("------------------- ARCHIVO INTERMEDIO -------------------");
-            sb.AppendLine($"{"#",-4} | {"CONTLOC",-8} | {"ETQ",-10} | {"CODOP",-10} | {"OPR",-15} | {"VALOR_SEM",-15} | {"FMT",-4} | {"MOD",-12} | {"COD_OBJ",-12} | {"ERR"}");
-            sb.AppendLine(new string('-', 140));
-            
+            sb.AppendLine($"{"#",-4} | {"CONTLOC",-8} | {"BLQ",-8} | {"ETQ",-10} | {"CODOP",-10} | {"OPR",-15} | {"VALOR_SEM",-15} | {"FMT",-4} | {"MOD",-12} | {"COD_OBJ",-12} | {"ERR"}");
+            sb.AppendLine(new string('-', 150));
+
             foreach (var line in IntermediateLines)
             {
                 string loc = (line.Address >= 0) ? $"{line.Address:X4}h" : "";
@@ -1471,7 +1526,7 @@ namespace laboratorioPractica3
                 if (objectCodes != null && objectCodes.TryGetValue(line.LineNumber, out var oc))
                     codObj = oc;
                 
-                sb.AppendLine($"{line.LineNumber,-4} | {loc,-8} | {line.Label,-10} | {line.Operation,-10} | {line.Operand,-15} | {line.SemanticValue,-15} | {fmt,-4} | {line.AddressingMode,-12} | {codObj,-12} | {errorDisplay}");
+                sb.AppendLine($"{line.LineNumber,-4} | {loc,-8} | {line.BlockName,-8} | {line.Label,-10} | {line.Operation,-10} | {line.Operand,-15} | {line.SemanticValue,-15} | {fmt,-4} | {line.AddressingMode,-12} | {codObj,-12} | {errorDisplay}");
             }
             sb.AppendLine();
 
@@ -1529,14 +1584,15 @@ namespace laboratorioPractica3
             sb.AppendLine();
             sb.AppendLine("------------------- RESUMEN DEL ANALISIS -------------------");
             sb.AppendLine($"  * Tabla de simbolos (TABSIM): {TABSIM_EXT.Count} simbolo(s) definido(s)");
-            sb.AppendLine($"  * Longitud del programa: CONTLOC_final({finalContloc:X4}h) - START({START_ADDRESS:X4}h) = {PROGRAM_LENGTH:X4}h ({PROGRAM_LENGTH} bytes)");
+            sb.AppendLine($"  * Tabla de bloques (TABBLK): {BLOCKS.GetAllBlocks().Count} bloque(s)");
+            sb.AppendLine($"  * Longitud del programa: {PROGRAM_LENGTH:X4}h ({PROGRAM_LENGTH} bytes)");
             if (BASE_VALUE.HasValue)
             {
                 string baseSum = string.IsNullOrEmpty(BASE_OPERAND) ? "" : $"'{BASE_OPERAND}' -> ";
                 sb.AppendLine($"  * BASE almacenado: {baseSum}{BASE_VALUE.Value:X4}h ({BASE_VALUE.Value}) [disponible para Paso 2]");
             }
             sb.AppendLine($"  * Archivo intermedio: {IntermediateLines.Count} linea(s) generada(s)");
-                sb.AppendLine($"  * Errores detectados: {allErrors.Count}");
+                sb.AppendLine($"  * Errores detectados: {Errors.Count}");
 
             return sb.ToString();
         }
@@ -1547,14 +1603,16 @@ namespace laboratorioPractica3
         /// </summary>
         public void ExportSymbolTableToCSV(string outputPath)
         {
-            var sb = new StringBuilder();
-            sb.AppendLine("SIMBOLO,DIRECCION_HEX,DIRECCION_DEC");
-            
-            foreach (var symbol in TABSIM.OrderBy(s => s.Value))
-            {
-                sb.AppendLine($"{symbol.Key},{symbol.Value:X4},{symbol.Value}");
-            }
+            FinalizeBlocksAndRelocate();
 
+            var sb = new StringBuilder();
+            sb.AppendLine("SIMBOLO,DIRECCION_HEX,DIRECCION_DEC,TIPO,BLOQUE,NUM_BLOQUE");
+            
+            foreach (var symbol in TABSIM_EXT.GetAllSymbols())
+            {
+                sb.AppendLine($"{symbol.Key},{symbol.Value.Value:X4},{symbol.Value.Value},{symbol.Value.Type},{symbol.Value.BlockName},{symbol.Value.BlockNumber}");
+            }
+            
             File.WriteAllText(outputPath, sb.ToString(), Encoding.UTF8);
         }
 
@@ -1563,28 +1621,22 @@ namespace laboratorioPractica3
         /// </summary>
         public void ExportIntermediateListingToCSV(string outputPath)
         {
+            FinalizeBlocksAndRelocate();
+
             var sb = new StringBuilder();
-            sb.AppendLine("NL,CONTLOC_HEX,CONTLOC_DEC,ETQ,CODOP,OPR,FMT,MOD,ERR,COMENTARIO");
+            sb.AppendLine("NL,CONTLOC_HEX,CONTLOC_DEC,BLOQUE,ETQ,CODOP,OPR,VALOR_SEM,FMT,MOD,ERR,COMENTARIO");
             
             foreach (var line in IntermediateLines)
             {
-                string addressHex = (line.Address >= 0) ? $"{line.Address:X4}" : "";
-                string addressDec = (line.Address >= 0) ? $"{line.Address}" : "";
-                string fmt = (line.Format > 0) ? $"{line.Format}" : "";
+                string addressHex = (line.Address >= 0) ? $"\"{line.Address:X4}\"" : "\"\"";
+                string addressDec = (line.Address >= 0) ? $"{line.Address}" : "\"\"";
+                string fmt = (line.Format > 0) ? $"{line.Format}" : "\"\"";
+
+                string errorMsg = string.IsNullOrEmpty(line.Error)
+                    ? string.Join("; ", Errors.Where(e => e.Line == line.SourceLine || e.Line == line.LineNumber).Select(e => e.Message).Distinct())
+                    : line.Error;
                 
-                // Buscar si hay errores para esta línea
-                string errorMsg = "";
-                var lineErrors = Errors.Where(e => e.Line == line.LineNumber);
-                if (lineErrors.Any())
-                {
-                    errorMsg = string.Join("; ", lineErrors.Select(e => e.Message));
-                }
-                else if (!string.IsNullOrEmpty(line.Error))
-                {
-                    errorMsg = line.Error;
-                }
-                
-                sb.AppendLine($"{line.LineNumber},{addressHex},{addressDec},{EscapeCSV(line.Label)},{EscapeCSV(line.Operation)},{EscapeCSV(line.Operand)},{fmt},{EscapeCSV(line.AddressingMode)},{EscapeCSV(errorMsg)},{EscapeCSV(line.Comment)}");
+                sb.AppendLine($"{line.LineNumber},{addressHex},{addressDec},{FormatCSVCell(line.BlockName)},{FormatCSVCell(line.Label)},{FormatCSVCell(line.Operation)},{FormatCSVCell(line.Operand)},{FormatCSVCell(line.SemanticValue)},{fmt},{FormatCSVCell(line.AddressingMode)},{FormatCSVCell(errorMsg)},{FormatCSVCell(line.Comment)}");
             }
 
             File.WriteAllText(outputPath, sb.ToString(), Encoding.UTF8);
@@ -1595,11 +1647,14 @@ namespace laboratorioPractica3
         /// </summary>
         public void ExportSummaryToCSV(string outputPath)
         {
+            FinalizeBlocksAndRelocate();
+
             var sb = new StringBuilder();
             sb.AppendLine("PROPIEDAD,VALOR_HEX,VALOR_DEC");
             sb.AppendLine($"NOMBRE_PROGRAMA,{PROGRAM_NAME},{PROGRAM_NAME}");
             sb.AppendLine($"DIRECCION_INICIO,{START_ADDRESS:X4},{START_ADDRESS}");
             sb.AppendLine($"LONGITUD_PROGRAMA,{PROGRAM_LENGTH:X4},{PROGRAM_LENGTH}");
+            sb.AppendLine($"TOTAL_BLOQUES,,{BLOCKS.GetAllBlocks().Count}");
             sb.AppendLine($"TOTAL_SIMBOLOS,,{TABSIM_EXT.Count}");
             sb.AppendLine($"TOTAL_LINEAS,,{IntermediateLines.Count}");
             sb.AppendLine($"TOTAL_ERRORES,,{Errors.Count}");
@@ -1615,6 +1670,8 @@ namespace laboratorioPractica3
         public void ExportAllToCSV(string baseOutputPath)
         {
             string directory = Path.GetDirectoryName(baseOutputPath) ?? ".";
+
+            // Usar nombre base sin timestamp para exportaciones individuales
             string baseName = Path.GetFileNameWithoutExtension(baseOutputPath);
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
 
@@ -1643,7 +1700,7 @@ namespace laboratorioPractica3
         /// - Ordenados por dirección de menor a mayor
         /// 
         /// SECCIÓN 2 - ARCHIVO INTERMEDIO:
-        /// - Columnas: NL, CONTLOC_HEX, CONTLOC_DEC, ETQ, CODOP, OPR, FMT, MOD, COMENTARIO
+        /// - Columnas: NL, CONTLOC_HEX, CONTLOC_DEC, ETQ, CODOP, OPR, VALOR_SEM, FMT, MOD, ERR, COMENTARIO
         /// - NL: Número de línea secuencial
         /// - CONTLOC: Dirección de memoria donde se encuentra la instrucción
         /// - ETQ: Etiqueta (símbolo definido en esta línea)
@@ -1660,6 +1717,8 @@ namespace laboratorioPractica3
         /// </summary>
         public void ExportToSingleCSV(string outputPath, List<SICXEError>? allErrors = null)
         {
+            FinalizeBlocksAndRelocate();
+
             // Exportación canónica de resultados del Paso 1 en un solo CSV:
             // Sección TABSIM + Sección intermedia + Resumen.
             var sb = new StringBuilder();
@@ -1668,67 +1727,69 @@ namespace laboratorioPractica3
             var utf8WithBom = new UTF8Encoding(true);
             
             // ═══════════════════ SECCIÓN 1: TABLA DE SÍMBOLOS (TABSIM) ═══════════════════
-            // Requisito 2: imprimir TABSIM con tipo absoluto/relativo
             sb.AppendLine("=== TABLA DE SIMBOLOS (TABSIM) ===");
-            sb.AppendLine("SIMBOLO,DIRECCION_HEX,DIRECCION_DEC,TIPO");
-            
-            foreach (var symbol in TABSIM_EXT.GetAllSymbols().OrderBy(s => s.Value.Value))
+            sb.AppendLine("SIMBOLO,DIRECCION_HEX,DIRECCION_DEC,TIPO,BLOQUE,NUM_BLOQUE");
+
+            foreach (var symbol in TABSIM_EXT.GetAllSymbols())
             {
-                // Usar comillas para forzar formato texto en valores hexadecimales
-                sb.AppendLine($"\"{symbol.Key}\",\"{symbol.Value.Value:X4}\",{symbol.Value.Value},{symbol.Value.Type}");
+                sb.AppendLine($"\"{symbol.Key}\",\"{symbol.Value.Value:X4}\",{symbol.Value.Value},{symbol.Value.Type},{symbol.Value.BlockName},{symbol.Value.BlockNumber}");
             }
-            
+
             if (TABSIM_EXT.Count == 0)
             {
-                sb.AppendLine("\"(Sin símbolos)\",\"\",\"\",\"\"");
+                sb.AppendLine("\"(Sin símbolos)\",\"\",\"\",\"\",\"\",\"\"");
             }
-            
+
+            sb.AppendLine();
+
+            // ═══════════════════ SECCIÓN 2: TABLA DE BLOQUES (TABBLK) ═══════════════════
+            sb.AppendLine("=== TABLA DE BLOQUES (TABBLK) ===");
+            sb.AppendLine("NUM_BLOQUE,NOMBRE,DIR_INICIO_HEX,DIR_INICIO_DEC,LONGITUD_HEX,LONGITUD_DEC");
+            foreach (var block in BLOCKS.GetAllBlocks())
+            {
+                sb.AppendLine($"{block.Number},{FormatCSVCell(block.Name)},\"{block.StartAddress:X4}\",{block.StartAddress},\"{block.Length:X4}\",{block.Length}");
+            }
+
             sb.AppendLine();
             
-            // ═══════════════════ SECCIÓN 2: ARCHIVO INTERMEDIO ═══════════════════
+            // ═══════════════════ SECCIÓN 3: ARCHIVO INTERMEDIO ═══════════════════
             sb.AppendLine("=== ARCHIVO INTERMEDIO ===");
-            sb.AppendLine("NL,CONTLOC_HEX,CONTLOC_DEC,ETQ,CODOP,OPR,VALOR_SEM,FMT,MOD,ERR,COMENTARIO");
+            sb.AppendLine("NL,CONTLOC_HEX,CONTLOC_DEC,BLOQUE,ETQ,CODOP,OPR,VALOR_SEM,FMT,MOD,ERR,COMENTARIO");
             
             foreach (var line in IntermediateLines)
             {
-                // Forzar formato texto para valores hexadecimales con comillas
                 string addressHex = (line.Address >= 0) ? $"\"{line.Address:X4}\"" : "\"\"";
                 string addressDec = (line.Address >= 0) ? $"{line.Address}" : "\"\"";
                 string fmt = (line.Format > 0) ? $"{line.Format}" : "\"\"";
                 
-                // Obtener errores para esta línea usando SourceLine para mapeo correcto
                 string errorMsg = line.Error ?? "";
                 if (allErrors != null)
                 {
                     var lineErrors = allErrors.Where(e => e.Line == line.SourceLine);
-                    if (lineErrors.Any())
-                    {
-                        string additionalErrors = string.Join("; ", lineErrors
-                            .Select(e => e.Message)
-                            .Where(m => !errorMsg.Contains(m)));
-                        if (!string.IsNullOrEmpty(additionalErrors))
-                            errorMsg = string.IsNullOrEmpty(errorMsg) ? additionalErrors : errorMsg + "; " + additionalErrors;
-                    }
+                    string additional = string.Join("; ", lineErrors.Select(e => e.Message));
+                    if (!string.IsNullOrWhiteSpace(additional))
+                        errorMsg = string.IsNullOrWhiteSpace(errorMsg) ? additional : errorMsg + "; " + additional;
                 }
                 
-                sb.AppendLine($"{line.LineNumber},{addressHex},{addressDec},{FormatCSVCell(line.Label)},{FormatCSVCell(line.Operation)},{FormatCSVCell(line.Operand)},{FormatCSVCell(line.SemanticValue)},{fmt},{FormatCSVCell(line.AddressingMode)},{FormatCSVCell(errorMsg)},{FormatCSVCell(line.Comment)}");
+                sb.AppendLine($"{line.LineNumber},{addressHex},{addressDec},{FormatCSVCell(line.BlockName)},{FormatCSVCell(line.Label)},{FormatCSVCell(line.Operation)},{FormatCSVCell(line.Operand)},{FormatCSVCell(line.SemanticValue)},{fmt},{FormatCSVCell(line.AddressingMode)},{FormatCSVCell(errorMsg)},{FormatCSVCell(line.Comment)}");
             }
 
-            // ═══════════════════ SECCIÓN 3: RESUMEN DEL PASO 1 ═══════════════════
+            // ═══════════════════ SECCIÓN 4: RESUMEN DEL PASO 1 ═══════════════════
             sb.AppendLine();
             sb.AppendLine("=== RESUMEN DEL PASO 1 ===");
             sb.AppendLine("PROPIEDAD,VALOR_HEX,VALOR_DEC,DESCRIPCION");
-            int csvFinalContloc = CONTLOC_FINAL > 0 ? CONTLOC_FINAL : CONTLOC;
+            int csvFinalContloc = CONTLOC_FINAL > 0 ? CONTLOC_FINAL : (START_ADDRESS + PROGRAM_LENGTH);
             sb.AppendLine($"\"NOMBRE_PROGRAMA\",\"{PROGRAM_NAME}\",\"{PROGRAM_NAME}\",\"Nombre del programa\"");
-            sb.AppendLine($"\"DIR_INICIO\",\"{START_ADDRESS:X4}\",{START_ADDRESS},\"Dirección de inicio (operando de START)\"");
-            sb.AppendLine($"\"CONTLOC_FINAL\",\"{csvFinalContloc:X4}\",{csvFinalContloc},\"CONTLOC al llegar a END\"");
-            sb.AppendLine($"\"LONGITUD_PROGRAMA\",\"{PROGRAM_LENGTH:X4}\",{PROGRAM_LENGTH},\"= CONTLOC_final({csvFinalContloc:X4}h) - START({START_ADDRESS:X4}h)\"");
+            sb.AppendLine($"\"DIR_INICIO\",\"{START_ADDRESS:X4}\",\"{START_ADDRESS}\",\"Dirección de inicio (operando de START)\"");
+            sb.AppendLine($"\"CONTLOC_FINAL\",\"{csvFinalContloc:X4}\",\"{csvFinalContloc}\",\"Dirección final absoluta del programa\"");
+            sb.AppendLine($"\"LONGITUD_PROGRAMA\",\"{PROGRAM_LENGTH:X4}\",\"{PROGRAM_LENGTH}\",\"Suma de longitudes de todos los bloques\"");
+            sb.AppendLine($"\"TOTAL_BLOQUES\",\"\",{BLOCKS.GetAllBlocks().Count},\"Bloques definidos con USE\"");
             sb.AppendLine($"\"TOTAL_SIMBOLOS\",\"\",{TABSIM_EXT.Count},\"Símbolos definidos en TABSIM\"");
             sb.AppendLine($"\"TOTAL_LINEAS\",\"\",{IntermediateLines.Count},\"Líneas en archivo intermedio\"");
             sb.AppendLine($"\"TOTAL_ERRORES\",\"\",{(allErrors?.Count ?? Errors.Count)},\"Total de errores detectados\"");
             if (BASE_VALUE.HasValue)
             {
-                sb.AppendLine($"\"BASE_OPERANDO\",\"{BASE_VALUE.Value:X4}\",\"{BASE_VALUE.Value}\",\"Valor almacenado de BASE (para uso en Paso 2)\"");
+                sb.AppendLine($"\"VALOR_BASE\",\"{BASE_VALUE.Value:X4}\",\"{BASE_VALUE.Value}\",\"Valor almacenado de BASE (para uso en Paso 2)\"");
                 sb.AppendLine($"\"BASE_VALOR\",\"\",\"{BASE_OPERAND}\",\"Operando de la directiva BASE\"");
             }
 
@@ -1773,6 +1834,46 @@ namespace laboratorioPractica3
 
             return value;
         }
+
+        private void SetCurrentBlockOnIntermediateLine(IntermediateLine line)
+        {
+            line.BlockName = BLOCKS.CurrentBlockName;
+            line.BlockNumber = BLOCKS.CurrentBlockNumber;
+        }
+
+        private void FinalizeBlocksAndRelocate()
+        {
+            if (BLOCKS_FINALIZED)
+                return;
+
+            PROGRAM_LENGTH = BLOCKS.FinalizeBlocks(START_ADDRESS);
+            CONTLOC_FINAL = START_ADDRESS + PROGRAM_LENGTH;
+
+            // Reubicar símbolos relativos a direcciones absolutas
+            TABSIM_EXT.RelocateRelativeSymbols(blockName => BLOCKS.GetBlockStartAddress(blockName));
+
+            // Reubicar direcciones del archivo intermedio según su bloque
+            foreach (var line in IntermediateLines)
+            {
+                if (line.Address >= 0)
+                {
+                    line.Address += BLOCKS.GetBlockStartAddress(line.BlockName);
+                }
+            }
+
+            // Ajustar BASE si era símbolo
+            if (!string.IsNullOrEmpty(BASE_OPERAND) && TABSIM_EXT.TryGetValue(BASE_OPERAND, out var baseSymbol))
+            {
+                BASE_VALUE = baseSymbol.Value;
+            }
+
+            // Ajustar primer ejecutable después de reubicar
+            var firstExecutableLine = IntermediateLines
+                .FirstOrDefault(l => l.Increment > 0 && !DIRECTIVES.Contains(l.Operation.TrimStart('+').ToUpperInvariant()));
+            FIRST_EXECUTABLE_ADDRESS = firstExecutableLine?.Address;
+
+            BLOCKS_FINALIZED = true;
+        }
     }
 
     /// <summary>
@@ -1783,6 +1884,8 @@ namespace laboratorioPractica3
         public int LineNumber { get; set; }
         public int SourceLine { get; set; }  // Número de línea ANTLR (fuente original)
         public int Address { get; set; }
+        public string BlockName { get; set; } = "Por Omision";
+        public int BlockNumber { get; set; }
         public string Label { get; set; } = "";
         public string Operation { get; set; } = "";
         public string Operand { get; set; } = "";

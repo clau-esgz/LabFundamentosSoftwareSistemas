@@ -225,8 +225,6 @@ namespace laboratorioPractica3
         //  1. PC-relativo: disp = target - PC  (rango -2048..2047)          
         //  2. BASE-relativo: disp = target - BASE (rango 0..4095)           
         //  3. Si ninguno funciona → ERROR de Paso 2                         
-    
-
         private (string ObjCode, string Error) GenerateFormat3(IntermediateLine linea, OpCodeInfo infoOp)
         {
             // Formato 3:

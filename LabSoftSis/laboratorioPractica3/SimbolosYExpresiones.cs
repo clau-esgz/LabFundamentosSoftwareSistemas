@@ -17,17 +17,23 @@ namespace laboratorioPractica3
         public string Name { get; set; }
         public int Value { get; set; }
         public SymbolType Type { get; set; }
+        public string BlockName { get; set; }
+        public int BlockNumber { get; set; }
+        public int RelativeValue { get; set; }
 
-        public SymbolInfo(string name, int value, SymbolType type)
+        public SymbolInfo(string name, int value, SymbolType type, string blockName = "Por Omision", int blockNumber = 0, int? relativeValue = null)
         {
             Name = name;
             Value = value;
             Type = type;
+            BlockName = blockName;
+            BlockNumber = blockNumber;
+            RelativeValue = relativeValue ?? value;
         }
 
         public override string ToString()
         {
-            return $"Nombre: {Name}, Valor: {Value:X4}h, Tipo: {Type}";
+            return $"Nombre: {Name}, Valor: {Value:X4}h, Tipo: {Type}, Bloque: {BlockName}";
         }
     }
 
@@ -43,9 +49,21 @@ namespace laboratorioPractica3
 
         public bool ContainsKey(string name) => _symbolTable.ContainsKey(name);
 
-        public void AddSymbol(string name, int value, SymbolType type)
+        public void AddSymbol(string name, int value, SymbolType type, string blockName = "Por Omision", int blockNumber = 0)
         {
-            _symbolTable[name] = new SymbolInfo(name, value, type);
+            _symbolTable[name] = new SymbolInfo(name, value, type, blockName, blockNumber, value);
+        }
+
+        public void RelocateRelativeSymbols(Func<string, int> blockStartResolver)
+        {
+            foreach (var symbol in _symbolTable.Values)
+            {
+                if (symbol.Type == SymbolType.Relative)
+                {
+                    int blockStart = blockStartResolver(symbol.BlockName);
+                    symbol.Value = blockStart + symbol.RelativeValue;
+                }
+            }
         }
 
         public bool TryGetValue(string name, out SymbolInfo info)
@@ -172,7 +190,7 @@ namespace laboratorioPractica3
         }
 
         // Procesa multiplicaciones y divisiones: precedencia más alta que +/-
-        // Restricción SIC/XE: los operandos DEBEN ser absolutos (relCount = 0)
+        // Restricción SIC/XE: losoperandos DEBEN ser absolutos (relCount = 0)
         private (int val, int relCount, string? err) ParseMulDivInternal(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols)
         {
             var (leftVal, leftRelCount, err) = ParseFactorInternal(tokens, ref pos, pc, allowUndefinedSymbols);
