@@ -6,6 +6,9 @@
 **/bin/
 **/obj/
 *.csproj.Backup.tmp
+**/reportes_objeto
+**/reportes_paso1
+**/reportes_paso2
 
 # Build artifacts
 *.pdb

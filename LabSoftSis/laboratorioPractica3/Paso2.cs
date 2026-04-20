@@ -58,13 +58,6 @@ namespace laboratorioPractica3
                 string codigoObjeto = "";
                 string errorPaso2 = "";
 
-                // Si la linea ya tiene error del Paso 1, no generar codigo objeto.
-                if (!string.IsNullOrWhiteSpace(linea.Error)) 
-                {
-                    ObjectCodeLines.Add(new ObjectCodeLine(linea, "", linea.Error));
-                    continue;
-                }
-
                 // Linea de comentario o sin operacion: sin codigo objeto.
                 if (linea.Address < 0 || string.IsNullOrWhiteSpace(linea.Operation))
                 {
@@ -268,6 +261,8 @@ namespace laboratorioPractica3
                     break;
             }
 
+            operandoLimpio = StripIndexSuffix(operandoLimpio);
+
             bool isImmediate = (n == 0 && i == 1);
             bool isIndirect = (n == 1 && i == 0);
             bool isIndexed = (x == 1);
@@ -306,9 +301,9 @@ namespace laboratorioPractica3
             targetAddress = evalVal;
             targetType = evalType;
             
-            // Si el operando resulta una constante absoluta (ej: #3 o #100).
-            // Y estamos en Inmediato (n=0, i=1), usamos disp directo al valor:
-            if (isImmediate && targetType == SymbolType.Absolute)
+            // Si el operando resulta una constante absoluta (ej: #3, 110H).
+            // En formato 3 puede codificarse directo en disp con b=p=0 si cabe en 12 bits.
+            if (targetType == SymbolType.Absolute)
             {
                 if (targetAddress < 0 || targetAddress > 4095)
                 {
@@ -424,6 +419,8 @@ namespace laboratorioPractica3
                     break;
             }
 
+                    operandoLimpio = StripIndexSuffix(operandoLimpio);
+
             bool isImmediate = (n == 0 && i == 1);
 
             var (evalVal, evalType, evalErr) = _tablaSimbolos.EvaluateExpression(operandoLimpio, linea.Address);
@@ -438,23 +435,21 @@ namespace laboratorioPractica3
                 return (objError.ToString("X8"), err);
             }
 
-            // Regla del modelo: si se pasa una constante literal 'c' (0..4095)
-            // en formato 4, se marca como operando fuera de rango.
-            // (ejemplo: +SUB 350)
-            if (TryParseNumeric(operandoLimpio, out int valorConstante) && valorConstante >= 0 && valorConstante <= 4095)
-            {
-                string err = "Error: Operando fuera de rango";
-                int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
-                int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
-                int objError = (fbError << 24) | (xbpeError << 20) | 0xFFFFF;
-                return (objError.ToString("X8"), err);
-            }
-
             // Formato 4 con valor absoluto (constante o expresión absoluta):
             // permitido mientras quepa en 20 bits.
             // Ejemplo esperado: +SUB 350 -> 1F10015E (sin registro M).
             if (evalType == SymbolType.Absolute)
             {
+                // c,X no es válido en este ensamblador para formato 4.
+                if (x == 1)
+                {
+                    string err = "Error: Constante fuera de rango";
+                    int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
+                    int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
+                    int objError = (fbError << 24) | (xbpeError << 20) | 0xFFFFF;
+                    return (objError.ToString("X8"), err);
+                }
+
                 if (evalVal < 0 || evalVal > 0xFFFFF)
                 {
                     string err = "Error: Operando fuera de rango";
@@ -605,6 +600,22 @@ namespace laboratorioPractica3
 
             // gramatica: NUMBER -> decimal
             return int.TryParse(operand, out value);
+        }
+
+        private static string StripIndexSuffix(string operand)
+        {
+            if (string.IsNullOrWhiteSpace(operand))
+                return operand;
+
+            string compact = operand.Replace(" ", string.Empty);
+            if (compact.EndsWith(",X", StringComparison.OrdinalIgnoreCase))
+            {
+                int commaIndex = compact.LastIndexOf(',');
+                if (commaIndex > 0)
+                    compact = compact.Substring(0, commaIndex);
+            }
+
+            return compact;
         }
 
        

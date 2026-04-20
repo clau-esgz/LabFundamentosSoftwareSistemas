@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 // using ClosedXML.Excel;  // Deshabilitado: no se usa exportación a Excel
 
 namespace laboratorioPractica3
@@ -265,6 +266,7 @@ namespace laboratorioPractica3
                     bool isWordOrByteWithExpression = false;
                     bool isOrgWithExpression = false;
                     bool isInstructionWithExpression = false;
+                    bool isEquWithExpression = false;
                     if (!string.IsNullOrEmpty(parsedLine.Operation))
                     {
                         string baseOp = parsedLine.Operation.TrimStart('+');
@@ -290,6 +292,74 @@ namespace laboratorioPractica3
                         {
                             isInstructionWithExpression = true;
                         }
+                        else if (baseOp.Equals("EQU", StringComparison.OrdinalIgnoreCase) &&
+                                 !string.IsNullOrEmpty(parsedLine.Label) &&
+                                 !string.IsNullOrEmpty(parsedLine.Operand))
+                        {
+                            isEquWithExpression = true;
+                        }
+                    }
+
+                    // Si es EQU con expresión en fallback por error sintáctico, procesarlo para TABSIM
+                    if (isEquWithExpression)
+                    {
+                        var intermediateLine = new IntermediateLine
+                        {
+                            LineNumber = IntermediateLines.Count + 1,
+                            SourceLine = antlrLine,
+                            Address = CONTLOC,
+                            Label = parsedLine.Label,
+                            Operation = parsedLine.Operation,
+                            Operand = parsedLine.Operand,
+                            Comment = parsedLine.Comment,
+                            Format = 0,
+                            AddressingMode = "-"
+                        };
+
+                        if (TABSIM_EXT.ContainsKey(parsedLine.Label))
+                        {
+                            string dupMsg = $"Símbolo duplicado: {parsedLine.Label}";
+                            intermediateLine.Error = dupMsg;
+                            Errors.Add(new SICXEError(antlrLine, 0, dupMsg, SICXEErrorType.Semantico));
+                        }
+                        else
+                        {
+                            if (HasRelativeSymbolsFromDifferentBlocks(parsedLine.Operand) || IsStrictInvalidEquExpression(parsedLine.Operand))
+                            {
+                                const string blockExprError = "Error: Expresión (diferentes bloques)";
+                                TABSIM_EXT.AddSymbol(parsedLine.Label, -1, SymbolType.Absolute, BLOCKS.CurrentBlockName, BLOCKS.CurrentBlockNumber);
+                                intermediateLine.Error = blockExprError;
+                                intermediateLine.SemanticValue = "FFFFh";
+                                Errors.Add(new SICXEError(antlrLine, 0, blockExprError, SICXEErrorType.Semantico));
+
+                                intermediateLine.Increment = 0;
+                                SetCurrentBlockOnIntermediateLine(intermediateLine);
+                                IntermediateLines.Add(intermediateLine);
+                                return;
+                            }
+
+                            var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(parsedLine.Operand, CONTLOC, allowUndefinedSymbols: false);
+                            if (evalErr != null)
+                            {
+                                string expressionMsg = evalErr.Contains("más de un término relativo positivo", StringComparison.OrdinalIgnoreCase)
+                                    ? "Error: Expresión (diferentes bloques)"
+                                    : evalErr;
+                                TABSIM_EXT.AddSymbol(parsedLine.Label, -1, SymbolType.Absolute, BLOCKS.CurrentBlockName, BLOCKS.CurrentBlockNumber);
+                                intermediateLine.Error = expressionMsg;
+                                intermediateLine.SemanticValue = "FFFFh";
+                                Errors.Add(new SICXEError(antlrLine, 0, expressionMsg, SICXEErrorType.Semantico));
+                            }
+                            else
+                            {
+                                TABSIM_EXT.AddSymbol(parsedLine.Label, evalVal, evalType, BLOCKS.CurrentBlockName, BLOCKS.CurrentBlockNumber);
+                                intermediateLine.SemanticValue = $"{evalVal:X4}h";
+                            }
+                        }
+
+                        intermediateLine.Increment = 0;
+                        SetCurrentBlockOnIntermediateLine(intermediateLine);
+                        IntermediateLines.Add(intermediateLine);
+                        return;
                     }
 
                     // Si es ORG con expresión, procesarlo
@@ -307,6 +377,22 @@ namespace laboratorioPractica3
                             Format = 0,
                             AddressingMode = "-"
                         };
+
+                        if (!string.IsNullOrEmpty(parsedLine.Label))
+                        {
+                            if (TABSIM_EXT.ContainsKey(parsedLine.Label))
+                            {
+                                string dupMsg = $"Símbolo duplicado: {parsedLine.Label}";
+                                intermediateLine.Error = string.IsNullOrWhiteSpace(intermediateLine.Error)
+                                    ? dupMsg
+                                    : intermediateLine.Error + "; " + dupMsg;
+                                Errors.Add(new SICXEError(antlrLine, 0, dupMsg, SICXEErrorType.Semantico));
+                            }
+                            else
+                            {
+                                TABSIM_EXT.AddSymbol(parsedLine.Label, CONTLOC, SymbolType.Relative, BLOCKS.CurrentBlockName, BLOCKS.CurrentBlockNumber);
+                            }
+                        }
 
                         // Intentar evaluar la expresión ORG
                         if (!string.IsNullOrEmpty(parsedLine.Operand))
@@ -347,6 +433,22 @@ namespace laboratorioPractica3
                             Format = 0,
                             AddressingMode = "-"
                         };
+
+                        if (!string.IsNullOrEmpty(parsedLine.Label))
+                        {
+                            if (TABSIM_EXT.ContainsKey(parsedLine.Label))
+                            {
+                                string dupMsg = $"Símbolo duplicado: {parsedLine.Label}";
+                                intermediateLine.Error = string.IsNullOrWhiteSpace(intermediateLine.Error)
+                                    ? dupMsg
+                                    : intermediateLine.Error + "; " + dupMsg;
+                                Errors.Add(new SICXEError(antlrLine, 0, dupMsg, SICXEErrorType.Semantico));
+                            }
+                            else
+                            {
+                                TABSIM_EXT.AddSymbol(parsedLine.Label, CONTLOC, SymbolType.Relative, BLOCKS.CurrentBlockName, BLOCKS.CurrentBlockNumber);
+                            }
+                        }
 
                         // Intentar evaluar la expresión
                         if (!string.IsNullOrEmpty(parsedLine.Operand))
@@ -395,19 +497,31 @@ namespace laboratorioPractica3
                                 Operation = parsedLine.Operation,
                                 Operand = parsedLine.Operand,
                                 Comment = parsedLine.Comment,
-                                Format = opCodeInfo.Format,
+                                Format = parsedLine.Operation.StartsWith("+", StringComparison.OrdinalIgnoreCase) ? 4 : opCodeInfo.Format,
                                 AddressingMode = DetermineAddressingMode(parsedLine.Operand)
                             };
+
+                            if (!string.IsNullOrEmpty(parsedLine.Label))
+                            {
+                                if (TABSIM_EXT.ContainsKey(parsedLine.Label))
+                                {
+                                    string dupMsg = $"Símbolo duplicado: {parsedLine.Label}";
+                                    intermediateLine.Error = string.IsNullOrWhiteSpace(intermediateLine.Error)
+                                        ? dupMsg
+                                        : intermediateLine.Error + "; " + dupMsg;
+                                    Errors.Add(new SICXEError(antlrLine, 0, dupMsg, SICXEErrorType.Semantico));
+                                }
+                                else
+                                {
+                                    TABSIM_EXT.AddSymbol(parsedLine.Label, CONTLOC, SymbolType.Relative, BLOCKS.CurrentBlockName, BLOCKS.CurrentBlockNumber);
+                                }
+                            }
 
                             // Intentar evaluar la expresión del operando
                             if (!string.IsNullOrEmpty(parsedLine.Operand))
                             {
                                 // Quitar prefijos de modo deDireccionamiento si existen
-                                string operandForEvaluation = parsedLine.Operand;
-                                if (operandForEvaluation.StartsWith("#", StringComparison.Ordinal))
-                                    operandForEvaluation = operandForEvaluation.Substring(1);
-                                else if (operandForEvaluation.StartsWith("@", StringComparison.Ordinal))
-                                    operandForEvaluation = operandForEvaluation.Substring(1);
+                                string operandForEvaluation = NormalizeOperandForExpressionEvaluation(parsedLine.Operand);
 
                                 var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operandForEvaluation, CONTLOC, allowUndefinedSymbols: true);
                                 if (evalErr != null)
@@ -536,8 +650,11 @@ namespace laboratorioPractica3
                 BlockNumber = BLOCKS.CurrentBlockNumber
             };
             
-            // Registrar símbolos referenciados con el número de línea para rastrear errores
-            if (!string.IsNullOrEmpty(operand))
+            // Registrar símbolos referenciados con el número de línea para rastrear errores.
+            // USE no referencia símbolos de TABSIM: su operando es nombre de bloque.
+            bool isUseDirective = operationContext?.directive()?.USE() != null ||
+                                  (!string.IsNullOrEmpty(operation) && operation.Equals("USE", StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrEmpty(operand) && !isUseDirective)
                 RegisterReferencedSymbols(operand, IntermediateLines.Count + 1);
 
             // Directiva START
@@ -611,6 +728,7 @@ namespace laboratorioPractica3
             {
                 // Verificar si es WORD o BYTE con expresión como operando
                 bool isWordOrByteWithExpression = false;
+                bool isEquWithExpression = false;
                 if (!string.IsNullOrEmpty(operation))
                 {
                     string baseOp = operation.TrimStart('+');
@@ -622,10 +740,17 @@ namespace laboratorioPractica3
                     {
                         isWordOrByteWithExpression = true;
                     }
+                    else if (baseOp.Equals("EQU", StringComparison.OrdinalIgnoreCase) &&
+                             !string.IsNullOrEmpty(operand) &&
+                             (operand.Contains('*') || operand.Contains('/') || operand.Contains('+') ||
+                              operand.Contains('-') || operand.Contains('(') || operand.Contains(')')))
+                    {
+                        isEquWithExpression = true;
+                    }
                 }
 
                 // Si NO es WORD/BYTE con expresión, retorna sin incrementar
-                if (!isWordOrByteWithExpression)
+                if (!isWordOrByteWithExpression && !isEquWithExpression)
                 {
                     // NO insertar etiqueta en TABSIM cuando hay error sintáctico
                     intermediateLine2.Increment = 0;  // NO incrementar CONTLOC
@@ -640,7 +765,7 @@ namespace laboratorioPractica3
                     // NO incrementar CONTLOC para errores sintácticos
                     return;
                 }
-                // Si es WORD/BYTE con expresión, CONTINÚA PROCESANDO (NO retorna)
+                // Si es WORD/BYTE/EQU con expresión, CONTINÚA PROCESANDO (NO retorna)
                 // Limpia el error sintáctico porque se va a intentar evaluar como expresión
                 intermediateLine2.Error = "";
             }
@@ -682,7 +807,8 @@ namespace laboratorioPractica3
             // - EQU con * toma el CONTLOC (relativo)
             // - EQU con constante define simbolo absoluto
             // - EQU con expresion usa evaluador aritmetico y valida reglas de apareamiento
-            if (operationContext?.directive()?.EQU() != null)
+            if (operationContext?.directive()?.EQU() != null ||
+                (!string.IsNullOrEmpty(operation) && operation.Equals("EQU", StringComparison.OrdinalIgnoreCase)))
             {
                 if (!string.IsNullOrEmpty(label))
                 {
@@ -698,6 +824,21 @@ namespace laboratorioPractica3
                     }
                     else
                     {
+                        if (HasRelativeSymbolsFromDifferentBlocks(operand) || IsStrictInvalidEquExpression(operand))
+                        {
+                            const string blockExprError = "Error: Expresión (diferentes bloques)";
+                            TABSIM_EXT.AddSymbol(label, -1, SymbolType.Absolute, BLOCKS.CurrentBlockName, BLOCKS.CurrentBlockNumber);
+                            intermediateLine2.Error = string.IsNullOrEmpty(intermediateLine2.Error)
+                                ? blockExprError
+                                : intermediateLine2.Error + "; " + blockExprError;
+                            intermediateLine2.SemanticValue = "FFFFh";
+                            Errors.Add(new SICXEError(antlrLine, 0, blockExprError, SICXEErrorType.Semantico));
+
+                            intermediateLine2.Increment = 0;
+                            IntermediateLines.Add(intermediateLine2);
+                            return;
+                        }
+
                         // Evalua expresión para EQU y obtiene tipo (absoluto/relativo).
                         // Regla de este ensamblador: EQU NO permite referencias adelantadas;
                         // todos los símbolos usados deben estar previamente definidos en TABSIM.
@@ -805,11 +946,7 @@ namespace laboratorioPractica3
                  operand.Contains('-') || operand.Contains('(') || operand.Contains(')')))
             {
                 // Quitar prefijos de modo de direccionamiento si existen
-                string operandForEvaluation = operand;
-                if (operand.StartsWith("#", StringComparison.Ordinal))
-                    operandForEvaluation = operand.Substring(1);
-                else if (operand.StartsWith("@", StringComparison.Ordinal))
-                    operandForEvaluation = operand.Substring(1);
+                string operandForEvaluation = NormalizeOperandForExpressionEvaluation(operand);
 
                 // Si la expresión aún contiene operadores después de quitar el prefijo
                 if (operandForEvaluation.Contains('*') || operandForEvaluation.Contains('/') || operandForEvaluation.Contains('+') || 
@@ -1331,10 +1468,32 @@ namespace laboratorioPractica3
             if (operand.StartsWith("@", StringComparison.Ordinal))
                 return "Indirecto";
 
-            if (operand.Contains(",X", StringComparison.OrdinalIgnoreCase))
+            if (operand.Contains(",X", StringComparison.OrdinalIgnoreCase) ||
+                operand.Contains(", X", StringComparison.OrdinalIgnoreCase) ||
+                operand.Replace(" ", string.Empty).Contains(",X", StringComparison.OrdinalIgnoreCase))
                 return "Indexado";
 
             return "Simple";
+        }
+
+        private static string NormalizeOperandForExpressionEvaluation(string operand)
+        {
+            if (string.IsNullOrWhiteSpace(operand))
+                return operand;
+
+            string value = operand.Trim();
+            if (value.StartsWith("#", StringComparison.Ordinal) || value.StartsWith("@", StringComparison.Ordinal))
+                value = value.Substring(1).Trim();
+
+            string compact = value.Replace(" ", string.Empty);
+            if (compact.EndsWith(",X", StringComparison.OrdinalIgnoreCase))
+            {
+                int commaIndex = compact.LastIndexOf(',');
+                if (commaIndex > 0)
+                    compact = compact.Substring(0, commaIndex);
+            }
+
+            return compact;
         }
 
         /// <summary>
@@ -1367,6 +1526,46 @@ namespace laboratorioPractica3
                 return TABSIM_EXT.TryGetValue(operand, out var symInfo) ? $"{symInfo.Value:X4}h" : operand;
 
             return "";
+        }
+
+        private bool HasRelativeSymbolsFromDifferentBlocks(string? expression)
+        {
+            if (string.IsNullOrWhiteSpace(expression))
+                return false;
+
+            var blocks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (Match match in Regex.Matches(expression, "[A-Za-z_][A-Za-z0-9_]*"))
+            {
+                string token = match.Value;
+                if (TABSIM_EXT.TryGetValue(token, out var symbolInfo) && symbolInfo.Type == SymbolType.Relative)
+                {
+                    blocks.Add(symbolInfo.BlockName ?? "Por Omision");
+                    if (blocks.Count > 1)
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool IsStrictInvalidEquExpression(string? expression)
+        {
+            if (string.IsNullOrWhiteSpace(expression))
+                return false;
+
+            if (!expression.Contains('+'))
+                return false;
+
+            foreach (Match match in Regex.Matches(expression, "[A-Za-z_][A-Za-z0-9_]*"))
+            {
+                string token = match.Value;
+                if (TABSIM_EXT.TryGetValue(token, out var symbolInfo) && symbolInfo.Type == SymbolType.Relative)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -1469,8 +1668,10 @@ namespace laboratorioPractica3
 
             foreach (var symbol in TABSIM_EXT.GetAllSymbols())
             {
+                int displayValue = symbol.Value.Type == SymbolType.Relative ? symbol.Value.RelativeValue : symbol.Value.Value;
+                string typeDisplay = symbol.Value.Type == SymbolType.Relative ? "R" : "A";
                 string bloque = $"{symbol.Value.BlockName} ({symbol.Value.BlockNumber})";
-                sb.AppendLine($"{symbol.Key,-20} | {symbol.Value.Value:X4}h{"",-13} | {symbol.Value.Value,-18} | {symbol.Value.Type,-10} | {bloque,-14}");
+                sb.AppendLine($"{symbol.Key,-20} | {(displayValue & 0xFFFF):X4}h{"",-13} | {displayValue,-18} | {typeDisplay,-10} | {bloque,-14}");
             }
             
             if (TABSIM_EXT.Count == 0)
@@ -1526,7 +1727,7 @@ namespace laboratorioPractica3
                 if (objectCodes != null && objectCodes.TryGetValue(line.LineNumber, out var oc))
                     codObj = oc;
                 
-                sb.AppendLine($"{line.LineNumber,-4} | {loc,-8} | {line.BlockName,-8} | {line.Label,-10} | {line.Operation,-10} | {line.Operand,-15} | {line.SemanticValue,-15} | {fmt,-4} | {line.AddressingMode,-12} | {codObj,-12} | {errorDisplay}");
+                sb.AppendLine($"{line.LineNumber,-4} | {loc,-8} | {line.BlockNumber,-8} | {line.Label,-10} | {line.Operation,-10} | {line.Operand,-15} | {line.SemanticValue,-15} | {fmt,-4} | {line.AddressingMode,-12} | {codObj,-12} | {errorDisplay}");
             }
             sb.AppendLine();
 
@@ -1610,7 +1811,9 @@ namespace laboratorioPractica3
             
             foreach (var symbol in TABSIM_EXT.GetAllSymbols())
             {
-                sb.AppendLine($"{symbol.Key},{symbol.Value.Value:X4},{symbol.Value.Value},{symbol.Value.Type},{symbol.Value.BlockName},{symbol.Value.BlockNumber}");
+                int displayValue = symbol.Value.Type == SymbolType.Relative ? symbol.Value.RelativeValue : symbol.Value.Value;
+                string typeDisplay = symbol.Value.Type == SymbolType.Relative ? "R" : "A";
+                sb.AppendLine($"{symbol.Key},{(displayValue & 0xFFFF):X4},{displayValue},{typeDisplay},{symbol.Value.BlockName},{symbol.Value.BlockNumber}");
             }
             
             File.WriteAllText(outputPath, sb.ToString(), Encoding.UTF8);
@@ -1732,7 +1935,9 @@ namespace laboratorioPractica3
 
             foreach (var symbol in TABSIM_EXT.GetAllSymbols())
             {
-                sb.AppendLine($"\"{symbol.Key}\",\"{symbol.Value.Value:X4}\",{symbol.Value.Value},{symbol.Value.Type},{symbol.Value.BlockName},{symbol.Value.BlockNumber}");
+                int displayValue = symbol.Value.Type == SymbolType.Relative ? symbol.Value.RelativeValue : symbol.Value.Value;
+                string typeDisplay = symbol.Value.Type == SymbolType.Relative ? "R" : "A";
+                sb.AppendLine($"\"{symbol.Key}\",\"{(displayValue & 0xFFFF):X4}\",{displayValue},{typeDisplay},{symbol.Value.BlockName},{symbol.Value.BlockNumber}");
             }
 
             if (TABSIM_EXT.Count == 0)
@@ -1849,15 +2054,45 @@ namespace laboratorioPractica3
             PROGRAM_LENGTH = BLOCKS.FinalizeBlocks(START_ADDRESS);
             CONTLOC_FINAL = START_ADDRESS + PROGRAM_LENGTH;
 
+            var missingBlocks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
             // Reubicar símbolos relativos a direcciones absolutas
-            TABSIM_EXT.RelocateRelativeSymbols(blockName => BLOCKS.GetBlockStartAddress(blockName));
+            TABSIM_EXT.RelocateRelativeSymbols(blockName =>
+            {
+                if (BLOCKS.TryGetBlockStartAddress(blockName, out int startAddress))
+                    return startAddress;
+
+                string normalized = string.IsNullOrWhiteSpace(blockName) ? "Por Omision" : blockName.Trim();
+                if (missingBlocks.Add(normalized))
+                {
+                    Errors.Add(new SICXEError(0, 0, $"Bloque no encontrado durante reubicación de símbolos: '{normalized}'", SICXEErrorType.Semantico));
+                }
+                return 0;
+            });
 
             // Reubicar direcciones del archivo intermedio según su bloque
             foreach (var line in IntermediateLines)
             {
                 if (line.Address >= 0)
                 {
-                    line.Address += BLOCKS.GetBlockStartAddress(line.BlockName);
+                    if (BLOCKS.TryGetBlockStartAddress(line.BlockName, out int blockStart))
+                    {
+                        line.Address += blockStart;
+                    }
+                    else
+                    {
+                        string normalized = string.IsNullOrWhiteSpace(line.BlockName) ? "Por Omision" : line.BlockName.Trim();
+                        if (missingBlocks.Add(normalized))
+                        {
+                            Errors.Add(new SICXEError(line.SourceLine, 0, $"Bloque no encontrado durante reubicación de intermedio: '{normalized}'", SICXEErrorType.Semantico));
+                        }
+
+                        string blockErr = $"Bloque no encontrado: {normalized}";
+                        if (string.IsNullOrWhiteSpace(line.Error))
+                            line.Error = blockErr;
+                        else if (!line.Error.Contains(blockErr, StringComparison.OrdinalIgnoreCase))
+                            line.Error += "; " + blockErr;
+                    }
                 }
             }
 

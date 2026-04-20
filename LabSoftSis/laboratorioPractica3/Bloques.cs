@@ -66,6 +66,19 @@ namespace laboratorioPractica3
             return _blocks.TryGetValue(normalized, out var block) ? block.StartAddress : 0;
         }
 
+        public bool TryGetBlockStartAddress(string? blockName, out int startAddress)
+        {
+            string normalized = NormalizeBlockName(blockName);
+            if (_blocks.TryGetValue(normalized, out var block))
+            {
+                startAddress = block.StartAddress;
+                return true;
+            }
+
+            startAddress = 0;
+            return false;
+        }
+
         public IReadOnlyList<BloqueInfo> GetAllBlocks()
         {
             return _orderedBlocks.OrderBy(b => b.Number).ToList();

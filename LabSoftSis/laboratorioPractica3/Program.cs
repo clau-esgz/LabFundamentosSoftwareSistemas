@@ -2,6 +2,7 @@ using Antlr4.Runtime;
 using Antlr4.Runtime.Tree;
 using laboratorioPractica3;
 using System.Text;
+using System.Windows.Forms;
 
 /// <summary>
 /// Punto de entrada del ensamblador SIC/XE.
@@ -9,7 +10,14 @@ using System.Text;
 /// </summary>
 class Program
 {
-    static void Main(string[] args)
+    [STAThread]
+    static void Main()
+    {
+        ApplicationConfiguration.Initialize();
+        Application.Run(new Form1());
+    }
+
+    static void Main_old(string[] args)
     {
         Console.OutputEncoding = Encoding.UTF8;
 
@@ -170,6 +178,7 @@ class Program
         else
         {
             Console.WriteLine($"Modo seleccionado: {(option == "2" ? "PASO 1 - Ensamblador" : "Analisis completo")}");
+
             Console.WriteLine();
         }
 
@@ -278,7 +287,7 @@ class Program
             paso1.ProgramName,
             paso1.BaseValue);
 
-        // Paso 2: resuelve direccionamiento y genera código objeto por línea.
+        // Paso 2: resuelvedireccionamiento y genera código objeto por línea.
         paso2.ObjectCodeGeneration();
 
         // ═══════════════ MOSTRAR REPORTE COMBINADO ═══════════════
@@ -336,9 +345,17 @@ class Program
         Console.WriteLine("                    PROGRAMA OBJETO GENERADO");
         Console.WriteLine("-------------------------------------------------------------------");
         var objRecords = progObjeto.GenerarRegistros();
-        foreach (var r in objRecords)
+        const int maxConsoleObjectRecords = 100;
+        int recordsToPrint = Math.Min(maxConsoleObjectRecords, objRecords.Count);
+
+        for (int i = 0; i < recordsToPrint; i++)
         {
-            Console.WriteLine(r);
+            Console.WriteLine(objRecords[i]);
+        }
+
+        if (objRecords.Count > maxConsoleObjectRecords)
+        {
+            Console.WriteLine($"... ({objRecords.Count - maxConsoleObjectRecords} registros adicionales omitidos en consola)");
         }
 
         string reportesObjDir = Path.Combine(projectDir, "reportes_objeto");
@@ -530,6 +547,7 @@ class Program
             sb.AppendLine();
             sb.AppendLine("DETALLE DE ERRORES POR LINEA:");
             
+
 
             foreach (var error in result.Errors.OrderBy(e => e.Line))
             {

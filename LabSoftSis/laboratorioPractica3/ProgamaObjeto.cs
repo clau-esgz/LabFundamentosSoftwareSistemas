@@ -45,6 +45,7 @@ namespace laboratorioPractica3
             int inicioTexto = -1;
             string codigoTexto = "";
             int conteoBytesTexto = 0;
+            string? bloqueTextoActual = null;
 
             Action vaciarTexto = () =>
             {
@@ -63,17 +64,12 @@ namespace laboratorioPractica3
             {
                 if (string.IsNullOrWhiteSpace(linea.ObjectCode))
                 {
-                    // 3) Si hay error o directiva que no genera código y corta bloque, cerrar T vigente
-                    if (!string.IsNullOrWhiteSpace(linea.ErrorPaso2) || !string.IsNullOrWhiteSpace(linea.IntermLine.Error))
-                    {
-                        vaciarTexto();
-                        continue;
-                    }
-
+                    // 3) Directivas sin código objeto que cortan bloque de texto
                     string operacion = linea.IntermLine.Operation?.Trim().ToUpperInvariant() ?? "";
-                    if (operacion == "RESB" || operacion == "RESW" || operacion == "ORG" || operacion == "END")
+                    if (operacion == "RESB" || operacion == "RESW" || operacion == "ORG" || operacion == "END" || operacion == "USE" || operacion == "CSECT")
                     {
                         vaciarTexto();
+                        bloqueTextoActual = null;
                     }
                     continue; // Directivas sin codigo objeto
                 }
@@ -83,12 +79,14 @@ namespace laboratorioPractica3
                 string codigoLimpio = codigoCrudo.Replace("*", "");
 
                 int bytesLinea = codigoLimpio.Length / 2;
+                string bloqueLinea = linea.IntermLine.BlockName ?? "Por Omision";
 
                 bool esContiguo = (inicioTexto != -1) && ((inicioTexto + conteoBytesTexto) == linea.IntermLine.Address);
                 bool excedeLimite = (conteoBytesTexto + bytesLinea) > 30;
+                bool cambiaBloque = (inicioTexto != -1) && !string.Equals(bloqueTextoActual, bloqueLinea, StringComparison.OrdinalIgnoreCase);
 
                 // 3) Si se rompe contigüidad de memoria o excede 30 bytes, se cierra el registro de texto
-                if (inicioTexto != -1 && (!esContiguo || excedeLimite))
+                if (inicioTexto != -1 && (!esContiguo || excedeLimite || cambiaBloque))
                 {
                     vaciarTexto();
                 }
@@ -96,6 +94,7 @@ namespace laboratorioPractica3
                 if (inicioTexto == -1)
                 {
                     inicioTexto = linea.IntermLine.Address;
+                    bloqueTextoActual = bloqueLinea;
                 }
 
                 // 2) El codigo objeto se envia directamente al registro de texto
