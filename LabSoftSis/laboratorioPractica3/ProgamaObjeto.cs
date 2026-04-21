@@ -30,6 +30,8 @@ namespace laboratorioPractica3
 
         public List<string> GenerarRegistros()
         {
+            // Evidencia P5: este metodo convierte marcas '*' del codigo objeto
+            // en registros M reales con direccion y longitud en medios bytes.
             // Ensambla la salida final del módulo objeto:
             // H (header), T (texto), M (modificación) y E (fin/entrada).
             // Aquí se aplican reglas de corte de T y relocalización.
@@ -105,6 +107,8 @@ namespace laboratorioPractica3
                 // 6) Estructura para almacenar informacion de registros de modificacion
                 if (esRelocalizable)
                 {
+                    // Evidencia P5: regla de longitud para M.
+                    // WORD -> 06 medios bytes, Formato 4 -> 05 medios bytes desde addr+1.
                     int direccionMod;
                     int longitudMediosBytes;
 
@@ -129,6 +133,7 @@ namespace laboratorioPractica3
 
             vaciarTexto(); // 9) Al final se escribe el ultimo registro de texto
 
+            // Evidencia P5: emision final de registros M en formato objeto SIC/XE.
             // 9) Generar registros de modificacion antes del registro de fin
             foreach (var registro in registrosModificacion)
             {

@@ -49,6 +49,8 @@ namespace laboratorioPractica3
 
         public bool ContainsKey(string name) => _symbolTable.ContainsKey(name);
 
+        // Evidencia P2/P1: inserta simbolos con su tipo absoluto/relativo ya resuelto.
+        // Esto permite que EQU guarde no solo el valor, sino tambien la naturaleza del simbolo.
         public void AddSymbol(string name, int value, SymbolType type, string blockName = "Por Omision", int blockNumber = 0)
         {
             _symbolTable[name] = new SymbolInfo(name, value, type, blockName, blockNumber, value);
@@ -75,6 +77,8 @@ namespace laboratorioPractica3
 
         public void Clear() => _symbolTable.Clear();
 
+        // Evidencia P1/P2/P3/P4: punto de entrada del evaluador de expresiones.
+        // Se usa desde EQU, instrucciones y WORD para obtener (valor, tipo, error).
         // Evalúa expresiones aritméticas: +, -, *, /, ()
         // Parámetros:
         //   expression: la expresión a evaluar
@@ -89,6 +93,8 @@ namespace laboratorioPractica3
             return ParseExpressionTokens(expression, currentAddress, allowUndefinedSymbols);
         }
 
+        // Evidencia P1: aplica el algoritmo de apareamiento absoluto/relativo por conteo.
+        // relCount=0 => absoluto, relCount=1 => relativo, otro valor => expresion invalida.
         // Procesa los tokens de la expresión mediante parser recursivo descendente
         private (int value, SymbolType type, string? error) ParseExpressionTokens(string expression, int currentAddress, bool allowUndefinedSymbols)
         {
@@ -155,6 +161,8 @@ namespace laboratorioPractica3
             return tokens;
         }
 
+        // Evidencia P1: aqui ocurre el apareamiento principal de simbolos relativos.
+        // En '+' se suman contadores relativos; en '-' se restan para cancelar relativos.
         // Procesa sumas y restas: precedencia más baja
         // Usa método de conteo de relativos:
         //   - Sumar relCount: A + B suma sus contadores relativos
@@ -189,6 +197,8 @@ namespace laboratorioPractica3
             return (leftVal, leftRelCount, null);
         }
 
+        // Evidencia P1: regla semantica SIC/XE para apareamiento.
+        // Multiplicacion y division solo aceptan operandos absolutos.
         // Procesa multiplicaciones y divisiones: precedencia más alta que +/-
         // Restricción SIC/XE: losoperandos DEBEN ser absolutos (relCount = 0)
         private (int val, int relCount, string? err) ParseMulDivInternal(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols)
@@ -224,6 +234,8 @@ namespace laboratorioPractica3
             return (leftVal, leftRelCount, null);
         }
 
+        // Evidencia P1/P2: clasifica cada termino de la expresion:
+        // numero => absoluto, '*' => relativo, simbolo => segun tabla de simbolos.
         // Procesa factores: números, símbolos, *, paréntesis y operadores unarios +/-
         private (int val, int relCount, string? err) ParseFactorInternal(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols)
         {

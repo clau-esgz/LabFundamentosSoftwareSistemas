@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -384,6 +384,9 @@ namespace laboratorioPractica3
 
         private (string ObjCode, string Error) GenerateFormat4(IntermediateLine linea, OpCodeInfo infoOp)
         {
+            // Evidencia P3: aqui se materializa el operando de instruccion (formato 4)
+            // cuando viene como expresion ya validada semantica y sintacticamente.
+            // Evidencia P5: si la expresion resulta relativa, se marca '*' para generar registro M.
             // Formato 4:
             // - campo de dirección de 20 bits
             // - si operando relativo, marca '*' para registro M
@@ -555,6 +558,8 @@ namespace laboratorioPractica3
         /// Ejemplo: WORD 3 -> 000003, WORD BUFFER-BUFEND
         private (string ObjCode, string Error) GenerateWordObjCode(string operand, int pc)
         {
+            // Evidencia P4: WORD acepta expresion como operando, la evalua y la empaqueta a 24 bits.
+            // Evidencia P5: si el resultado es relativo, agrega '*' para que ProgramaObjeto emita M.
             // WORD: empaqueta valor en 24 bits.
             // Si la expresión es relativa, agrega '*' para generar registro M en objeto.
             var (val, type, err) = _tablaSimbolos.EvaluateExpression(operand, pc);

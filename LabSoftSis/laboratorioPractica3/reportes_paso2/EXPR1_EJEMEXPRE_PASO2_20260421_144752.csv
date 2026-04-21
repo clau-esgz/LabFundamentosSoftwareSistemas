@@ -1,0 +1,30 @@
+﻿=== PASO 2 - CODIGO OBJETO ===
+NL,CONTLOC_HEX,CONTLOC_DEC,ETQ,CODOP,OPR,FMT,MOD,COD_OBJ,ERR_PASO1,ERR_PASO2,COMENTARIO
+1,"0000",0,"EJEMEXPRE","START","0H","","'-","'----","","",""
+2,"0000",0,"INICIO","EQU","19*NUMERO","","'-","'----","Símbolo no definido o valor inválido: NUMERO","Símbolo no definido o valor inválido: NUMERO",""
+3,"0000",0,"","WORD","4*(SALTO-ETIQ)+TAM","","'-","0003C3*","","",""
+4,"0003",3,"NUMERO","EQU","40","","'-","'----","","",""
+5,"0003",3,"","RESW","6","","'-","'----","","",""
+6,"0015",21,"ETIQ","CLEAR","T",2,"'-","B450","","",""
+7,"0017",23,"TAM","EQU","*","","'-","'----","","",""
+8,"0017",23,"VALOR","EQU","10*NUMERO","","'-","'----","","",""
+9,"0017",23,"","RESB","12","","'-","'----","","",""
+10,"0023",35,"","ADD","NUM,X",3,"Indexado","1BEFFF","","Error: Simbolo no encontrado en TABSIM",""
+11,"0026",38,"","LDA","#(6*NUMERO-10)",3,"Inmediato","0100E6","","",""
+12,"0029",41,"","ORG","100H","","'-","'----","","",""
+13,"0100",256,"SALTO","JLT","ETIQ",3,"Simple","3B2F12","","",""
+14,"0103",259,"","LDT","SALTO-16",3,"Simple","772FEA","","",""
+15,"0106",262,"","RESW","12","","'-","'----","","",""
+16,"012A",298,"COUNT","WORD","SALTO-(TAM-ETIQ)","","'-","0000FE*","","",""
+17,"012D",301,"EXPR","EQU","(12*(COUNT-SALTO))-(-ETIQ)","","'-","'----","","",""
+18,"012D",301,"","WORD","(SALTO-TAM+1)/2","","'-","000075","","",""
+19,"0130",304,"FINAL","'+STA","'@COUNT",4,"Indirecto","0E10012A*","","",""
+20,"0134",308,"","END","ETIQ","","'-","'----","","",""
+
+=== RESUMEN DEL PASO 2 ===
+PROPIEDAD,VALOR
+"NOMBRE_PROGRAMA","EJEMEXPRE"
+"DIR_INICIO","0000"
+"LONGITUD_PROGRAMA","0134"
+"LINEAS_CON_CODIGO",9
+"ERRORES_PASO2",1

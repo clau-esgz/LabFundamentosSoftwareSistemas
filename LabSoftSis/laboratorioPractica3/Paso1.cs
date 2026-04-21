@@ -228,6 +228,9 @@ namespace laboratorioPractica3
         }
 
         /// <summary>
+        /// Evidencia P2/P3/P4: este metodo integra el soporte de expresiones en EQU,
+        /// en operandos de instrucciones y en directivas WORD/BYTE durante Paso 1.
+        /// Evidencia P1: usa EvaluateExpression para validar apareamiento absoluto/relativo.
         /// MÉTODO PRINCIPAL DEL PASO 1: Usa el contexto de la gramática ANTLR para procesar líneas
         /// 
         /// MANEJO DE ERRORES SEGÚN ESPECIFICACIÓN:
@@ -677,6 +680,8 @@ namespace laboratorioPractica3
                 }
             }
 
+            // Evidencia P2: soporte de expresiones en EQU.
+            // Se evalua la expresion, se obtiene su tipo (absoluto/relativo) y se guarda en TABSIM.
             // Directiva EQU
             // Requisitos 3, 4 y 7:
             // - EQU con * toma el CONTLOC (relativo)
@@ -753,6 +758,8 @@ namespace laboratorioPractica3
                 return;
             }
 
+            // Evidencia P4: soporte de expresiones en WORD (y BYTE cuando aplica).
+            // Si el operando es expresion, se evalua y se conserva el valor semantico para Paso 2.
             // Directiva WORD o BYTE: intentar evaluar como expresion si es necesario
             // Requisito 9: WORD soporta expresiones en el operando
             // Verifica tanto operationContext (para casos normales) como operation (para casos con error sintáctico)
@@ -798,6 +805,8 @@ namespace laboratorioPractica3
                 }
             }
 
+            // Evidencia P3: soporte de expresiones en operandos de instrucciones.
+            // Se remueven prefijos (#/@), se evalua expresion y se registra valor semantico.
             // Para instrucciones con expresiones, evaluar el operando sin prefijos de modo
             // Requisito 8: expresiones en operandos de instrucciones formato 3 y 4
             if (!string.IsNullOrEmpty(operand) && 
