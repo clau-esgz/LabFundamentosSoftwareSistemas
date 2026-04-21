@@ -28,15 +28,15 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.codigoTextBox1 = new TextBox();
+            codigoTextBox1 = new RichTextBox();
             label1 = new Label();
             groupBox1 = new GroupBox();
-            this.ArchivoInterdataGridView1 = new DataGridView();
+            ArchivoInterdataGridView1 = new DataGridView();
             groupBox2 = new GroupBox();
             groupBox3 = new GroupBox();
-            this.TablaSimdataGridView2 = new DataGridView();
+            TablaSimdataGridView2 = new DataGridView();
             groupBox4 = new GroupBox();
-            this.RegistrostextBox2 = new TextBox();
+            RegistrostextBox2 = new TextBox();
             groupBox5 = new GroupBox();
             ErrortextBox3 = new TextBox();
             menuStrip1 = new MenuStrip();
@@ -56,24 +56,28 @@
             EnsambladoStripMenuItem4 = new ToolStripMenuItem();
             cargarToolStripMenuItem = new ToolStripMenuItem();
             simularToolStripMenuItem = new ToolStripMenuItem();
+            groupBox6 = new GroupBox();
+            tablaBlqsGridView1 = new DataGridView();
             groupBox1.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)this.ArchivoInterdataGridView1).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)ArchivoInterdataGridView1).BeginInit();
             groupBox2.SuspendLayout();
             groupBox3.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)this.TablaSimdataGridView2).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)TablaSimdataGridView2).BeginInit();
             groupBox4.SuspendLayout();
             groupBox5.SuspendLayout();
             menuStrip1.SuspendLayout();
+            groupBox6.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)tablaBlqsGridView1).BeginInit();
             SuspendLayout();
             // 
             // codigoTextBox1
             // 
-            this.codigoTextBox1.Location = new Point(6, 26);
-            this.codigoTextBox1.Multiline = true;
-            this.codigoTextBox1.Name = "codigoTextBox1";
-            this.codigoTextBox1.ScrollBars = ScrollBars.Both;
-            this.codigoTextBox1.Size = new Size(238, 501);
-            this.codigoTextBox1.TabIndex = 1;
+            codigoTextBox1.Location = new Point(6, 26);
+            codigoTextBox1.Multiline = true;
+            codigoTextBox1.Name = "codigoTextBox1";
+            codigoTextBox1.ScrollBars = ScrollBars.Both;
+            codigoTextBox1.Size = new Size(238, 501);
+            codigoTextBox1.TabIndex = 1;
             // 
             // label1
             // 
@@ -85,7 +89,7 @@
             // 
             // groupBox1
             // 
-            groupBox1.Controls.Add(this.codigoTextBox1);
+            groupBox1.Controls.Add(codigoTextBox1);
             groupBox1.Location = new Point(15, 31);
             groupBox1.Name = "groupBox1";
             groupBox1.Size = new Size(250, 537);
@@ -96,16 +100,16 @@
             // 
             // ArchivoInterdataGridView1
             // 
-            this.ArchivoInterdataGridView1.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            this.ArchivoInterdataGridView1.Location = new Point(6, 26);
-            this.ArchivoInterdataGridView1.Name = "ArchivoInterdataGridView1";
-            this.ArchivoInterdataGridView1.RowHeadersWidth = 51;
-            this.ArchivoInterdataGridView1.Size = new Size(726, 482);
-            this.ArchivoInterdataGridView1.TabIndex = 4;
+            ArchivoInterdataGridView1.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            ArchivoInterdataGridView1.Location = new Point(6, 26);
+            ArchivoInterdataGridView1.Name = "ArchivoInterdataGridView1";
+            ArchivoInterdataGridView1.RowHeadersWidth = 51;
+            ArchivoInterdataGridView1.Size = new Size(726, 482);
+            ArchivoInterdataGridView1.TabIndex = 4;
             // 
             // groupBox2
             // 
-            groupBox2.Controls.Add(this.ArchivoInterdataGridView1);
+            groupBox2.Controls.Add(ArchivoInterdataGridView1);
             groupBox2.Location = new Point(271, 44);
             groupBox2.Name = "groupBox2";
             groupBox2.Size = new Size(754, 514);
@@ -116,7 +120,7 @@
             // 
             // groupBox3
             // 
-            groupBox3.Controls.Add(this.TablaSimdataGridView2);
+            groupBox3.Controls.Add(TablaSimdataGridView2);
             groupBox3.Location = new Point(1031, 57);
             groupBox3.Name = "groupBox3";
             groupBox3.Size = new Size(338, 330);
@@ -127,16 +131,16 @@
             // 
             // TablaSimdataGridView2
             // 
-            this.TablaSimdataGridView2.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            this.TablaSimdataGridView2.Location = new Point(6, 35);
-            this.TablaSimdataGridView2.Name = "TablaSimdataGridView2";
-            this.TablaSimdataGridView2.RowHeadersWidth = 51;
-            this.TablaSimdataGridView2.Size = new Size(326, 289);
-            this.TablaSimdataGridView2.TabIndex = 0;
+            TablaSimdataGridView2.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            TablaSimdataGridView2.Location = new Point(6, 35);
+            TablaSimdataGridView2.Name = "TablaSimdataGridView2";
+            TablaSimdataGridView2.RowHeadersWidth = 51;
+            TablaSimdataGridView2.Size = new Size(326, 289);
+            TablaSimdataGridView2.TabIndex = 0;
             // 
             // groupBox4
             // 
-            groupBox4.Controls.Add(this.RegistrostextBox2);
+            groupBox4.Controls.Add(RegistrostextBox2);
             groupBox4.Location = new Point(1031, 393);
             groupBox4.Name = "groupBox4";
             groupBox4.Size = new Size(338, 165);
@@ -146,12 +150,12 @@
             // 
             // RegistrostextBox2
             // 
-            this.RegistrostextBox2.Location = new Point(6, 26);
-            this.RegistrostextBox2.Multiline = true;
-            this.RegistrostextBox2.Name = "RegistrostextBox2";
-            this.RegistrostextBox2.ScrollBars = ScrollBars.Both;
-            this.RegistrostextBox2.Size = new Size(318, 133);
-            this.RegistrostextBox2.TabIndex = 0;
+            RegistrostextBox2.Location = new Point(6, 26);
+            RegistrostextBox2.Multiline = true;
+            RegistrostextBox2.Name = "RegistrostextBox2";
+            RegistrostextBox2.ScrollBars = ScrollBars.Both;
+            RegistrostextBox2.Size = new Size(318, 133);
+            RegistrostextBox2.TabIndex = 0;
             // 
             // groupBox5
             // 
@@ -288,11 +292,31 @@
             simularToolStripMenuItem.Size = new Size(73, 24);
             simularToolStripMenuItem.Text = "Simular";
             // 
+            // groupBox6
+            // 
+            groupBox6.Controls.Add(tablaBlqsGridView1);
+            groupBox6.Location = new Point(17, 585);
+            groupBox6.Name = "groupBox6";
+            groupBox6.Size = new Size(619, 225);
+            groupBox6.TabIndex = 11;
+            groupBox6.TabStop = false;
+            groupBox6.Text = "Tabla de bloques";
+            // 
+            // tablaBlqsGridView1
+            // 
+            tablaBlqsGridView1.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            tablaBlqsGridView1.Location = new Point(6, 26);
+            tablaBlqsGridView1.Name = "tablaBlqsGridView1";
+            tablaBlqsGridView1.RowHeadersWidth = 51;
+            tablaBlqsGridView1.Size = new Size(594, 188);
+            tablaBlqsGridView1.TabIndex = 0;
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1671, 663);
+            ClientSize = new Size(1671, 822);
+            Controls.Add(groupBox6);
             Controls.Add(groupBox5);
             Controls.Add(groupBox4);
             Controls.Add(groupBox3);
@@ -306,22 +330,24 @@
             Load += Form1_Load;
             groupBox1.ResumeLayout(false);
             groupBox1.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)this.ArchivoInterdataGridView1).EndInit();
+            ((System.ComponentModel.ISupportInitialize)ArchivoInterdataGridView1).EndInit();
             groupBox2.ResumeLayout(false);
             groupBox3.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)this.TablaSimdataGridView2).EndInit();
+            ((System.ComponentModel.ISupportInitialize)TablaSimdataGridView2).EndInit();
             groupBox4.ResumeLayout(false);
             groupBox4.PerformLayout();
             groupBox5.ResumeLayout(false);
             groupBox5.PerformLayout();
             menuStrip1.ResumeLayout(false);
             menuStrip1.PerformLayout();
+            groupBox6.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)tablaBlqsGridView1).EndInit();
             ResumeLayout(false);
             PerformLayout();
         }
 
         #endregion
-        private TextBox codigoTextBox1;
+        private RichTextBox codigoTextBox1;
         private Label label1;
         private GroupBox groupBox1;
         private DataGridView ArchivoInterdataGridView1;
@@ -349,5 +375,7 @@
         private ToolStripMenuItem Paso2StripMenuItem3;
         private ToolStripSeparator toolStripSeparator2;
         private ToolStripMenuItem EnsambladoStripMenuItem4;
+        private GroupBox groupBox6;
+        private DataGridView tablaBlqsGridView1;
     }
 }

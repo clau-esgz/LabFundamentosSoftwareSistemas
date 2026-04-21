@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Antlr4.Runtime;
@@ -19,6 +20,8 @@ namespace laboratorioPractica3
         private string? _currentFilePath;
         private bool _isDirty;
         private bool _consoleReady;
+        private bool _isHighlighting;
+        private System.Windows.Forms.Timer? _highlightTimer;
 
         [DllImport("kernel32.dll")]
         private static extern bool AllocConsole();
@@ -66,10 +69,23 @@ namespace laboratorioPractica3
             TablaSimdataGridView2.AllowUserToDeleteRows = false;
             TablaSimdataGridView2.ReadOnly = true;
 
+            tablaBlqsGridView1.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells;
+            tablaBlqsGridView1.AllowUserToAddRows = false;
+            tablaBlqsGridView1.AllowUserToDeleteRows = false;
+            tablaBlqsGridView1.ReadOnly = true;
+
             codigoTextBox1.TextChanged += (_, __) =>
             {
                 _isDirty = true;
                 ActualizarTitulo();
+                ProgramarResaltado();
+            };
+
+            _highlightTimer = new System.Windows.Forms.Timer { Interval = 180 };
+            _highlightTimer.Tick += (_, __) =>
+            {
+                _highlightTimer!.Stop();
+                AplicarResaltadoSintaxis();
             };
 
             NuevoArchivo();
@@ -184,7 +200,9 @@ namespace laboratorioPractica3
             RegistrostextBox2.Clear();
             ArchivoInterdataGridView1.DataSource = null;
             TablaSimdataGridView2.DataSource = null;
+            tablaBlqsGridView1.DataSource = null;
             ActualizarTitulo();
+            AplicarResaltadoSintaxis();
         }
 
         private void AbrirArchivo()
@@ -206,6 +224,7 @@ namespace laboratorioPractica3
             _currentFilePath = ofd.FileName;
             _isDirty = false;
             ActualizarTitulo();
+            AplicarResaltadoSintaxis();
         }
 
         private bool GuardarArchivo()
@@ -416,7 +435,7 @@ namespace laboratorioPractica3
                 .OrderBy(e => e.Line)
                 .ThenBy(e => e.Column)
                 .ToList();
-            var erroresPaso1 = resultado.Paso1.ErrorList
+            var erroresPaso1 = ObtenerErroresPaso1SinDuplicar(resultado)
                 .OrderBy(e => e.Line)
                 .ThenBy(e => e.Column)
                 .ToList();
@@ -427,14 +446,23 @@ namespace laboratorioPractica3
 
             MostrarErroresPorEtapa(erroresAnalizador, erroresPaso1, incluirCodigoObjeto ? erroresPaso2 : null);
 
+            var lineasError = erroresAnalizador
+                .Concat(erroresPaso1)
+                .Concat(erroresPaso2)
+                .Select(e => e.Line)
+                .Distinct();
+            AplicarResaltadoSintaxis(lineasError);
+
             if (incluirCodigoObjeto)
             {
                 var bloques = ConstruirResumenBloques(resultado.Paso1.Lines);
-                RegistrostextBox2.Text = ConstruirTextoRegistrosYBloques(resultado.Registros ?? new List<string>(), bloques);
+                RegistrostextBox2.Text = ConstruirTextoRegistros(resultado.Registros ?? new List<string>());
+                tablaBlqsGridView1.DataSource = CrearTablaBloques(bloques);
             }
             else
             {
                 RegistrostextBox2.Text = "";
+                tablaBlqsGridView1.DataSource = null;
             }
         }
 
@@ -464,6 +492,8 @@ namespace laboratorioPractica3
                 .GroupBy(e => new { e.Line, e.Column, e.Message, e.Type })
                 .Select(g => g.First())
                 .ToList();
+
+            AplicarResaltadoSintaxis(errores.Select(e => e.Line).Distinct());
 
             return new ParseResult(tree, sourceLines, errores);
         }
@@ -534,7 +564,7 @@ namespace laboratorioPractica3
         {
             var errores = new List<SICXEError>();
             errores.AddRange(resultado.Parse.ErroresLexicoSintacticos);
-            errores.AddRange(resultado.Paso1.ErrorList);
+            errores.AddRange(ObtenerErroresPaso1SinDuplicar(resultado));
 
             if (resultado.Paso2 != null)
                 errores.AddRange(resultado.Paso2.Errors);
@@ -546,6 +576,22 @@ namespace laboratorioPractica3
                 .ThenBy(e => e.Column)
                 .ToList();
         }
+
+        private List<SICXEError> ObtenerErroresPaso1SinDuplicar(PipelineResult resultado)
+        {
+            var setAnalizador = new HashSet<string>(
+                resultado.Parse.ErroresLexicoSintacticos.Select(ClaveError),
+                StringComparer.Ordinal);
+
+            return resultado.Paso1.ErrorList
+                .Where(e => !setAnalizador.Contains(ClaveError(e)))
+                .GroupBy(ClaveError, StringComparer.Ordinal)
+                .Select(g => g.First())
+                .ToList();
+        }
+
+        private static string ClaveError(SICXEError e)
+            => $"{e.Line}|{e.Column}|{e.Type}|{e.Message}";
 
         private void MostrarErroresAnalizador(IReadOnlyList<SICXEError> erroresAnalizador)
         {
@@ -631,6 +677,92 @@ namespace laboratorioPractica3
 
         private static string SeparadorConsola(char c = '=') => new string(c, 78);
 
+        private void ProgramarResaltado()
+        {
+            if (_isHighlighting)
+                return;
+
+            _highlightTimer?.Stop();
+            _highlightTimer?.Start();
+        }
+
+        private void AplicarResaltadoSintaxis(IEnumerable<int>? lineasError = null)
+        {
+            if (_isHighlighting)
+                return;
+
+            try
+            {
+                _isHighlighting = true;
+
+                int originalStart = codigoTextBox1.SelectionStart;
+                int originalLength = codigoTextBox1.SelectionLength;
+
+                codigoTextBox1.SuspendLayout();
+                codigoTextBox1.SelectAll();
+                codigoTextBox1.SelectionColor = Color.Black;
+
+                var instrucciones = Paso1.OPTAB.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var directivas = Paso1.DIRECTIVES.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var errorSet = new HashSet<int>(lineasError ?? Enumerable.Empty<int>());
+
+                var lines = codigoTextBox1.Lines;
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    int lineNumber = i + 1;
+                    int lineStart = codigoTextBox1.GetFirstCharIndexFromLine(i);
+                    if (lineStart < 0)
+                        continue;
+
+                    string lineText = lines[i] ?? string.Empty;
+                    if (lineText.Length == 0)
+                        continue;
+
+                    if (errorSet.Contains(lineNumber))
+                    {
+                        codigoTextBox1.Select(lineStart, lineText.Length);
+                        codigoTextBox1.SelectionColor = Color.Red;
+                        continue;
+                    }
+
+                    var labelMatch = Regex.Match(lineText, @"^\s*([A-Za-z][A-Za-z0-9_]*)");
+                    if (labelMatch.Success)
+                    {
+                        int ls = lineStart + labelMatch.Groups[1].Index;
+                        int ll = labelMatch.Groups[1].Length;
+                        codigoTextBox1.Select(ls, ll);
+                        codigoTextBox1.SelectionColor = Color.Black;
+                    }
+
+                    foreach (Match m in Regex.Matches(lineText, @"\b[A-Za-z][A-Za-z0-9]*\b"))
+                    {
+                        int tokenStart = lineStart + m.Index;
+                        int tokenLength = m.Length;
+                        string token = m.Value;
+
+                        if (instrucciones.Contains(token))
+                        {
+                            codigoTextBox1.Select(tokenStart, tokenLength);
+                            codigoTextBox1.SelectionColor = Color.Blue;
+                        }
+                        else if (directivas.Contains(token))
+                        {
+                            codigoTextBox1.Select(tokenStart, tokenLength);
+                            codigoTextBox1.SelectionColor = Color.ForestGreen;
+                        }
+                    }
+                }
+
+                codigoTextBox1.Select(originalStart, originalLength);
+                codigoTextBox1.SelectionColor = Color.Black;
+                codigoTextBox1.ResumeLayout();
+            }
+            finally
+            {
+                _isHighlighting = false;
+            }
+        }
+
         private void MostrarSalidaAnalizadorEnConsola(IReadOnlyList<SICXEError> errores, string archivoErrores)
         {
             AsegurarConsola();
@@ -662,7 +794,7 @@ namespace laboratorioPractica3
                 .OrderBy(e => e.Line)
                 .ThenBy(e => e.Column)
                 .ToList();
-            var erroresPaso1 = resultado.Paso1.ErrorList
+            var erroresPaso1 = ObtenerErroresPaso1SinDuplicar(resultado)
                 .OrderBy(e => e.Line)
                 .ThenBy(e => e.Column)
                 .ToList();
@@ -825,7 +957,24 @@ namespace laboratorioPractica3
                 .ToList();
         }
 
-        private string ConstruirTextoRegistrosYBloques(IReadOnlyList<string> registros, IReadOnlyList<BloqueResumen> bloques)
+        private DataTable CrearTablaBloques(IReadOnlyList<BloqueResumen> bloques)
+        {
+            var tabla = new DataTable();
+            tabla.Columns.Add("NoBloque", typeof(int));
+            tabla.Columns.Add("Bloque", typeof(string));
+            tabla.Columns.Add("Inicio", typeof(string));
+            tabla.Columns.Add("Fin", typeof(string));
+            tabla.Columns.Add("Longitud", typeof(string));
+
+            foreach (var b in bloques)
+            {
+                tabla.Rows.Add(b.Numero, b.Nombre, b.Inicio.ToString("X4"), b.Fin.ToString("X4"), b.Longitud.ToString("X4"));
+            }
+
+            return tabla;
+        }
+
+        private string ConstruirTextoRegistros(IReadOnlyList<string> registros)
         {
             var sb = new StringBuilder();
             sb.AppendLine("=== ARCHIVO DE REGISTROS ===");
@@ -838,15 +987,6 @@ namespace laboratorioPractica3
             {
                 foreach (var r in registros)
                     sb.AppendLine(r);
-            }
-
-            sb.AppendLine();
-            sb.AppendLine("=== TABLA DE BLOQUES ===");
-            sb.AppendLine("No  Bloque              Inicio  Fin     Longitud");
-
-            foreach (var b in bloques)
-            {
-                sb.AppendLine($"{b.Numero,2}  {b.Nombre,-18} {b.Inicio:X4}    {b.Fin:X4}    {b.Longitud:X4}");
             }
 
             return sb.ToString();
