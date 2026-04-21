@@ -108,7 +108,7 @@ namespace laboratorioPractica3
                     int longitudMediosBytes;
 
                     // WORD: 3 bytes completos (06 medios bytes)
-                    if (linea.IntermLine.Operation.Equals("WORD", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(linea.IntermLine.Operation, "WORD", StringComparison.OrdinalIgnoreCase))
                     {
                         direccionMod = linea.IntermLine.Address;
                         longitudMediosBytes = 0x06;

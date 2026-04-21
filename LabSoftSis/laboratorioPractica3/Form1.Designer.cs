@@ -73,11 +73,10 @@
             // codigoTextBox1
             // 
             codigoTextBox1.Location = new Point(6, 26);
-            codigoTextBox1.Multiline = true;
             codigoTextBox1.Name = "codigoTextBox1";
-            codigoTextBox1.ScrollBars = ScrollBars.Both;
             codigoTextBox1.Size = new Size(238, 501);
             codigoTextBox1.TabIndex = 1;
+            codigoTextBox1.Text = "";
             // 
             // label1
             // 
@@ -104,7 +103,7 @@
             ArchivoInterdataGridView1.Location = new Point(6, 26);
             ArchivoInterdataGridView1.Name = "ArchivoInterdataGridView1";
             ArchivoInterdataGridView1.RowHeadersWidth = 51;
-            ArchivoInterdataGridView1.Size = new Size(726, 482);
+            ArchivoInterdataGridView1.Size = new Size(736, 482);
             ArchivoInterdataGridView1.TabIndex = 4;
             // 
             // groupBox2
@@ -112,7 +111,7 @@
             groupBox2.Controls.Add(ArchivoInterdataGridView1);
             groupBox2.Location = new Point(271, 44);
             groupBox2.Name = "groupBox2";
-            groupBox2.Size = new Size(754, 514);
+            groupBox2.Size = new Size(762, 514);
             groupBox2.TabIndex = 5;
             groupBox2.TabStop = false;
             groupBox2.Text = "Archivo Intermedio";
@@ -121,7 +120,7 @@
             // groupBox3
             // 
             groupBox3.Controls.Add(TablaSimdataGridView2);
-            groupBox3.Location = new Point(1031, 57);
+            groupBox3.Location = new Point(1051, 57);
             groupBox3.Name = "groupBox3";
             groupBox3.Size = new Size(338, 330);
             groupBox3.TabIndex = 6;
@@ -141,9 +140,9 @@
             // groupBox4
             // 
             groupBox4.Controls.Add(RegistrostextBox2);
-            groupBox4.Location = new Point(1031, 393);
+            groupBox4.Location = new Point(1051, 393);
             groupBox4.Name = "groupBox4";
-            groupBox4.Size = new Size(338, 165);
+            groupBox4.Size = new Size(338, 187);
             groupBox4.TabIndex = 8;
             groupBox4.TabStop = false;
             groupBox4.Text = "Registros";
@@ -154,15 +153,15 @@
             RegistrostextBox2.Multiline = true;
             RegistrostextBox2.Name = "RegistrostextBox2";
             RegistrostextBox2.ScrollBars = ScrollBars.Both;
-            RegistrostextBox2.Size = new Size(318, 133);
+            RegistrostextBox2.Size = new Size(318, 149);
             RegistrostextBox2.TabIndex = 0;
             // 
             // groupBox5
             // 
             groupBox5.Controls.Add(ErrortextBox3);
-            groupBox5.Location = new Point(1375, 57);
+            groupBox5.Location = new Point(649, 586);
             groupBox5.Name = "groupBox5";
-            groupBox5.Size = new Size(250, 501);
+            groupBox5.Size = new Size(631, 224);
             groupBox5.TabIndex = 9;
             groupBox5.TabStop = false;
             groupBox5.Text = "Problemas en el Código";
@@ -174,7 +173,7 @@
             ErrortextBox3.Multiline = true;
             ErrortextBox3.Name = "ErrortextBox3";
             ErrortextBox3.ScrollBars = ScrollBars.Both;
-            ErrortextBox3.Size = new Size(238, 469);
+            ErrortextBox3.Size = new Size(608, 189);
             ErrortextBox3.TabIndex = 0;
             ErrortextBox3.TextChanged += textBox3_TextChanged;
             // 
@@ -184,7 +183,7 @@
             menuStrip1.Items.AddRange(new ToolStripItem[] { archivoToolStripMenuItem, ensamblarToolStripMenuItem, cargarToolStripMenuItem, simularToolStripMenuItem });
             menuStrip1.Location = new Point(0, 0);
             menuStrip1.Name = "menuStrip1";
-            menuStrip1.Size = new Size(1671, 28);
+            menuStrip1.Size = new Size(1419, 28);
             menuStrip1.TabIndex = 10;
             menuStrip1.Text = "menuStrip1";
             // 
@@ -198,45 +197,48 @@
             // Nuevo
             // 
             Nuevo.Name = "Nuevo";
-            Nuevo.Size = new Size(189, 26);
+            Nuevo.ShortcutKeys = Keys.Control | Keys.N;
+            Nuevo.Size = new Size(224, 26);
             Nuevo.Text = "Nuevo";
             Nuevo.Click += Nuevo_Click;
             // 
             // Abrir
             // 
             Abrir.Name = "Abrir";
-            Abrir.Size = new Size(189, 26);
+            Abrir.ShortcutKeys = Keys.Control | Keys.O;
+            Abrir.Size = new Size(224, 26);
             Abrir.Text = "Abrir";
             Abrir.Click += Abrir_Click;
             // 
             // toolStripSeparator1
             // 
             toolStripSeparator1.Name = "toolStripSeparator1";
-            toolStripSeparator1.Size = new Size(186, 6);
+            toolStripSeparator1.Size = new Size(221, 6);
             // 
             // Guardar
             // 
             Guardar.Name = "Guardar";
-            Guardar.Size = new Size(189, 26);
+            Guardar.ShortcutKeys = Keys.Control | Keys.S;
+            Guardar.Size = new Size(224, 26);
             Guardar.Text = "Guardar";
             Guardar.Click += Guardar_Click;
             // 
             // GuardarComoMenu
             // 
             GuardarComoMenu.Name = "GuardarComoMenu";
-            GuardarComoMenu.Size = new Size(189, 26);
+            GuardarComoMenu.Size = new Size(224, 26);
             GuardarComoMenu.Text = "Guardar Como";
             GuardarComoMenu.Click += GuardarComoMenu_Click;
             // 
             // SalirStripSeparator2
             // 
             SalirStripSeparator2.Name = "SalirStripSeparator2";
-            SalirStripSeparator2.Size = new Size(186, 6);
+            SalirStripSeparator2.Size = new Size(221, 6);
             // 
             // salirToolStripMenuItem
             // 
             salirToolStripMenuItem.Name = "salirToolStripMenuItem";
-            salirToolStripMenuItem.Size = new Size(189, 26);
+            salirToolStripMenuItem.Size = new Size(224, 26);
             salirToolStripMenuItem.Text = "Salir";
             salirToolStripMenuItem.Click += salirToolStripMenuItem_Click;
             // 
@@ -250,21 +252,24 @@
             // toolStripMenuItem1
             // 
             toolStripMenuItem1.Name = "toolStripMenuItem1";
-            toolStripMenuItem1.Size = new Size(164, 26);
+            toolStripMenuItem1.ShortcutKeys = Keys.Control | Keys.Z;
+            toolStripMenuItem1.Size = new Size(224, 26);
             toolStripMenuItem1.Text = "Analizador";
             toolStripMenuItem1.Click += toolStripMenuItem1_Click;
             // 
             // toolStripMenuItem2
             // 
             toolStripMenuItem2.Name = "toolStripMenuItem2";
-            toolStripMenuItem2.Size = new Size(164, 26);
+            toolStripMenuItem2.ShortcutKeys = Keys.Control | Keys.Y;
+            toolStripMenuItem2.Size = new Size(224, 26);
             toolStripMenuItem2.Text = "Paso 1";
             toolStripMenuItem2.Click += toolStripMenuItem2_Click;
             // 
             // Paso2StripMenuItem3
             // 
             Paso2StripMenuItem3.Name = "Paso2StripMenuItem3";
-            Paso2StripMenuItem3.Size = new Size(164, 26);
+            Paso2StripMenuItem3.ShortcutKeys = Keys.Control | Keys.X;
+            Paso2StripMenuItem3.Size = new Size(224, 26);
             Paso2StripMenuItem3.Text = "Paso 2";
             Paso2StripMenuItem3.Click += toolStripMenuItem3_Click;
             // 
@@ -276,7 +281,8 @@
             // EnsambladoStripMenuItem4
             // 
             EnsambladoStripMenuItem4.Name = "EnsambladoStripMenuItem4";
-            EnsambladoStripMenuItem4.Size = new Size(164, 26);
+            EnsambladoStripMenuItem4.ShortcutKeys = Keys.Control | Keys.C;
+            EnsambladoStripMenuItem4.Size = new Size(224, 26);
             EnsambladoStripMenuItem4.Text = "Ensamblar";
             EnsambladoStripMenuItem4.Click += toolStripMenuItem4_Click;
             // 
@@ -315,7 +321,7 @@
             // 
             AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1671, 822);
+            ClientSize = new Size(1419, 822);
             Controls.Add(groupBox6);
             Controls.Add(groupBox5);
             Controls.Add(groupBox4);
@@ -329,7 +335,6 @@
             Text = "ENSAMBLARODR SICXE";
             Load += Form1_Load;
             groupBox1.ResumeLayout(false);
-            groupBox1.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)ArchivoInterdataGridView1).EndInit();
             groupBox2.ResumeLayout(false);
             groupBox3.ResumeLayout(false);

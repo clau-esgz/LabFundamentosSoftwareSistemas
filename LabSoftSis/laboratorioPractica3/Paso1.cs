@@ -624,7 +624,6 @@ namespace laboratorioPractica3
             string addressingMode = (format == 3 || format == 4)
                 ? DetermineAddressingModeFromGrammar(statement.operand())
                 : "-";
-            string baseOperation = isFormat4 ? operation?.Substring(1) : operation;
             
             // Construir mensaje de error si hay errores en esta línea
             string errorMsg = "";
@@ -1432,7 +1431,7 @@ namespace laboratorioPractica3
         ///    - Cada 2 dígitos hex = 1 byte
         ///    - Ejemplo: BYTE X'F1' = 1 byte, BYTE X'C1C2C3' = 2 bytes (se redondea hacia arriba)
         /// </summary>
-        private int CalculateByteSize(string operand)
+        private int CalculateByteSize(string? operand)
         {
             if (string.IsNullOrEmpty(operand))
                 return 1;
