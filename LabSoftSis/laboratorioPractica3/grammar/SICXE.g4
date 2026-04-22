@@ -25,7 +25,7 @@ label
     ;
 
 operation
-    : FORMAT4_PREFIX? instruction
+    : PLUS? instruction
     | directive
     ;
 
@@ -194,7 +194,6 @@ EXTREF  : E X T R_ E F ;
 CSECT   : C S E C T ;
 
 // --- Symbols ---
-FORMAT4_PREFIX   : '+' ;
 PREFIX_INDIRECT  : '@' ;
 PREFIX_IMMEDIATE : '#' ;
 COMMA            : ',' ;

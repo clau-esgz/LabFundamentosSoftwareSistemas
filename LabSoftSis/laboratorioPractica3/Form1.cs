@@ -328,9 +328,9 @@ namespace laboratorioPractica3
             try
             {
                 var resultado = EjecutarPipeline(runPaso2: false);
-                RefrescarVista(resultado, incluirCodigoObjeto: false);
-                ExportarSalidaPaso1(resultado);
-                MostrarSalidaPipelineEnConsola("PASO 1 SIC/XE", resultado, incluirPaso2: false);
+                RefrescarVista(resultado, incluirCodigoObjeto: false, ExecutionMode.Paso1);
+                ExportarSalidaPaso1(resultado, ExecutionMode.Paso1);
+                MostrarSalidaPipelineEnConsola("PASO 1 SIC/XE", resultado, ExecutionMode.Paso1);
                 MessageBox.Show(this, "Paso 1 ejecutado correctamente.", "Paso 1 SIC/XE", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
@@ -345,10 +345,10 @@ namespace laboratorioPractica3
             try
             {
                 var resultado = EjecutarPipeline(runPaso2: true);
-                RefrescarVista(resultado, incluirCodigoObjeto: true);
-                ExportarSalidaPaso1(resultado);
+                RefrescarVista(resultado, incluirCodigoObjeto: true, ExecutionMode.Paso2);
+                ExportarSalidaPaso1(resultado, ExecutionMode.Paso2);
                 ExportarSalidaPaso2YObjeto(resultado);
-                MostrarSalidaPipelineEnConsola("PASO 2 SIC/XE", resultado, incluirPaso2: true);
+                MostrarSalidaPipelineEnConsola("PASO 2 SIC/XE", resultado, ExecutionMode.Paso2);
                 MessageBox.Show(this, "Paso 2 ejecutado correctamente.", "Paso 2 SIC/XE", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
@@ -363,13 +363,13 @@ namespace laboratorioPractica3
             try
             {
                 var resultado = EjecutarPipeline(runPaso2: true);
-                RefrescarVista(resultado, incluirCodigoObjeto: true);
+                RefrescarVista(resultado, incluirCodigoObjeto: true, ExecutionMode.Ensamblado);
 
                 ExportarAnalizador(resultado.Parse.ErroresLexicoSintacticos);
-                ExportarSalidaPaso1(resultado);
+                ExportarSalidaPaso1(resultado, ExecutionMode.Ensamblado);
                 ExportarSalidaPaso2YObjeto(resultado);
                 ExportarTablaBloques(resultado.Paso1.Lines);
-                MostrarSalidaPipelineEnConsola("ENSAMBLADO COMPLETO", resultado, incluirPaso2: true);
+                MostrarSalidaPipelineEnConsola("ENSAMBLADO COMPLETO", resultado, ExecutionMode.Ensamblado);
 
                 MessageBox.Show(this,
                     "Ensamblado completo finalizado.\nSe generaron Errores, Intermedio, TABSIM, Objeto y Bloques.",
@@ -425,7 +425,7 @@ namespace laboratorioPractica3
             return new PipelineResult(parse, paso1, paso2, objectLines, registros);
         }
 
-        private void RefrescarVista(PipelineResult resultado, bool incluirCodigoObjeto)
+        private void RefrescarVista(PipelineResult resultado, bool incluirCodigoObjeto, ExecutionMode mode)
         {
             ArchivoInterdataGridView1.DataSource = CrearTablaIntermedio(resultado.Paso1.Lines, incluirCodigoObjeto ? resultado.ObjectLines : null);
             AplicarNumeracionDeRenglones(ArchivoInterdataGridView1);
@@ -444,7 +444,14 @@ namespace laboratorioPractica3
                 .ThenBy(e => e.Column)
                 .ToList();
 
-            MostrarErroresPorEtapa(erroresAnalizador, erroresPaso1, incluirCodigoObjeto ? erroresPaso2 : null);
+            if (mode == ExecutionMode.Ensamblado)
+            {
+                MostrarErroresUnificados(UnificarErrores(resultado));
+            }
+            else
+            {
+                MostrarErroresPorEtapa(erroresAnalizador, erroresPaso1, mode == ExecutionMode.Paso2 ? erroresPaso2 : null);
+            }
 
             var lineasError = erroresAnalizador
                 .Concat(erroresPaso1)
@@ -501,6 +508,7 @@ namespace laboratorioPractica3
         private DataTable CrearTablaIntermedio(IReadOnlyList<IntermediateLine> lines, IReadOnlyList<ObjectCodeLine>? objectLines)
         {
             var tabla = new DataTable();
+            tabla.Columns.Add(" ", typeof(int));
             tabla.Columns.Add("CP", typeof(string));
             tabla.Columns.Add("Bloque", typeof(string));
             tabla.Columns.Add("NoBloque", typeof(int));
@@ -526,13 +534,13 @@ namespace laboratorioPractica3
 
                 if (objectLines == null)
                 {
-                    tabla.Rows.Add(cp, l.BlockName, l.BlockNumber, l.Label, l.Operation, l.Operand,
+                    tabla.Rows.Add(l.LineNumber, cp, l.BlockName, l.BlockNumber, l.Label, l.Operation, l.Operand,
                         l.SemanticValue, fmt, l.AddressingMode, l.Error, l.Comment);
                 }
                 else
                 {
                     objByLine.TryGetValue(l.LineNumber, out string? codObj);
-                    tabla.Rows.Add(cp, l.BlockName, l.BlockNumber, l.Label, l.Operation, l.Operand,
+                    tabla.Rows.Add(l.LineNumber, cp, l.BlockName, l.BlockNumber, l.Label, l.Operation, l.Operand,
                         l.SemanticValue, fmt, l.AddressingMode, codObj ?? string.Empty, l.Error, l.Comment);
                 }
             }
@@ -642,6 +650,23 @@ namespace laboratorioPractica3
                 else
                     foreach (var err in erroresPaso2)
                         sb.AppendLine(err.ToString());
+            }
+
+            ErrortextBox3.Text = sb.ToString();
+        }
+
+        private void MostrarErroresUnificados(IReadOnlyList<SICXEError> errores)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("=== ERRORES ENSAMBLADO (UNIFICADOS) ===");
+            if (errores.Count == 0)
+            {
+                sb.AppendLine("Sin errores.");
+            }
+            else
+            {
+                foreach (var err in errores)
+                    sb.AppendLine(err.ToString());
             }
 
             ErrortextBox3.Text = sb.ToString();
@@ -786,7 +811,7 @@ namespace laboratorioPractica3
             }
         }
 
-        private void MostrarSalidaPipelineEnConsola(string titulo, PipelineResult resultado, bool incluirPaso2)
+        private void MostrarSalidaPipelineEnConsola(string titulo, PipelineResult resultado, ExecutionMode mode)
         {
             AsegurarConsola();
 
@@ -812,36 +837,66 @@ namespace laboratorioPractica3
             Console.WriteLine($"TABSIM (símbolos): {resultado.Paso1.SymbolTableExtended.Count}");
             Console.WriteLine();
 
-            Console.WriteLine("[Errores Analizador]");
-            if (erroresAnalizador.Count == 0) Console.WriteLine("Sin errores.");
-            foreach (var e in erroresAnalizador) Console.WriteLine(e.ToString());
-            Console.WriteLine();
-
-            Console.WriteLine("[Errores Paso 1]");
-            if (erroresPaso1.Count == 0) Console.WriteLine("Sin errores.");
-            foreach (var e in erroresPaso1) Console.WriteLine(e.ToString());
-
-            if (incluirPaso2)
+            if (mode == ExecutionMode.Ensamblado)
             {
                 Console.WriteLine();
-                Console.WriteLine("[Errores Paso 2]");
-                if (erroresPaso2.Count == 0) Console.WriteLine("Sin errores.");
-                foreach (var e in erroresPaso2) Console.WriteLine(e.ToString());
+                Console.WriteLine("[Errores Unificados]");
+                var unificados = UnificarErrores(resultado);
+                if (unificados.Count == 0) Console.WriteLine("Sin errores.");
+                foreach (var e in unificados) Console.WriteLine(e.ToString());
+            }
+            else
+            {
+                Console.WriteLine("[Errores Analizador]");
+                if (erroresAnalizador.Count == 0) Console.WriteLine("Sin errores.");
+                foreach (var e in erroresAnalizador) Console.WriteLine(e.ToString());
+                Console.WriteLine();
 
-                if (resultado.Registros != null)
+                Console.WriteLine("[Errores Paso 1]");
+                if (erroresPaso1.Count == 0) Console.WriteLine("Sin errores.");
+                foreach (var e in erroresPaso1) Console.WriteLine(e.ToString());
+
+                if (mode == ExecutionMode.Paso2)
                 {
                     Console.WriteLine();
-                    Console.WriteLine("[Registros Objeto]");
-                    foreach (var r in resultado.Registros)
-                        Console.WriteLine(r);
+                    Console.WriteLine("[Errores Paso 2]");
+                    if (erroresPaso2.Count == 0) Console.WriteLine("Sin errores.");
+                    foreach (var e in erroresPaso2) Console.WriteLine(e.ToString());
                 }
+            }
 
-                var bloques = ConstruirResumenBloques(resultado.Paso1.Lines);
+            Console.WriteLine();
+            Console.WriteLine("[Tabla de Simbolos]");
+            Console.WriteLine("Simbolo             Valor  Tipo  Bloque");
+            foreach (var kv in resultado.Paso1.SymbolTableExtended.GetAllSymbols().OrderBy(k => k.Value.Value))
+            {
+                var sym = kv.Value;
+                string tipo = sym.Type == SymbolType.Relative ? "R" : "A";
+                Console.WriteLine($"{sym.Name,-18} {sym.Value:X4}  {tipo,-4}  {sym.BlockName}");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("[Archivo Intermedio]");
+            Console.WriteLine("NL   CP    Bloque             ETQ        CODOP      OPR");
+            foreach (var l in resultado.Paso1.Lines)
+            {
+                string cp = l.Address >= 0 ? l.Address.ToString("X4") : "----";
+                Console.WriteLine($"{l.LineNumber,-4} {cp,-5} {l.BlockName,-18} {l.Label,-10} {l.Operation,-10} {l.Operand}");
+            }
+
+            var bloques = ConstruirResumenBloques(resultado.Paso1.Lines);
+            Console.WriteLine();
+            Console.WriteLine("[Tabla de Bloques]");
+            Console.WriteLine("No  Bloque              Inicio  Fin     Longitud");
+            foreach (var b in bloques)
+                Console.WriteLine($"{b.Numero,2}  {b.Nombre,-18} {b.Inicio:X4}    {b.Fin:X4}    {b.Longitud:X4}");
+
+            if (resultado.Registros != null)
+            {
                 Console.WriteLine();
-                Console.WriteLine("[Tabla de Bloques]");
-                Console.WriteLine("No  Bloque              Inicio  Fin     Longitud");
-                foreach (var b in bloques)
-                    Console.WriteLine($"{b.Numero,2}  {b.Nombre,-18} {b.Inicio:X4}    {b.Fin:X4}    {b.Longitud:X4}");
+                Console.WriteLine("[Registros Objeto]");
+                foreach (var r in resultado.Registros)
+                    Console.WriteLine(r);
             }
         }
 
@@ -874,19 +929,44 @@ namespace laboratorioPractica3
             File.WriteAllText(path, ConstruirContenidoErrores(erroresLexicoSintacticos.OrderBy(e => e.Line).ThenBy(e => e.Column).ToList(), "ANALIZADOR LÉXICO-SINTÁCTICO"));
         }
 
-        private void ExportarSalidaPaso1(PipelineResult resultado)
+        private void ExportarSalidaPaso1(PipelineResult resultado, ExecutionMode mode)
         {
             string reportesDir = Path.Combine(ObtenerDirectorioProyecto(), "reportes_paso1");
             Directory.CreateDirectory(reportesDir);
 
             string baseName = ObtenerNombreBaseFuente();
             string time = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            var errores = ObtenerErroresPorModo(resultado, mode);
 
             string csvPaso1 = Path.Combine(reportesDir, $"{baseName}_PASO1_{time}.csv");
-            resultado.Paso1.ExportToSingleCSV(csvPaso1, UnificarErrores(resultado));
+            resultado.Paso1.ExportToSingleCSV(csvPaso1, errores);
 
             string txtErrores = Path.Combine(reportesDir, $"{baseName}_ERRORES_{time}.txt");
-            File.WriteAllText(txtErrores, ConstruirContenidoErrores(UnificarErrores(resultado), "ERRORES ENSAMBLADOR"));
+            File.WriteAllText(txtErrores, ConstruirContenidoErrores(errores, mode == ExecutionMode.Ensamblado ? "ERRORES ENSAMBLADOR (UNIFICADOS)" : "ERRORES ENSAMBLADOR"));
+        }
+
+        private List<SICXEError> ObtenerErroresPorModo(PipelineResult resultado, ExecutionMode mode)
+        {
+            var erroresAnalizador = resultado.Parse.ErroresLexicoSintacticos;
+            var erroresPaso1 = ObtenerErroresPaso1SinDuplicar(resultado);
+            var erroresPaso2 = resultado.Paso2?.Errors ?? new List<SICXEError>();
+            var errores = new List<SICXEError>();
+
+            if (mode == ExecutionMode.Ensamblado)
+                return UnificarErrores(resultado);
+
+            errores.AddRange(erroresAnalizador);
+            errores.AddRange(erroresPaso1);
+
+            if (mode == ExecutionMode.Paso2)
+                errores.AddRange(erroresPaso2);
+
+            return errores
+                .GroupBy(e => new { e.Line, e.Column, e.Message, e.Type })
+                .Select(g => g.First())
+                .OrderBy(e => e.Line)
+                .ThenBy(e => e.Column)
+                .ToList();
         }
 
         private void ExportarSalidaPaso2YObjeto(PipelineResult resultado)
@@ -1061,6 +1141,13 @@ namespace laboratorioPractica3
             public int Inicio { get; }
             public int Fin { get; }
             public int Longitud { get; }
+        }
+
+        private enum ExecutionMode
+        {
+            Paso1,
+            Paso2,
+            Ensamblado
         }
     }
 }

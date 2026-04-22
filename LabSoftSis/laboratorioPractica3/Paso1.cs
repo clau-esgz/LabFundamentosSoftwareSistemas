@@ -618,7 +618,7 @@ namespace laboratorioPractica3
             }
             
             // USAR LA GRAMÁTICA para determinar el formato de instrucción
-            bool isFormat4 = operationContext?.FORMAT4_PREFIX() != null || (operation?.StartsWith("+") == true);
+            bool isFormat4 = operationContext?.PLUS() != null || (operation?.StartsWith("+") == true);
             int format = GetFormatFromGrammar(operationContext, isFormat4);
             // El modo de direccionamiento solo aplica a instrucciones de formato 3 o 4
             string addressingMode = (format == 3 || format == 4)
@@ -1294,7 +1294,7 @@ namespace laboratorioPractica3
                 if (instruction != null)
                 {
                     // Formato 4 tiene prefijo +
-                    if (operationContext.FORMAT4_PREFIX() != null)
+                    if (operationContext.PLUS() != null)
                         return 4;
 
                     // Usar las reglas de la gramática
@@ -1969,8 +1969,8 @@ namespace laboratorioPractica3
                 string errorMsg = line.Error ?? "";
                 if (allErrors != null)
                 {
-                    var lineErrors = allErrors.Where(e => e.Line == line.SourceLine);
-                    string additional = string.Join("; ", lineErrors.Select(e => e.Message));
+                    var lineErrors = allErrors.Where(e => e.Line == line.SourceLine || e.Line == line.LineNumber);
+                    string additional = string.Join("; ", lineErrors.Select(e => e.Message).Distinct());
                     if (!string.IsNullOrWhiteSpace(additional))
                         errorMsg = string.IsNullOrWhiteSpace(errorMsg) ? additional : errorMsg + "; " + additional;
                 }

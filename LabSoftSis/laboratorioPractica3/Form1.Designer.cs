@@ -72,6 +72,7 @@
             // 
             // codigoTextBox1
             // 
+            codigoTextBox1.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             codigoTextBox1.Location = new Point(6, 26);
             codigoTextBox1.Multiline = true;
             codigoTextBox1.Name = "codigoTextBox1";
@@ -89,6 +90,7 @@
             // 
             // groupBox1
             // 
+            groupBox1.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left;
             groupBox1.Controls.Add(codigoTextBox1);
             groupBox1.Location = new Point(15, 31);
             groupBox1.Name = "groupBox1";
@@ -100,6 +102,7 @@
             // 
             // ArchivoInterdataGridView1
             // 
+            ArchivoInterdataGridView1.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             ArchivoInterdataGridView1.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             ArchivoInterdataGridView1.Location = new Point(6, 26);
             ArchivoInterdataGridView1.Name = "ArchivoInterdataGridView1";
@@ -109,6 +112,7 @@
             // 
             // groupBox2
             // 
+            groupBox2.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             groupBox2.Controls.Add(ArchivoInterdataGridView1);
             groupBox2.Location = new Point(271, 44);
             groupBox2.Name = "groupBox2";
@@ -120,6 +124,7 @@
             // 
             // groupBox3
             // 
+            groupBox3.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             groupBox3.Controls.Add(TablaSimdataGridView2);
             groupBox3.Location = new Point(1031, 57);
             groupBox3.Name = "groupBox3";
@@ -131,6 +136,7 @@
             // 
             // TablaSimdataGridView2
             // 
+            TablaSimdataGridView2.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             TablaSimdataGridView2.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             TablaSimdataGridView2.Location = new Point(6, 35);
             TablaSimdataGridView2.Name = "TablaSimdataGridView2";
@@ -140,6 +146,7 @@
             // 
             // groupBox4
             // 
+            groupBox4.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             groupBox4.Controls.Add(RegistrostextBox2);
             groupBox4.Location = new Point(1031, 393);
             groupBox4.Name = "groupBox4";
@@ -150,6 +157,7 @@
             // 
             // RegistrostextBox2
             // 
+            RegistrostextBox2.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             RegistrostextBox2.Location = new Point(6, 26);
             RegistrostextBox2.Multiline = true;
             RegistrostextBox2.Name = "RegistrostextBox2";
@@ -159,6 +167,7 @@
             // 
             // groupBox5
             // 
+            groupBox5.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Right;
             groupBox5.Controls.Add(ErrortextBox3);
             groupBox5.Location = new Point(1375, 57);
             groupBox5.Name = "groupBox5";
@@ -170,6 +179,7 @@
             // 
             // ErrortextBox3
             // 
+            ErrortextBox3.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             ErrortextBox3.Location = new Point(6, 26);
             ErrortextBox3.Multiline = true;
             ErrortextBox3.Name = "ErrortextBox3";
@@ -294,6 +304,7 @@
             // 
             // groupBox6
             // 
+            groupBox6.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
             groupBox6.Controls.Add(tablaBlqsGridView1);
             groupBox6.Location = new Point(17, 585);
             groupBox6.Name = "groupBox6";
@@ -304,6 +315,7 @@
             // 
             // tablaBlqsGridView1
             // 
+            tablaBlqsGridView1.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             tablaBlqsGridView1.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             tablaBlqsGridView1.Location = new Point(6, 26);
             tablaBlqsGridView1.Name = "tablaBlqsGridView1";
