@@ -502,29 +502,39 @@ namespace laboratorioPractica3
         {
             var tabla = new DataTable();
             tabla.Columns.Add("CP", typeof(string));
-            tabla.Columns.Add("Etiqueta", typeof(string));
-            tabla.Columns.Add("Instrucción", typeof(string));
-            tabla.Columns.Add("Operando", typeof(string));
-            tabla.Columns.Add("Codigo Objeto", typeof(string));
+            tabla.Columns.Add("Bloque", typeof(string));
+            tabla.Columns.Add("NoBloque", typeof(int));
+            tabla.Columns.Add("ETQ", typeof(string));
+            tabla.Columns.Add("CODOP", typeof(string));
+            tabla.Columns.Add("OPR", typeof(string));
+            tabla.Columns.Add("VALOR_SEM", typeof(string));
+            tabla.Columns.Add("FMT", typeof(string));
+            tabla.Columns.Add("MOD", typeof(string));
 
-            var objByLine = new Dictionary<int, string>();
             if (objectLines != null)
-            {
-                foreach (var obj in objectLines)
-                {
-                    // Si hay más de un objeto por línea intermedia, conservamos el último no vacío.
-                    if (!string.IsNullOrWhiteSpace(obj.ObjectCode))
-                        objByLine[obj.IntermLine.LineNumber] = obj.ObjectCode;
-                    else if (!objByLine.ContainsKey(obj.IntermLine.LineNumber))
-                        objByLine[obj.IntermLine.LineNumber] = string.Empty;
-                }
-            }
+                tabla.Columns.Add("COD_OBJ", typeof(string));
+
+            tabla.Columns.Add("ERR", typeof(string));
+            tabla.Columns.Add("COMENTARIO", typeof(string));
+
+            var objByLine = objectLines?.ToDictionary(o => o.IntermLine.LineNumber, o => o.ObjectCode) ?? new Dictionary<int, string>();
 
             foreach (var l in lines)
             {
                 string cp = l.Address >= 0 ? l.Address.ToString("X4") : string.Empty;
-                objByLine.TryGetValue(l.LineNumber, out string? codObj);
-                tabla.Rows.Add(cp, l.Label ?? string.Empty, l.Operation ?? string.Empty, l.Operand ?? string.Empty, codObj ?? string.Empty);
+                string fmt = l.Format > 0 ? l.Format.ToString() : string.Empty;
+
+                if (objectLines == null)
+                {
+                    tabla.Rows.Add(cp, l.BlockName, l.BlockNumber, l.Label, l.Operation, l.Operand,
+                        l.SemanticValue, fmt, l.AddressingMode, l.Error, l.Comment);
+                }
+                else
+                {
+                    objByLine.TryGetValue(l.LineNumber, out string? codObj);
+                    tabla.Rows.Add(cp, l.BlockName, l.BlockNumber, l.Label, l.Operation, l.Operand,
+                        l.SemanticValue, fmt, l.AddressingMode, codObj ?? string.Empty, l.Error, l.Comment);
+                }
             }
 
             return tabla;
