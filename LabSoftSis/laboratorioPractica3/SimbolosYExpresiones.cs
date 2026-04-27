@@ -1,9 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 
 namespace laboratorioPractica3
 {
+    public class ExpressionEvaluationMetadata
+    {
+        public List<string> ExternalSymbols { get; } = new();
+        public bool HasUnpairedRelative { get; set; }
+    }
+
     // Tipos de símbolos en SIC/XE: Absoluto (constante) o Relativo (dirección)
     public enum SymbolType
     {
@@ -20,8 +27,9 @@ namespace laboratorioPractica3
         public string BlockName { get; set; }
         public int BlockNumber { get; set; }
         public int RelativeValue { get; set; }
+        public bool IsExternal { get; set; }
 
-        public SymbolInfo(string name, int value, SymbolType type, string blockName = "Por Omision", int blockNumber = 0, int? relativeValue = null)
+        public SymbolInfo(string name, int value, SymbolType type, string blockName = "Por Omision", int blockNumber = 0, int? relativeValue = null, bool isExternal = false)
         {
             Name = name;
             Value = value;
@@ -29,6 +37,7 @@ namespace laboratorioPractica3
             BlockName = blockName;
             BlockNumber = blockNumber;
             RelativeValue = relativeValue ?? value;
+            IsExternal = isExternal;
         }
 
         public override string ToString()
@@ -49,9 +58,9 @@ namespace laboratorioPractica3
 
         public bool ContainsKey(string name) => _symbolTable.ContainsKey(name);
 
-        public void AddSymbol(string name, int value, SymbolType type, string blockName = "Por Omision", int blockNumber = 0)
+        public void AddSymbol(string name, int value, SymbolType type, string blockName = "Por Omision", int blockNumber = 0, bool isExternal = false)
         {
-            _symbolTable[name] = new SymbolInfo(name, value, type, blockName, blockNumber, value);
+            _symbolTable[name] = new SymbolInfo(name, value, type, blockName, blockNumber, value, isExternal);
         }
 
         public void RelocateRelativeSymbols(Func<string, int> blockStartResolver)
@@ -69,6 +78,68 @@ namespace laboratorioPractica3
         public bool TryGetValue(string name, out SymbolInfo info)
         {
             return _symbolTable.TryGetValue(name, out info!);
+        }
+
+        public bool IsExternalSymbol(string symbolName)
+        {
+            return _symbolTable.TryGetValue(symbolName, out var info) && info.IsExternal;
+        }
+
+        public bool ContainsExternalSymbol(string? expression)
+        {
+            if (string.IsNullOrWhiteSpace(expression))
+                return false;
+
+            foreach (var token in Tokenize(expression))
+            {
+                if (_symbolTable.TryGetValue(token, out var info) && info.IsExternal)
+                    return true;
+            }
+
+            return false;
+        }
+
+        public (int value, SymbolType type, string? error, ExpressionEvaluationMetadata metadata)
+            EvaluateExpressionForObject(string? expression, int currentAddress, bool allowUndefinedSymbols = false)
+        {
+            var metadata = new ExpressionEvaluationMetadata();
+
+            if (string.IsNullOrWhiteSpace(expression))
+                return (0, SymbolType.Absolute, "Expresión vacía", metadata);
+
+            string normalizedExpression = NormalizeExternalsToZero(expression, metadata);
+            var (value, type, error) = EvaluateExpression(normalizedExpression, currentAddress, allowUndefinedSymbols);
+
+            if (error != null)
+            {
+                metadata.HasUnpairedRelative =
+                    error.Contains("término relativo", StringComparison.OrdinalIgnoreCase) ||
+                    error.Contains("más de un término relativo", StringComparison.OrdinalIgnoreCase);
+            }
+            else if (type == SymbolType.Relative)
+            {
+                metadata.HasUnpairedRelative = true;
+            }
+
+            return (value, type, error, metadata);
+        }
+
+        private string NormalizeExternalsToZero(string expression, ExpressionEvaluationMetadata metadata)
+        {
+            var tokens = Tokenize(expression);
+
+            for (int i = 0; i < tokens.Count; i++)
+            {
+                string token = tokens[i];
+                if (_symbolTable.TryGetValue(token, out var symbolInfo) && symbolInfo.IsExternal)
+                {
+                    if (!metadata.ExternalSymbols.Contains(token, StringComparer.OrdinalIgnoreCase))
+                        metadata.ExternalSymbols.Add(token);
+                    tokens[i] = "0";
+                }
+            }
+
+            return string.Concat(tokens);
         }
 
         public int Count => _symbolTable.Count;

@@ -509,6 +509,8 @@ namespace laboratorioPractica3
         {
             var tabla = new DataTable();
             tabla.Columns.Add(" ", typeof(int));
+            tabla.Columns.Add("CSECT", typeof(string));
+            tabla.Columns.Add("NoCSECT", typeof(int));
             tabla.Columns.Add("CP", typeof(string));
             tabla.Columns.Add("Bloque", typeof(string));
             tabla.Columns.Add("NoBloque", typeof(int));
@@ -518,6 +520,7 @@ namespace laboratorioPractica3
             tabla.Columns.Add("VALOR_SEM", typeof(string));
             tabla.Columns.Add("FMT", typeof(string));
             tabla.Columns.Add("MOD", typeof(string));
+            tabla.Columns.Add("Simbolo externo", typeof(string));
 
             if (objectLines != null)
                 tabla.Columns.Add("COD_OBJ", typeof(string));
@@ -531,17 +534,18 @@ namespace laboratorioPractica3
             {
                 string cp = l.Address >= 0 ? l.Address.ToString("X4") : string.Empty;
                 string fmt = l.Format > 0 ? l.Format.ToString() : string.Empty;
+                string externalMark = l.ExternalReferenceSymbols.Count > 0 ? "Sí" : string.Empty;
 
                 if (objectLines == null)
                 {
-                    tabla.Rows.Add(l.LineNumber, cp, l.BlockName, l.BlockNumber, l.Label, l.Operation, l.Operand,
-                        l.SemanticValue, fmt, l.AddressingMode, l.Error, l.Comment);
+                    tabla.Rows.Add(l.LineNumber, l.ControlSectionName, l.ControlSectionNumber, cp, l.BlockName, l.BlockNumber, l.Label, l.Operation, l.Operand,
+                        l.SemanticValue, fmt, l.AddressingMode, externalMark, l.Error, l.Comment);
                 }
                 else
                 {
                     objByLine.TryGetValue(l.LineNumber, out string? codObj);
-                    tabla.Rows.Add(l.LineNumber, cp, l.BlockName, l.BlockNumber, l.Label, l.Operation, l.Operand,
-                        l.SemanticValue, fmt, l.AddressingMode, codObj ?? string.Empty, l.Error, l.Comment);
+                    tabla.Rows.Add(l.LineNumber, l.ControlSectionName, l.ControlSectionNumber, cp, l.BlockName, l.BlockNumber, l.Label, l.Operation, l.Operand,
+                        l.SemanticValue, fmt, l.AddressingMode, externalMark, codObj ?? string.Empty, l.Error, l.Comment);
                 }
             }
 
@@ -556,13 +560,15 @@ namespace laboratorioPractica3
             tabla.Columns.Add("Tipo", typeof(string));
             tabla.Columns.Add("Bloque", typeof(string));
             tabla.Columns.Add("NoBloque", typeof(int));
+            tabla.Columns.Add("Símbolo externo", typeof(string));
 
             foreach (var kv in simbolos.GetAllSymbols().OrderBy(k => k.Value.Value))
             {
                 var sym = kv.Value;
                 string tipo = sym.Type == SymbolType.Relative ? "R" : "A";
                 string valor = sym.Value.ToString("X4");
-                tabla.Rows.Add(sym.Name, valor, tipo, sym.BlockName, sym.BlockNumber);
+                string externo = sym.IsExternal ? "Sí" : "No";
+                tabla.Rows.Add(sym.Name, valor, tipo, sym.BlockName, sym.BlockNumber, externo);
             }
 
             return tabla;

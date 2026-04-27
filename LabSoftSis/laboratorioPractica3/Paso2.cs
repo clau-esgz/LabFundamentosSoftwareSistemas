@@ -286,7 +286,7 @@ namespace laboratorioPractica3
             int targetAddress;
             SymbolType targetType;
 
-            var (evalVal, evalType, evalErr) = _tablaSimbolos.EvaluateExpression(operandoLimpio, linea.Address);
+            var (evalVal, evalType, evalErr, evalMeta) = _tablaSimbolos.EvaluateExpressionForObject(operandoLimpio, linea.Address);
             
             if (evalErr != null)
             {
@@ -423,7 +423,7 @@ namespace laboratorioPractica3
 
             bool isImmediate = (n == 0 && i == 1);
 
-            var (evalVal, evalType, evalErr) = _tablaSimbolos.EvaluateExpression(operandoLimpio, linea.Address);
+            var (evalVal, evalType, evalErr, evalMeta) = _tablaSimbolos.EvaluateExpressionForObject(operandoLimpio, linea.Address);
 
             // Si no se puede resolver el operando, reportar símbolo/operando inválido.
             if (evalErr != null)
@@ -477,7 +477,7 @@ namespace laboratorioPractica3
                 int firstByte = (infoOp.Opcode & 0xFC) | (n << 1) | i;
                 int xbpe = (x << 3) | 1; // b=0, p=0, e=1
                 int objCode = (firstByte << 24) | (xbpe << 20) | (targetAddress & 0xFFFFF);
-                string suffix = (evalType == SymbolType.Relative) ? "*" : "";
+                string suffix = (evalType == SymbolType.Relative || evalMeta.ExternalSymbols.Count > 0 || evalMeta.HasUnpairedRelative) ? "*" : "";
                 return (objCode.ToString("X8") + suffix, "");
             }
         }
@@ -552,12 +552,12 @@ namespace laboratorioPractica3
         {
             // WORD: empaqueta valor en 24 bits.
             // Si la expresión es relativa, agrega '*' para generar registro M en objeto.
-            var (val, type, err) = _tablaSimbolos.EvaluateExpression(operand, pc);
+            var (val, type, err, evalMeta) = _tablaSimbolos.EvaluateExpressionForObject(operand, pc);
             if (err != null)
                 return ("FFFFFF", "Error: " + err); // Error base para WORD invalido
 
             string code = (val & 0xFFFFFF).ToString("X6");
-            if (type == SymbolType.Relative)
+            if (type == SymbolType.Relative || evalMeta.ExternalSymbols.Count > 0 || evalMeta.HasUnpairedRelative)
                 code += "*";
 
             return (code, "");
@@ -737,12 +737,20 @@ namespace laboratorioPractica3
         public IntermediateLine IntermLine { get; }
         public string ObjectCode { get; }
         public string ErrorPaso2 { get; }
+        public string SectionName { get; }
+        public int SectionNumber { get; }
+        public bool RequiresModification { get; }
+        public List<string> ExternalReferenceSymbols { get; }
 
         public ObjectCodeLine(IntermediateLine intermLine, string objectCode, string errorPaso2)
         {
             IntermLine = intermLine;
             ObjectCode = objectCode;
             ErrorPaso2 = errorPaso2;
+            SectionName = intermLine.ControlSectionName;
+            SectionNumber = intermLine.ControlSectionNumber;
+            RequiresModification = intermLine.RequiresModification;
+            ExternalReferenceSymbols = new List<string>(intermLine.ExternalReferenceSymbols);
         }
     }
 }

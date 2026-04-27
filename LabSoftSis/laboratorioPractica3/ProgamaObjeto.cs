@@ -30,114 +30,162 @@ namespace laboratorioPractica3
 
         public List<string> GenerarRegistros()
         {
-            // Ensambla la salida final del módulo objeto:
-            // H (header), T (texto), M (modificación) y E (fin/entrada).
-            // Aquí se aplican reglas de corte de T y relocalización.
             var registros = new List<string>();
-            var registrosModificacion = new List<RegistroModificacion>();
+            var lineasPorSeccion = _lineasCodigoObjeto
+                .GroupBy(l => (l.SectionName ?? "Por Omision", l.SectionNumber))
+                .OrderBy(g => g.Key.Item2)
+                .ThenBy(g => g.Min(x => x.IntermLine.LineNumber))
+                .ToList();
 
-            // 1) Registro H (Encabezado): nombre + direccion inicio + longitud
-            // Nombre justificado a la izquierda con espacios (6 caracteres)
-            string nombrePrograma = (_nombrePrograma ?? "").PadRight(6).Substring(0, 6);
-            registros.Add($"H{nombrePrograma}{_direccionInicio:X6}{_longitudPrograma:X6}");
-
-            // 2) Registros T (Texto) y M (Modificacion)
-            int inicioTexto = -1;
-            string codigoTexto = "";
-            int conteoBytesTexto = 0;
-            string? bloqueTextoActual = null;
-
-            Action vaciarTexto = () =>
+            foreach (var grupo in lineasPorSeccion)
             {
-                // Cierra un bloque T en construcción respetando formato:
-                // T + dirección inicio + longitud + bytes objeto concatenados.
-                if (conteoBytesTexto > 0)
+                string sectionName = string.IsNullOrWhiteSpace(grupo.Key.Item1) ? "Por Omision" : grupo.Key.Item1;
+                var lineasSeccion = grupo.OrderBy(l => l.IntermLine.LineNumber).ToList();
+
+                int sectionStart = lineasSeccion
+                    .Where(l => l.IntermLine.Address >= 0)
+                    .Select(l => l.IntermLine.Address)
+                    .DefaultIfEmpty(_direccionInicio)
+                    .Min();
+
+                int sectionEnd = lineasSeccion
+                    .Where(l => l.IntermLine.Address >= 0)
+                    .Select(l => l.IntermLine.Address + Math.Max(0, l.IntermLine.Increment))
+                    .DefaultIfEmpty(sectionStart)
+                    .Max();
+
+                int sectionLength = Math.Max(0, sectionEnd - sectionStart);
+                string nombreH = sectionName.PadRight(6).Substring(0, 6);
+                registros.Add($"H{nombreH}{sectionStart:X6}{sectionLength:X6}");
+
+                var extDefSymbols = new List<string>();
+                var extRefSymbols = new List<string>();
+                foreach (var linea in lineasSeccion)
                 {
+                    string op = linea.IntermLine.Operation?.Trim().ToUpperInvariant() ?? string.Empty;
+                    if (op == "EXTDEF")
+                    {
+                        extDefSymbols.AddRange(ParseSymbolList(linea.IntermLine.Operand));
+                    }
+                    else if (op == "EXTREF")
+                    {
+                        extRefSymbols.AddRange(ParseSymbolList(linea.IntermLine.Operand));
+                    }
+                }
+
+                extDefSymbols = extDefSymbols.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                extRefSymbols = extRefSymbols.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+                if (extDefSymbols.Count > 0)
+                {
+                    var dBuilder = new StringBuilder("D");
+                    foreach (var symbol in extDefSymbols)
+                    {
+                        var defLine = lineasSeccion.FirstOrDefault(l =>
+                            string.Equals(l.IntermLine.Label, symbol, StringComparison.OrdinalIgnoreCase));
+                        int relAddr = defLine == null ? 0 : Math.Max(0, defLine.IntermLine.Address - sectionStart);
+                        dBuilder.Append(symbol.PadRight(6).Substring(0, 6));
+                        dBuilder.Append(relAddr.ToString("X6"));
+                    }
+                    registros.Add(dBuilder.ToString());
+                }
+
+                if (extRefSymbols.Count > 0)
+                {
+                    var rBuilder = new StringBuilder("R");
+                    foreach (var symbol in extRefSymbols)
+                    {
+                        rBuilder.Append(symbol.PadRight(6).Substring(0, 6));
+                    }
+                    registros.Add(rBuilder.ToString());
+                }
+
+                int inicioTexto = -1;
+                string codigoTexto = string.Empty;
+                int conteoBytesTexto = 0;
+
+                void VaciarTexto()
+                {
+                    if (conteoBytesTexto <= 0)
+                        return;
                     registros.Add($"T{inicioTexto:X6}{conteoBytesTexto:X2}{codigoTexto}");
-                    codigoTexto = "";
-                    conteoBytesTexto = 0;
                     inicioTexto = -1;
+                    codigoTexto = string.Empty;
+                    conteoBytesTexto = 0;
                 }
-            };
 
-            foreach (var linea in _lineasCodigoObjeto)
-            {
-                if (string.IsNullOrWhiteSpace(linea.ObjectCode))
+                var registrosModificacion = new List<RegistroModificacion>();
+
+                foreach (var linea in lineasSeccion)
                 {
-                    // 3) Directivas sin código objeto que cortan bloque de texto
-                    string operacion = linea.IntermLine.Operation?.Trim().ToUpperInvariant() ?? "";
-                    if (operacion == "RESB" || operacion == "RESW" || operacion == "ORG" || operacion == "END" || operacion == "USE" || operacion == "CSECT")
+                    if (string.IsNullOrWhiteSpace(linea.ObjectCode))
                     {
-                        vaciarTexto();
-                        bloqueTextoActual = null;
-                    }
-                    continue; // Directivas sin codigo objeto
-                }
-
-                string codigoCrudo = linea.ObjectCode;
-                bool esRelocalizable = codigoCrudo.EndsWith("*");
-                string codigoLimpio = codigoCrudo.Replace("*", "");
-
-                int bytesLinea = codigoLimpio.Length / 2;
-                string bloqueLinea = linea.IntermLine.BlockName ?? "Por Omision";
-
-                bool esContiguo = (inicioTexto != -1) && ((inicioTexto + conteoBytesTexto) == linea.IntermLine.Address);
-                bool excedeLimite = (conteoBytesTexto + bytesLinea) > 30;
-                bool cambiaBloque = (inicioTexto != -1) && !string.Equals(bloqueTextoActual, bloqueLinea, StringComparison.OrdinalIgnoreCase);
-
-                // 3) Si se rompe contigüidad de memoria o excede 30 bytes, se cierra el registro de texto
-                if (inicioTexto != -1 && (!esContiguo || excedeLimite || cambiaBloque))
-                {
-                    vaciarTexto();
-                }
-
-                if (inicioTexto == -1)
-                {
-                    inicioTexto = linea.IntermLine.Address;
-                    bloqueTextoActual = bloqueLinea;
-                }
-
-                // 2) El codigo objeto se envia directamente al registro de texto
-                codigoTexto += codigoLimpio;
-                conteoBytesTexto += bytesLinea;
-
-                // 6) Estructura para almacenar informacion de registros de modificacion
-                if (esRelocalizable)
-                {
-                    int direccionMod;
-                    int longitudMediosBytes;
-
-                    // WORD: 3 bytes completos (06 medios bytes)
-                    if (string.Equals(linea.IntermLine.Operation, "WORD", StringComparison.OrdinalIgnoreCase))
-                    {
-                        direccionMod = linea.IntermLine.Address;
-                        longitudMediosBytes = 0x06;
-                    }
-                    else // Formato 4: modificar 20 bits de direccion (05 medios bytes)
-                    {
-                        direccionMod = linea.IntermLine.Address + 1;
-                        longitudMediosBytes = 0x05;
+                        string operacion = linea.IntermLine.Operation?.Trim().ToUpperInvariant() ?? string.Empty;
+                        if (operacion is "RESB" or "RESW" or "ORG" or "END" or "USE" or "CSECT")
+                            VaciarTexto();
+                        continue;
                     }
 
-                    registrosModificacion.Add(new RegistroModificacion(
-                        direccionMod,
-                        longitudMediosBytes,
-                        nombrePrograma));
+                    string codigoCrudo = linea.ObjectCode;
+                    string codigoLimpio = codigoCrudo.Replace("*", "");
+                    int bytesLinea = codigoLimpio.Length / 2;
+
+                    bool esContiguo = (inicioTexto != -1) && ((inicioTexto + conteoBytesTexto) == linea.IntermLine.Address);
+                    bool excedeLimite = (conteoBytesTexto + bytesLinea) > 30;
+                    if (inicioTexto != -1 && (!esContiguo || excedeLimite))
+                        VaciarTexto();
+
+                    if (inicioTexto == -1)
+                        inicioTexto = linea.IntermLine.Address;
+
+                    codigoTexto += codigoLimpio;
+                    conteoBytesTexto += bytesLinea;
+
+                    bool requiereM = linea.RequiresModification || codigoCrudo.EndsWith("*", StringComparison.Ordinal);
+                    if (!requiereM)
+                        continue;
+
+                    int direccionMod = string.Equals(linea.IntermLine.Operation, "WORD", StringComparison.OrdinalIgnoreCase)
+                        ? linea.IntermLine.Address
+                        : linea.IntermLine.Address + 1;
+                    int longitudHalfBytes = string.Equals(linea.IntermLine.Operation, "WORD", StringComparison.OrdinalIgnoreCase) ? 0x06 : 0x05;
+
+                    if (linea.ExternalReferenceSymbols.Count > 0)
+                    {
+                        foreach (var ext in linea.ExternalReferenceSymbols.Distinct(StringComparer.OrdinalIgnoreCase))
+                        {
+                            registrosModificacion.Add(new RegistroModificacion(direccionMod, longitudHalfBytes, ext));
+                        }
+                    }
+                    else
+                    {
+                        registrosModificacion.Add(new RegistroModificacion(direccionMod, longitudHalfBytes, sectionName));
+                    }
+                }
+
+                VaciarTexto();
+
+                foreach (var registro in registrosModificacion)
+                {
+                    registros.Add($"M{registro.Direccion:X6}{registro.LongitudMediosBytes:X2}+{registro.Nombre}");
                 }
             }
 
-            vaciarTexto(); // 9) Al final se escribe el ultimo registro de texto
-
-            // 9) Generar registros de modificacion antes del registro de fin
-            foreach (var registro in registrosModificacion)
-            {
-                registros.Add($"M{registro.Direccion:X6}{registro.LongitudMediosBytes:X2}+{registro.Nombre}");
-            }
-
-            // 4) Registro E (Fin)
             registros.Add($"E{_direccionEjecucion:X6}");
 
             return registros;
+        }
+
+        private static List<string> ParseSymbolList(string? operand)
+        {
+            if (string.IsNullOrWhiteSpace(operand))
+                return new List<string>();
+
+            return operand
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .Where(s => !string.IsNullOrEmpty(s))
+                .ToList();
         }
 
         public void ExportarACSV(string filePath)
