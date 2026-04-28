@@ -2109,14 +2109,16 @@ namespace laboratorioPractica3
 
                 sb.AppendLine();
                 sb.AppendLine("  - TABLA DE BLOQUES (TABBLK)");
-                sb.AppendLine($"    {"NUM",-6} | {"NOMBRE",-12} | {"DIR_INI_HEX",-12} | {"DIR_INI_DEC",-12} | {"LONG_HEX",-10} | {"LONG_DEC",-10}");
-                sb.AppendLine("    " + new string('-', 80));
+                sb.AppendLine($"    {"#",-4} | {"NUM",-6} | {"NOMBRE",-12} | {"DIR_INI_HEX",-12} | {"DIR_INI_DEC",-12} | {"LONG_HEX",-10} | {"LONG_DEC",-10}");
+                sb.AppendLine("    " + new string('-', 87));
                 var blks = TABBLK_BY_CSECT.ContainsKey(sec) ? TABBLK_BY_CSECT[sec] : new List<BloqueInfo>();
                 if (blks != null && blks.Count > 0)
                 {
+                    int row = 1;
                     foreach (var block in blks)
                     {
-                        sb.AppendLine($"    {block.Number,-6} | {block.Name,-12} | {block.StartAddress:X4}h{"",-7} | {block.StartAddress,-12} | {block.Length:X4}h{"",-5} | {block.Length,-10}");
+                        sb.AppendLine($"    {row,-4} | {block.Number,-6} | {block.Name,-12} | {block.StartAddress:X4}h{"",-7} | {block.StartAddress,-12} | {block.Length:X4}h{"",-5} | {block.Length,-10}");
+                        row++;
                     }
                 }
                 else

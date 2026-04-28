@@ -63,6 +63,7 @@ namespace laboratorioPractica3
             ArchivoInterdataGridView1.RowHeadersVisible = true;
             ArchivoInterdataGridView1.RowHeadersWidthSizeMode = DataGridViewRowHeadersWidthSizeMode.DisableResizing;
             ArchivoInterdataGridView1.RowHeadersWidth = 40;
+            ArchivoInterdataGridView1.RowPrePaint += ArchivoInterdataGridView1_RowPrePaint;
 
             TablaSimdataGridView2.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells;
             TablaSimdataGridView2.AllowUserToAddRows = false;
@@ -224,6 +225,13 @@ namespace laboratorioPractica3
             codigoTextBox1.Text = File.ReadAllText(ofd.FileName);
             _currentFilePath = ofd.FileName;
             _isDirty = false;
+            
+            ErrortextBox3.Clear();
+            RegistrostextBox2.Clear();
+            ArchivoInterdataGridView1.DataSource = null;
+            TablaSimdataGridView2.DataSource = null;
+            tablaBlqsGridView1.DataSource = null;
+            
             ActualizarTitulo();
             AplicarResaltadoSintaxis();
         }
@@ -430,6 +438,9 @@ namespace laboratorioPractica3
         {
             ArchivoInterdataGridView1.DataSource = CrearTablaIntermedio(resultado.Paso1.Lines, incluirCodigoObjeto ? resultado.ObjectLines : null);
             AplicarNumeracionDeRenglones(ArchivoInterdataGridView1);
+            if (ArchivoInterdataGridView1.Columns.Contains("TipoFormato"))
+                ArchivoInterdataGridView1.Columns["TipoFormato"].Visible = false;
+            
             TablaSimdataGridView2.DataSource = CrearTablaSimbolos(resultado.Paso1.SymbolTableExtended);
             if (TablaSimdataGridView2.Columns.Contains("EsCabecera"))
                 TablaSimdataGridView2.Columns["EsCabecera"].Visible = false;
@@ -524,6 +535,7 @@ namespace laboratorioPractica3
             tabla.Columns.Add("FMT", typeof(string));
             tabla.Columns.Add("MOD", typeof(string));
             tabla.Columns.Add("Simbolo externo", typeof(string));
+            tabla.Columns.Add("TipoFormato", typeof(string));
 
             if (objectLines != null)
                 tabla.Columns.Add("COD_OBJ", typeof(string));
@@ -538,17 +550,29 @@ namespace laboratorioPractica3
                 string cp = l.Address >= 0 ? l.Address.ToString("X4") : string.Empty;
                 string fmt = l.Format > 0 ? l.Format.ToString() : string.Empty;
                 string externalMark = l.ExternalReferenceSymbols.Count > 0 ? "Sí" : string.Empty;
+                
+                // Determinar el tipo de formato para aplicar estilos
+                string tipoFormato = "Normal";
+                string baseOperation = (l.Operation ?? string.Empty).TrimStart('+').ToUpperInvariant();
+                if (baseOperation == "START" || baseOperation == "CSECT")
+                    tipoFormato = "StartCsect";
+                else if (baseOperation == "USE")
+                    tipoFormato = "Use";
+                else if (baseOperation == "EXTREF")
+                    tipoFormato = "Extref";
+                else if (baseOperation == "EXTDEF")
+                    tipoFormato = "Extdef";
 
                 if (objectLines == null)
                 {
                     tabla.Rows.Add(l.LineNumber, l.ControlSectionName, l.ControlSectionNumber, cp, l.BlockName, l.BlockNumber, l.Label, l.Operation, l.Operand,
-                        l.SemanticValue, fmt, l.AddressingMode, externalMark, l.Error, l.Comment);
+                        l.SemanticValue, fmt, l.AddressingMode, externalMark, tipoFormato, l.Error, l.Comment);
                 }
                 else
                 {
                     objByLine.TryGetValue(l.LineNumber, out string? codObj);
                     tabla.Rows.Add(l.LineNumber, l.ControlSectionName, l.ControlSectionNumber, cp, l.BlockName, l.BlockNumber, l.Label, l.Operation, l.Operand,
-                        l.SemanticValue, fmt, l.AddressingMode, externalMark, codObj ?? string.Empty, l.Error, l.Comment);
+                        l.SemanticValue, fmt, l.AddressingMode, externalMark, tipoFormato, codObj ?? string.Empty, l.Error, l.Comment);
                 }
             }
 
@@ -583,7 +607,7 @@ namespace laboratorioPractica3
                 foreach (var sym in group)
                 {
                     string tipo = sym.Type == SymbolType.Relative ? "R" : "A";
-                    string valor = sym.Value.ToString("X4");
+                    string valor = sym.IsExternal ? "------" : sym.Value.ToString("X4");
                     string externo = sym.IsExternal ? "Sí" : "No";
                     tabla.Rows.Add(string.Empty, sym.Name, valor, tipo, sym.BlockName, sym.BlockNumber, externo, false);
                 }
@@ -617,6 +641,78 @@ namespace laboratorioPractica3
                     // reset to default
                     row.DefaultCellStyle.BackColor = dgv.DefaultCellStyle.BackColor;
                     row.DefaultCellStyle.Font = dgv.DefaultCellStyle.Font;
+                }
+            }
+            catch
+            {
+                // no-op: defensivo para evitar excepciones de renderizado
+            }
+        }
+
+        private void ArchivoInterdataGridView1_RowPrePaint(object? sender, DataGridViewRowPrePaintEventArgs e)
+        {
+            if (sender is not DataGridView dgv) return;
+            if (e.RowIndex < 0 || e.RowIndex >= dgv.Rows.Count) return;
+
+            var row = dgv.Rows[e.RowIndex];
+            try
+            {
+                if (dgv.Columns.Contains("TipoFormato"))
+                {
+                    var tipoFormatoCol = dgv.Columns["TipoFormato"];
+                    var tipoCell = row.Cells[tipoFormatoCol.Index];
+                    
+                    if (tipoCell?.Value is string tipoFormato)
+                    {
+                        if (tipoFormato == "StartCsect")
+                        {
+                            row.DefaultCellStyle.BackColor = Color.AliceBlue;
+                            row.DefaultCellStyle.Font = new Font(dgv.Font, FontStyle.Bold);
+                            row.DefaultCellStyle.ForeColor = Color.Blue;
+                            row.HeaderCell.Style.Font = new Font(dgv.Font, FontStyle.Bold);
+                            row.HeaderCell.Style.ForeColor = Color.Blue;
+                        }
+                        else if (tipoFormato == "Use")
+                        {
+                            row.DefaultCellStyle.BackColor = Color.LightGreen;
+                            row.DefaultCellStyle.Font = new Font(dgv.Font, FontStyle.Bold);
+                            row.DefaultCellStyle.ForeColor = Color.Green;
+                            row.HeaderCell.Style.Font = new Font(dgv.Font, FontStyle.Bold);
+                            row.HeaderCell.Style.ForeColor = Color.Green;
+                        }
+                        else if (tipoFormato == "Extref" || tipoFormato == "Extdef")
+                        {
+                            // Solo colorear el CODOP en verde y negrita
+                            if (dgv.Columns.Contains("CODOP"))
+                            {
+                                var codopCell = row.Cells[dgv.Columns["CODOP"].Index];
+                                codopCell.Style.Font = new Font(dgv.Font, FontStyle.Bold);
+                                codopCell.Style.ForeColor = Color.Green;
+                            }
+                            // Colorear el renglón encabezado (número de línea) también en verde
+                            row.HeaderCell.Style.ForeColor = Color.Green;
+                            row.HeaderCell.Style.Font = new Font(dgv.Font, FontStyle.Bold);
+                        }
+                        else
+                        {
+                            // Normal
+                            row.DefaultCellStyle.BackColor = dgv.DefaultCellStyle.BackColor;
+                            row.DefaultCellStyle.Font = dgv.DefaultCellStyle.Font;
+                            row.DefaultCellStyle.ForeColor = dgv.DefaultCellStyle.ForeColor;
+                            row.HeaderCell.Style.ForeColor = Color.Black;
+                            row.HeaderCell.Style.Font = dgv.Font;
+                        }
+                        row.DefaultCellStyle.SelectionBackColor = row.DefaultCellStyle.BackColor;
+                    }
+                }
+                else
+                {
+                    // reset to default
+                    row.DefaultCellStyle.BackColor = dgv.DefaultCellStyle.BackColor;
+                    row.DefaultCellStyle.Font = dgv.DefaultCellStyle.Font;
+                    row.DefaultCellStyle.ForeColor = dgv.DefaultCellStyle.ForeColor;
+                    row.HeaderCell.Style.ForeColor = Color.Black;
+                    row.HeaderCell.Style.Font = dgv.Font;
                 }
             }
             catch
