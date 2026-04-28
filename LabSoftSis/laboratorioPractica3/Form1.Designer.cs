@@ -72,10 +72,10 @@
             // 
             // codigoTextBox1
             // 
-            codigoTextBox1.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            codigoTextBox1.Location = new Point(6, 26);
+            codigoTextBox1.Dock = DockStyle.Fill;
+            codigoTextBox1.Location = new Point(3, 23);
             codigoTextBox1.Name = "codigoTextBox1";
-            codigoTextBox1.Size = new Size(350, 501);
+            codigoTextBox1.Size = new Size(356, 511);
             codigoTextBox1.TabIndex = 1;
             codigoTextBox1.Text = "";
             // 
@@ -101,12 +101,12 @@
             // 
             // ArchivoInterdataGridView1
             // 
-            ArchivoInterdataGridView1.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             ArchivoInterdataGridView1.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            ArchivoInterdataGridView1.Location = new Point(6, 26);
+            ArchivoInterdataGridView1.Dock = DockStyle.Fill;
+            ArchivoInterdataGridView1.Location = new Point(3, 23);
             ArchivoInterdataGridView1.Name = "ArchivoInterdataGridView1";
             ArchivoInterdataGridView1.RowHeadersWidth = 51;
-            ArchivoInterdataGridView1.Size = new Size(726, 482);
+            ArchivoInterdataGridView1.Size = new Size(748, 488);
             ArchivoInterdataGridView1.TabIndex = 4;
             // 
             // groupBox2
@@ -127,7 +127,7 @@
             groupBox3.Controls.Add(TablaSimdataGridView2);
             groupBox3.Location = new Point(1188, 57);
             groupBox3.Name = "groupBox3";
-            groupBox3.Size = new Size(338, 330);
+            groupBox3.Size = new Size(471, 330);
             groupBox3.TabIndex = 6;
             groupBox3.TabStop = false;
             groupBox3.Text = "Tabla de simbolos";
@@ -135,42 +135,42 @@
             // 
             // TablaSimdataGridView2
             // 
-            TablaSimdataGridView2.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             TablaSimdataGridView2.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            TablaSimdataGridView2.Location = new Point(6, 35);
+            TablaSimdataGridView2.Dock = DockStyle.Fill;
+            TablaSimdataGridView2.Location = new Point(3, 23);
             TablaSimdataGridView2.Name = "TablaSimdataGridView2";
             TablaSimdataGridView2.RowHeadersWidth = 51;
-            TablaSimdataGridView2.Size = new Size(326, 289);
+            TablaSimdataGridView2.Size = new Size(465, 304);
             TablaSimdataGridView2.TabIndex = 0;
             // 
             // groupBox4
             // 
-            groupBox4.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            groupBox4.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             groupBox4.Controls.Add(RegistrostextBox2);
             groupBox4.Location = new Point(1188, 393);
             groupBox4.Name = "groupBox4";
-            groupBox4.Size = new Size(338, 165);
+            groupBox4.Size = new Size(468, 208);
             groupBox4.TabIndex = 8;
             groupBox4.TabStop = false;
             groupBox4.Text = "Registros";
             // 
             // RegistrostextBox2
             // 
-            RegistrostextBox2.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            RegistrostextBox2.Location = new Point(6, 26);
+            RegistrostextBox2.Dock = DockStyle.Fill;
+            RegistrostextBox2.Location = new Point(3, 23);
             RegistrostextBox2.Multiline = true;
             RegistrostextBox2.Name = "RegistrostextBox2";
             RegistrostextBox2.ScrollBars = ScrollBars.Both;
-            RegistrostextBox2.Size = new Size(318, 133);
+            RegistrostextBox2.Size = new Size(462, 182);
             RegistrostextBox2.TabIndex = 0;
             // 
             // groupBox5
             // 
-            groupBox5.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Right;
+            groupBox5.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             groupBox5.Controls.Add(ErrortextBox3);
-            groupBox5.Location = new Point(680, 611);
+            groupBox5.Location = new Point(665, 607);
             groupBox5.Name = "groupBox5";
-            groupBox5.Size = new Size(764, 186);
+            groupBox5.Size = new Size(861, 200);
             groupBox5.TabIndex = 9;
             groupBox5.TabStop = false;
             groupBox5.Text = "Problemas en el Código";
@@ -178,12 +178,12 @@
             // 
             // ErrortextBox3
             // 
-            ErrortextBox3.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            ErrortextBox3.Location = new Point(6, 26);
+            ErrortextBox3.Dock = DockStyle.Fill;
+            ErrortextBox3.Location = new Point(3, 23);
             ErrortextBox3.Multiline = true;
             ErrortextBox3.Name = "ErrortextBox3";
             ErrortextBox3.ScrollBars = ScrollBars.Both;
-            ErrortextBox3.Size = new Size(752, 154);
+            ErrortextBox3.Size = new Size(855, 174);
             ErrortextBox3.TabIndex = 0;
             ErrortextBox3.TextChanged += textBox3_TextChanged;
             // 
@@ -314,12 +314,12 @@
             // 
             // tablaBlqsGridView1
             // 
-            tablaBlqsGridView1.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             tablaBlqsGridView1.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            tablaBlqsGridView1.Location = new Point(6, 26);
+            tablaBlqsGridView1.Dock = DockStyle.Fill;
+            tablaBlqsGridView1.Location = new Point(3, 23);
             tablaBlqsGridView1.Name = "tablaBlqsGridView1";
             tablaBlqsGridView1.RowHeadersWidth = 51;
-            tablaBlqsGridView1.Size = new Size(594, 188);
+            tablaBlqsGridView1.Size = new Size(613, 199);
             tablaBlqsGridView1.TabIndex = 0;
             // 
             // Form1
@@ -336,7 +336,7 @@
             Controls.Add(label1);
             Controls.Add(menuStrip1);
             MainMenuStrip = menuStrip1;
-            MinimumSize = new Size(1671, 822);
+            MinimumSize = new Size(1000, 700);
             Name = "Form1";
             Text = "ENSAMBLARODR SICXE";
             Load += Form1_Load;
