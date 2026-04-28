@@ -74,11 +74,10 @@
             // 
             codigoTextBox1.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             codigoTextBox1.Location = new Point(6, 26);
-            codigoTextBox1.Multiline = true;
             codigoTextBox1.Name = "codigoTextBox1";
-            codigoTextBox1.ScrollBars = RichTextBoxScrollBars.Both;
-            codigoTextBox1.Size = new Size(238, 501);
+            codigoTextBox1.Size = new Size(350, 501);
             codigoTextBox1.TabIndex = 1;
+            codigoTextBox1.Text = "";
             // 
             // label1
             // 
@@ -94,7 +93,7 @@
             groupBox1.Controls.Add(codigoTextBox1);
             groupBox1.Location = new Point(15, 31);
             groupBox1.Name = "groupBox1";
-            groupBox1.Size = new Size(250, 537);
+            groupBox1.Size = new Size(362, 537);
             groupBox1.TabIndex = 3;
             groupBox1.TabStop = false;
             groupBox1.Text = "Programa Fuente";
@@ -114,7 +113,7 @@
             // 
             groupBox2.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             groupBox2.Controls.Add(ArchivoInterdataGridView1);
-            groupBox2.Location = new Point(271, 44);
+            groupBox2.Location = new Point(383, 44);
             groupBox2.Name = "groupBox2";
             groupBox2.Size = new Size(754, 514);
             groupBox2.TabIndex = 5;
@@ -126,7 +125,7 @@
             // 
             groupBox3.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             groupBox3.Controls.Add(TablaSimdataGridView2);
-            groupBox3.Location = new Point(1031, 57);
+            groupBox3.Location = new Point(1188, 57);
             groupBox3.Name = "groupBox3";
             groupBox3.Size = new Size(338, 330);
             groupBox3.TabIndex = 6;
@@ -148,7 +147,7 @@
             // 
             groupBox4.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             groupBox4.Controls.Add(RegistrostextBox2);
-            groupBox4.Location = new Point(1031, 393);
+            groupBox4.Location = new Point(1188, 393);
             groupBox4.Name = "groupBox4";
             groupBox4.Size = new Size(338, 165);
             groupBox4.TabIndex = 8;
@@ -169,9 +168,9 @@
             // 
             groupBox5.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Right;
             groupBox5.Controls.Add(ErrortextBox3);
-            groupBox5.Location = new Point(1375, 57);
+            groupBox5.Location = new Point(680, 611);
             groupBox5.Name = "groupBox5";
-            groupBox5.Size = new Size(250, 501);
+            groupBox5.Size = new Size(764, 186);
             groupBox5.TabIndex = 9;
             groupBox5.TabStop = false;
             groupBox5.Text = "Problemas en el Código";
@@ -184,7 +183,7 @@
             ErrortextBox3.Multiline = true;
             ErrortextBox3.Name = "ErrortextBox3";
             ErrortextBox3.ScrollBars = ScrollBars.Both;
-            ErrortextBox3.Size = new Size(238, 469);
+            ErrortextBox3.Size = new Size(752, 154);
             ErrortextBox3.TabIndex = 0;
             ErrortextBox3.TextChanged += textBox3_TextChanged;
             // 
@@ -304,7 +303,7 @@
             // 
             // groupBox6
             // 
-            groupBox6.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
+            groupBox6.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             groupBox6.Controls.Add(tablaBlqsGridView1);
             groupBox6.Location = new Point(17, 585);
             groupBox6.Name = "groupBox6";
@@ -337,11 +336,11 @@
             Controls.Add(label1);
             Controls.Add(menuStrip1);
             MainMenuStrip = menuStrip1;
+            MinimumSize = new Size(1671, 822);
             Name = "Form1";
             Text = "ENSAMBLARODR SICXE";
             Load += Form1_Load;
             groupBox1.ResumeLayout(false);
-            groupBox1.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)ArchivoInterdataGridView1).EndInit();
             groupBox2.ResumeLayout(false);
             groupBox3.ResumeLayout(false);

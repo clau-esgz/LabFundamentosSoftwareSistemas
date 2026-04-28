@@ -150,16 +150,28 @@ namespace laboratorioPractica3
                         : linea.IntermLine.Address + 1;
                     int longitudHalfBytes = string.Equals(linea.IntermLine.Operation, "WORD", StringComparison.OrdinalIgnoreCase) ? 0x06 : 0x05;
 
+                    // Construir marcadores de relocalización
+                    var marcadores = new StringBuilder();
+
                     if (linea.ExternalReferenceSymbols.Count > 0)
                     {
+                        // Hay símbolos externos: agregar *SE por cada uno
                         foreach (var ext in linea.ExternalReferenceSymbols.Distinct(StringComparer.OrdinalIgnoreCase))
                         {
-                            registrosModificacion.Add(new RegistroModificacion(direccionMod, longitudHalfBytes, ext));
+                            marcadores.Append("*SE");
                         }
+                        registrosModificacion.Add(new RegistroModificacion(direccionMod, longitudHalfBytes, marcadores.ToString()));
+                    }
+                    else if (linea.RequiresModification)
+                    {
+                        // Es relativo puro (no es R-R=A porque RequiresModification sería false si lo fuera)
+                        marcadores.Append("*R");
+                        registrosModificacion.Add(new RegistroModificacion(direccionMod, longitudHalfBytes, marcadores.ToString()));
                     }
                     else
                     {
-                        registrosModificacion.Add(new RegistroModificacion(direccionMod, longitudHalfBytes, sectionName));
+                        // No requiere relocalización (puede ser absoluto o R-R=A)
+                        // No agregar registro M en este caso
                     }
                 }
 
@@ -169,9 +181,16 @@ namespace laboratorioPractica3
                 {
                     registros.Add($"M{registro.Direccion:X6}{registro.LongitudMediosBytes:X2}+{registro.Nombre}");
                 }
-            }
 
-            registros.Add($"E{_direccionEjecucion:X6}");
+                // Emitir registro E para esta sección
+                // Sólo la primera sección (PRINCIPAL) usa la dirección de ejecución
+                // Las demás secciones emiten E con 6 espacios en blanco
+                bool isPrimarySection = (grupo.Key.Item2 == 0) || string.Equals(sectionName, "Por Omision", StringComparison.OrdinalIgnoreCase);
+                string eRecord = isPrimarySection
+                    ? $"E{_direccionEjecucion:X6}"
+                    : "E      "; // 6 espacios: secciones secundarias sin punto de entrada
+                registros.Add(eRecord);
+            }
 
             return registros;
         }
@@ -232,6 +251,7 @@ namespace laboratorioPractica3
             {
                 Direccion = direccion;
                 LongitudMediosBytes = longitudMediosBytes;
+                // Nombre ahora contiene los marcadores (*R, *SE*SE, etc.)
                 Nombre = nombre;
             }
 

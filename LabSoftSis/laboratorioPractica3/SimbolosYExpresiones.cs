@@ -24,16 +24,18 @@ namespace laboratorioPractica3
         public string Name { get; set; }
         public int Value { get; set; }
         public SymbolType Type { get; set; }
+        public string ControlSectionName { get; set; }
         public string BlockName { get; set; }
         public int BlockNumber { get; set; }
         public int RelativeValue { get; set; }
         public bool IsExternal { get; set; }
 
-        public SymbolInfo(string name, int value, SymbolType type, string blockName = "Por Omision", int blockNumber = 0, int? relativeValue = null, bool isExternal = false)
+        public SymbolInfo(string name, int value, SymbolType type, string blockName = "Por Omision", int blockNumber = 0, int? relativeValue = null, bool isExternal = false, string controlSectionName = "Por Omision")
         {
             Name = name;
             Value = value;
             Type = type;
+            ControlSectionName = string.IsNullOrWhiteSpace(controlSectionName) ? "Por Omision" : controlSectionName.Trim();
             BlockName = blockName;
             BlockNumber = blockNumber;
             RelativeValue = relativeValue ?? value;
@@ -51,48 +53,151 @@ namespace laboratorioPractica3
     // Valida reglas de apareamiento Absoluto-Relativo según especificación SIC/XE
     public class SimbolosYExpresiones
     {
-        // Tabla de símbolos: almacena todos los símbolos definidos (case-insensitive)
-        private readonly Dictionary<string, SymbolInfo> _symbolTable = new(StringComparer.OrdinalIgnoreCase);
-
-        public IReadOnlyDictionary<string, SymbolInfo> GetAllSymbols() => _symbolTable;
-
-        public bool ContainsKey(string name) => _symbolTable.ContainsKey(name);
-
-        public void AddSymbol(string name, int value, SymbolType type, string blockName = "Por Omision", int blockNumber = 0, bool isExternal = false)
+        // Tabla de símbolos por sección de control (case-insensitive)
+        private readonly Dictionary<string, Dictionary<string, SymbolInfo>> _symbolTableBySection = new(StringComparer.OrdinalIgnoreCase)
         {
-            _symbolTable[name] = new SymbolInfo(name, value, type, blockName, blockNumber, value, isExternal);
+            ["Por Omision"] = new Dictionary<string, SymbolInfo>(StringComparer.OrdinalIgnoreCase)
+        };
+
+        private static string NormalizeSectionName(string? sectionName)
+            => string.IsNullOrWhiteSpace(sectionName) ? "Por Omision" : sectionName.Trim();
+
+        private Dictionary<string, SymbolInfo> EnsureSection(string? sectionName)
+        {
+            string normalized = NormalizeSectionName(sectionName);
+            if (!_symbolTableBySection.TryGetValue(normalized, out var table))
+            {
+                table = new Dictionary<string, SymbolInfo>(StringComparer.OrdinalIgnoreCase);
+                _symbolTableBySection[normalized] = table;
+            }
+            return table;
+        }
+
+        private bool TryResolveSymbol(string name, string? controlSectionName, out SymbolInfo info)
+        {
+            info = null!;
+
+            string section = NormalizeSectionName(controlSectionName);
+            if (_symbolTableBySection.TryGetValue(section, out var sectionTable) && sectionTable.TryGetValue(name, out var foundInSection))
+            {
+                info = foundInSection;
+                return true;
+            }
+
+            // Fallback: símbolo único en cualquier sección
+            SymbolInfo? unique = null;
+            int matches = 0;
+            foreach (var table in _symbolTableBySection.Values)
+            {
+                if (table.TryGetValue(name, out var candidate))
+                {
+                    unique = candidate;
+                    matches++;
+                    if (matches > 1)
+                        return false; // ambiguo entre secciones
+                }
+            }
+
+            if (matches == 1 && unique != null)
+            {
+                info = unique;
+                return true;
+            }
+
+            return false;
+        }
+
+        public IReadOnlyDictionary<string, SymbolInfo> GetAllSymbols()
+        {
+            var merged = new Dictionary<string, SymbolInfo>(StringComparer.OrdinalIgnoreCase);
+            var keyOccurrences = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var sec in _symbolTableBySection.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
+            {
+                foreach (var kv in _symbolTableBySection[sec])
+                {
+                    if (!keyOccurrences.ContainsKey(kv.Key))
+                        keyOccurrences[kv.Key] = 0;
+                    keyOccurrences[kv.Key]++;
+                }
+            }
+
+            foreach (var sec in _symbolTableBySection.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
+            {
+                foreach (var kv in _symbolTableBySection[sec])
+                {
+                    string outputKey = keyOccurrences[kv.Key] > 1 ? $"{sec}::{kv.Key}" : kv.Key;
+                    merged[outputKey] = kv.Value;
+                }
+            }
+
+            return merged;
+        }
+
+        public IReadOnlyDictionary<string, SymbolInfo> GetSymbolsBySection(string? controlSectionName)
+        {
+            string section = NormalizeSectionName(controlSectionName);
+            if (_symbolTableBySection.TryGetValue(section, out var table))
+                return table;
+
+            return new Dictionary<string, SymbolInfo>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        public bool ContainsKey(string name, string? controlSectionName = null)
+        {
+            if (!string.IsNullOrWhiteSpace(controlSectionName))
+            {
+                string section = NormalizeSectionName(controlSectionName);
+                return _symbolTableBySection.TryGetValue(section, out var table) && table.ContainsKey(name);
+            }
+
+            foreach (var table in _symbolTableBySection.Values)
+            {
+                if (table.ContainsKey(name))
+                    return true;
+            }
+
+            return false;
+        }
+
+        public void AddSymbol(string name, int value, SymbolType type, string blockName = "Por Omision", int blockNumber = 0, bool isExternal = false, string? controlSectionName = null)
+        {
+            string section = NormalizeSectionName(controlSectionName);
+            var sectionTable = EnsureSection(section);
+            sectionTable[name] = new SymbolInfo(name, value, type, blockName, blockNumber, value, isExternal, section);
         }
 
         public void RelocateRelativeSymbols(Func<string, int> blockStartResolver)
         {
-            foreach (var symbol in _symbolTable.Values)
+            foreach (var sectionTable in _symbolTableBySection.Values)
             {
-                if (symbol.Type == SymbolType.Relative)
+                foreach (var symbol in sectionTable.Values)
                 {
-                    int blockStart = blockStartResolver(symbol.BlockName);
-                    symbol.Value = blockStart + symbol.RelativeValue;
+                    if (symbol.Type == SymbolType.Relative)
+                    {
+                        int blockStart = blockStartResolver(symbol.BlockName);
+                        symbol.Value = blockStart + symbol.RelativeValue;
+                    }
                 }
             }
         }
 
-        public bool TryGetValue(string name, out SymbolInfo info)
+        public bool TryGetValue(string name, out SymbolInfo info, string? controlSectionName = null)
+            => TryResolveSymbol(name, controlSectionName, out info!);
+
+        public bool IsExternalSymbol(string symbolName, string? controlSectionName = null)
         {
-            return _symbolTable.TryGetValue(name, out info!);
+            return TryResolveSymbol(symbolName, controlSectionName, out var info) && info.IsExternal;
         }
 
-        public bool IsExternalSymbol(string symbolName)
-        {
-            return _symbolTable.TryGetValue(symbolName, out var info) && info.IsExternal;
-        }
-
-        public bool ContainsExternalSymbol(string? expression)
+        public bool ContainsExternalSymbol(string? expression, string? controlSectionName = null)
         {
             if (string.IsNullOrWhiteSpace(expression))
                 return false;
 
             foreach (var token in Tokenize(expression))
             {
-                if (_symbolTable.TryGetValue(token, out var info) && info.IsExternal)
+                if (TryResolveSymbol(token, controlSectionName, out var info) && info.IsExternal)
                     return true;
             }
 
@@ -100,15 +205,15 @@ namespace laboratorioPractica3
         }
 
         public (int value, SymbolType type, string? error, ExpressionEvaluationMetadata metadata)
-            EvaluateExpressionForObject(string? expression, int currentAddress, bool allowUndefinedSymbols = false)
+            EvaluateExpressionForObject(string? expression, int currentAddress, bool allowUndefinedSymbols = false, string? controlSectionName = null)
         {
             var metadata = new ExpressionEvaluationMetadata();
 
             if (string.IsNullOrWhiteSpace(expression))
                 return (0, SymbolType.Absolute, "Expresión vacía", metadata);
 
-            string normalizedExpression = NormalizeExternalsToZero(expression, metadata);
-            var (value, type, error) = EvaluateExpression(normalizedExpression, currentAddress, allowUndefinedSymbols);
+            string normalizedExpression = NormalizeExternalsToZero(expression, metadata, controlSectionName);
+            var (value, type, error) = EvaluateExpression(normalizedExpression, currentAddress, allowUndefinedSymbols, controlSectionName);
 
             if (error != null)
             {
@@ -124,14 +229,14 @@ namespace laboratorioPractica3
             return (value, type, error, metadata);
         }
 
-        private string NormalizeExternalsToZero(string expression, ExpressionEvaluationMetadata metadata)
+        private string NormalizeExternalsToZero(string expression, ExpressionEvaluationMetadata metadata, string? controlSectionName)
         {
             var tokens = Tokenize(expression);
 
             for (int i = 0; i < tokens.Count; i++)
             {
                 string token = tokens[i];
-                if (_symbolTable.TryGetValue(token, out var symbolInfo) && symbolInfo.IsExternal)
+                if (TryResolveSymbol(token, controlSectionName, out var symbolInfo) && symbolInfo.IsExternal)
                 {
                     if (!metadata.ExternalSymbols.Contains(token, StringComparer.OrdinalIgnoreCase))
                         metadata.ExternalSymbols.Add(token);
@@ -142,9 +247,13 @@ namespace laboratorioPractica3
             return string.Concat(tokens);
         }
 
-        public int Count => _symbolTable.Count;
+        public int Count => _symbolTableBySection.Values.Sum(t => t.Count);
 
-        public void Clear() => _symbolTable.Clear();
+        public void Clear()
+        {
+            _symbolTableBySection.Clear();
+            _symbolTableBySection["Por Omision"] = new Dictionary<string, SymbolInfo>(StringComparer.OrdinalIgnoreCase);
+        }
 
         // Evalúa expresiones aritméticas: +, -, *, /, ()
         // Parámetros:
@@ -152,16 +261,16 @@ namespace laboratorioPractica3
         //   currentAddress: valor de * (contador de ubicación actual)
         //   allowUndefinedSymbols: si true, permite símbolos no definidos (útil para Paso 1)
         // Retorna: (valor, tipo de resultado, mensaje de error si hay)
-        public (int value, SymbolType type, string? error) EvaluateExpression(string? expression, int currentAddress, bool allowUndefinedSymbols = false)
+        public (int value, SymbolType type, string? error) EvaluateExpression(string? expression, int currentAddress, bool allowUndefinedSymbols = false, string? controlSectionName = null)
         {
             if (string.IsNullOrWhiteSpace(expression))
                 return (0, SymbolType.Absolute, "Expresión vacía");
 
-            return ParseExpressionTokens(expression, currentAddress, allowUndefinedSymbols);
+            return ParseExpressionTokens(expression, currentAddress, allowUndefinedSymbols, controlSectionName);
         }
 
         // Procesa los tokens de la expresión mediante parser recursivo descendente
-        private (int value, SymbolType type, string? error) ParseExpressionTokens(string expression, int currentAddress, bool allowUndefinedSymbols)
+        private (int value, SymbolType type, string? error) ParseExpressionTokens(string expression, int currentAddress, bool allowUndefinedSymbols, string? controlSectionName)
         {
             try
             {
@@ -172,7 +281,7 @@ namespace laboratorioPractica3
                 // relCount = 0 -> resultado es Absoluto
                 // relCount = 1 -> resultado es Relativo
                 // relCount != 0,1 -> error (mezcla inválida de relativos)
-                var (value, relCount, error) = ParseAddSubInternal(tokens, ref pos, currentAddress, allowUndefinedSymbols);
+                var (value, relCount, error) = ParseAddSubInternal(tokens, ref pos, currentAddress, allowUndefinedSymbols, controlSectionName);
                 if (error != null)
                     return (-1, SymbolType.Absolute, error);
 
@@ -230,16 +339,16 @@ namespace laboratorioPractica3
         // Usa método de conteo de relativos:
         //   - Sumar relCount: A + B suma sus contadores relativos
         //   - Restar relCount: A - B resta sus contadores (puede cancelar términos relativos)
-        private (int val, int relCount, string? err) ParseAddSubInternal(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols)
+        private (int val, int relCount, string? err) ParseAddSubInternal(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols, string? controlSectionName)
         {
-            var (leftVal, leftRelCount, err) = ParseMulDivInternal(tokens, ref pos, pc, allowUndefinedSymbols);
+            var (leftVal, leftRelCount, err) = ParseMulDivInternal(tokens, ref pos, pc, allowUndefinedSymbols, controlSectionName);
             if (err != null)
                 return (leftVal, leftRelCount, err);
 
             while (pos < tokens.Count && (tokens[pos] == "+" || tokens[pos] == "-"))
             {
                 string op = tokens[pos++];
-                var (rightVal, rightRelCount, rightErr) = ParseMulDivInternal(tokens, ref pos, pc, allowUndefinedSymbols);
+                var (rightVal, rightRelCount, rightErr) = ParseMulDivInternal(tokens, ref pos, pc, allowUndefinedSymbols, controlSectionName);
                 if (rightErr != null)
                     return (-1, 0, rightErr);
 
@@ -262,16 +371,16 @@ namespace laboratorioPractica3
 
         // Procesa multiplicaciones y divisiones: precedencia más alta que +/-
         // Restricción SIC/XE: losoperandos DEBEN ser absolutos (relCount = 0)
-        private (int val, int relCount, string? err) ParseMulDivInternal(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols)
+        private (int val, int relCount, string? err) ParseMulDivInternal(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols, string? controlSectionName)
         {
-            var (leftVal, leftRelCount, err) = ParseFactorInternal(tokens, ref pos, pc, allowUndefinedSymbols);
+            var (leftVal, leftRelCount, err) = ParseFactorInternal(tokens, ref pos, pc, allowUndefinedSymbols, controlSectionName);
             if (err != null)
                 return (leftVal, leftRelCount, err);
 
             while (pos < tokens.Count && (tokens[pos] == "*" || tokens[pos] == "/"))
             {
                 string op = tokens[pos++];
-                var (rightVal, rightRelCount, rightErr) = ParseFactorInternal(tokens, ref pos, pc, allowUndefinedSymbols);
+                var (rightVal, rightRelCount, rightErr) = ParseFactorInternal(tokens, ref pos, pc, allowUndefinedSymbols, controlSectionName);
                 if (rightErr != null)
                     return (-1, 0, rightErr);
 
@@ -296,7 +405,7 @@ namespace laboratorioPractica3
         }
 
         // Procesa factores: números, símbolos, *, paréntesis y operadores unarios +/-
-        private (int val, int relCount, string? err) ParseFactorInternal(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols)
+        private (int val, int relCount, string? err) ParseFactorInternal(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols, string? controlSectionName)
         {
             if (pos >= tokens.Count)
                 return (-1, 0, "Expresión mal formada");
@@ -309,7 +418,7 @@ namespace laboratorioPractica3
                 string unary = token;
                 pos++;
 
-                var (value, relCount, err) = ParseFactorInternal(tokens, ref pos, pc, allowUndefinedSymbols);
+                var (value, relCount, err) = ParseFactorInternal(tokens, ref pos, pc, allowUndefinedSymbols, controlSectionName);
                 if (err != null)
                     return (value, relCount, err);
 
@@ -328,7 +437,7 @@ namespace laboratorioPractica3
             // Paréntesis: evaluar subexpresión recursivamente
             if (token == "(")
             {
-                var (exprValue, exprRelCount, exprErr) = ParseAddSubInternal(tokens, ref pos, pc, allowUndefinedSymbols);
+                var (exprValue, exprRelCount, exprErr) = ParseAddSubInternal(tokens, ref pos, pc, allowUndefinedSymbols, controlSectionName);
                 if (exprErr != null)
                     return (exprValue, exprRelCount, exprErr);
 
@@ -343,7 +452,7 @@ namespace laboratorioPractica3
                 return (pc, 1, null);
 
             // Símbolo conocido
-            if (_symbolTable.TryGetValue(token, out var symbolInfo))
+            if (TryResolveSymbol(token, controlSectionName, out var symbolInfo))
                 return (symbolInfo.Value, symbolInfo.Type == SymbolType.Relative ? 1 : 0, null);
 
             // Número (decimal, hexadecimal con H, 0x, X'...')

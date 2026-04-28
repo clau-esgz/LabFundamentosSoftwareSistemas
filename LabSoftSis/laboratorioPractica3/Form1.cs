@@ -68,6 +68,7 @@ namespace laboratorioPractica3
             TablaSimdataGridView2.AllowUserToAddRows = false;
             TablaSimdataGridView2.AllowUserToDeleteRows = false;
             TablaSimdataGridView2.ReadOnly = true;
+            TablaSimdataGridView2.RowPrePaint += TablaSimdataGridView2_RowPrePaint;
 
             tablaBlqsGridView1.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells;
             tablaBlqsGridView1.AllowUserToAddRows = false;
@@ -430,6 +431,8 @@ namespace laboratorioPractica3
             ArchivoInterdataGridView1.DataSource = CrearTablaIntermedio(resultado.Paso1.Lines, incluirCodigoObjeto ? resultado.ObjectLines : null);
             AplicarNumeracionDeRenglones(ArchivoInterdataGridView1);
             TablaSimdataGridView2.DataSource = CrearTablaSimbolos(resultado.Paso1.SymbolTableExtended);
+            if (TablaSimdataGridView2.Columns.Contains("EsCabecera"))
+                TablaSimdataGridView2.Columns["EsCabecera"].Visible = false;
 
             var erroresAnalizador = resultado.Parse.ErroresLexicoSintacticos
                 .OrderBy(e => e.Line)
@@ -555,23 +558,71 @@ namespace laboratorioPractica3
         private DataTable CrearTablaSimbolos(SimbolosYExpresiones simbolos)
         {
             var tabla = new DataTable();
+            tabla.Columns.Add("Seccion", typeof(string));
             tabla.Columns.Add("Simbolo", typeof(string));
             tabla.Columns.Add("Direccion/Valor", typeof(string));
             tabla.Columns.Add("Tipo", typeof(string));
             tabla.Columns.Add("Bloque", typeof(string));
             tabla.Columns.Add("NoBloque", typeof(int));
             tabla.Columns.Add("Símbolo externo", typeof(string));
+            tabla.Columns.Add("EsCabecera", typeof(bool));
 
-            foreach (var kv in simbolos.GetAllSymbols().OrderBy(k => k.Value.Value))
+            var symbolsBySection = simbolos.GetAllSymbols()
+                .Values
+                .OrderBy(s => s.ControlSectionName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(s => s.Value)
+                .ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+                .GroupBy(s => s.ControlSectionName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            foreach (var group in symbolsBySection)
             {
-                var sym = kv.Value;
-                string tipo = sym.Type == SymbolType.Relative ? "R" : "A";
-                string valor = sym.Value.ToString("X4");
-                string externo = sym.IsExternal ? "Sí" : "No";
-                tabla.Rows.Add(sym.Name, valor, tipo, sym.BlockName, sym.BlockNumber, externo);
+                // Cabecera de sección
+                tabla.Rows.Add(group.Key, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, true);
+
+                foreach (var sym in group)
+                {
+                    string tipo = sym.Type == SymbolType.Relative ? "R" : "A";
+                    string valor = sym.Value.ToString("X4");
+                    string externo = sym.IsExternal ? "Sí" : "No";
+                    tabla.Rows.Add(string.Empty, sym.Name, valor, tipo, sym.BlockName, sym.BlockNumber, externo, false);
+                }
             }
 
             return tabla;
+        }
+
+        private void TablaSimdataGridView2_RowPrePaint(object? sender, DataGridViewRowPrePaintEventArgs e)
+        {
+            if (sender is not DataGridView dgv) return;
+            if (e.RowIndex < 0 || e.RowIndex >= dgv.Rows.Count) return;
+
+            var row = dgv.Rows[e.RowIndex];
+            try
+            {
+                if (dgv.Columns.Contains("EsCabecera"))
+                {
+                    var col = dgv.Columns["EsCabecera"];
+                    var cell = row.Cells[col.Index];
+                    if (cell?.Value is bool isHeader && isHeader)
+                    {
+                        row.DefaultCellStyle.BackColor = Color.LightGray;
+                        row.DefaultCellStyle.Font = new Font(dgv.Font, FontStyle.Bold);
+                        row.DefaultCellStyle.SelectionBackColor = row.DefaultCellStyle.BackColor;
+                        row.ReadOnly = true;
+                    }
+                }
+                else
+                {
+                    // reset to default
+                    row.DefaultCellStyle.BackColor = dgv.DefaultCellStyle.BackColor;
+                    row.DefaultCellStyle.Font = dgv.DefaultCellStyle.Font;
+                }
+            }
+            catch
+            {
+                // no-op: defensivo para evitar excepciones de renderizado
+            }
         }
 
         private List<SICXEError> UnificarErrores(PipelineResult resultado)
@@ -893,9 +944,9 @@ namespace laboratorioPractica3
             var bloques = ConstruirResumenBloques(resultado.Paso1.Lines);
             Console.WriteLine();
             Console.WriteLine("[Tabla de Bloques]");
-            Console.WriteLine("No  Bloque              Inicio  Fin     Longitud");
+            Console.WriteLine("Seccion  No  Bloque              Inicio  Fin     Longitud");
             foreach (var b in bloques)
-                Console.WriteLine($"{b.Numero,2}  {b.Nombre,-18} {b.Inicio:X4}    {b.Fin:X4}    {b.Longitud:X4}");
+                Console.WriteLine($"{b.Seccion,-8} {b.Numero,2}  {b.Nombre,-18} {b.Inicio:X4}    {b.Fin:X4}    {b.Longitud:X4}");
 
             if (resultado.Registros != null)
             {
@@ -1012,10 +1063,10 @@ namespace laboratorioPractica3
             var bloques = ConstruirResumenBloques(lines);
             var sb = new StringBuilder();
             sb.AppendLine("TABLA DE BLOQUES");
-            sb.AppendLine("NoBloque\tBloque\tInicio\tFin\tLongitud");
+            sb.AppendLine("Seccion\tNoBloque\tBloque\tInicio\tFin\tLongitud");
 
             foreach (var b in bloques)
-                sb.AppendLine($"{b.Numero}\t{b.Nombre}\t{b.Inicio:X4}\t{b.Fin:X4}\t{b.Longitud:X4}");
+                sb.AppendLine($"{b.Seccion}\t{b.Numero}\t{b.Nombre}\t{b.Inicio:X4}\t{b.Fin:X4}\t{b.Longitud:X4}");
 
             File.WriteAllText(path, sb.ToString());
         }
@@ -1024,7 +1075,7 @@ namespace laboratorioPractica3
         {
             return lines
                 .Where(l => l.Address >= 0)
-                .GroupBy(l => new { l.BlockNumber, l.BlockName })
+                .GroupBy(l => new { l.ControlSectionName, l.BlockNumber, l.BlockName })
                 .Select(g =>
                 {
                     int ini = g.Min(x => x.Address);
@@ -1033,28 +1084,41 @@ namespace laboratorioPractica3
                         fin = ini;
 
                     return new BloqueResumen(
+                        g.Key.ControlSectionName,
                         g.Key.BlockNumber,
                         g.Key.BlockName,
                         ini,
                         fin,
                         (fin - ini) + 1);
                 })
-                .OrderBy(b => b.Numero)
+                .OrderBy(b => b.Seccion)
+                .ThenBy(b => b.Numero)
                 .ToList();
         }
 
         private DataTable CrearTablaBloques(IReadOnlyList<BloqueResumen> bloques)
         {
             var tabla = new DataTable();
+            tabla.Columns.Add("Seccion", typeof(string));
             tabla.Columns.Add("NoBloque", typeof(int));
             tabla.Columns.Add("Bloque", typeof(string));
             tabla.Columns.Add("Inicio", typeof(string));
             tabla.Columns.Add("Fin", typeof(string));
             tabla.Columns.Add("Longitud", typeof(string));
 
+            string lastSection = null;
+            bool first = true;
             foreach (var b in bloques)
             {
-                tabla.Rows.Add(b.Numero, b.Nombre, b.Inicio.ToString("X4"), b.Fin.ToString("X4"), b.Longitud.ToString("X4"));
+                // Insert blank separator row between sections for visual clarity
+                if (!first && !string.Equals(lastSection, b.Seccion, StringComparison.OrdinalIgnoreCase))
+                {
+                    tabla.Rows.Add(DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value);
+                }
+
+                tabla.Rows.Add(b.Seccion, b.Numero, b.Nombre, b.Inicio.ToString("X4"), b.Fin.ToString("X4"), b.Longitud.ToString("X4"));
+                lastSection = b.Seccion;
+                first = false;
             }
 
             return tabla;
@@ -1071,8 +1135,18 @@ namespace laboratorioPractica3
             }
             else
             {
+                bool lastWasE = false;
                 foreach (var r in registros)
+                {
+                    // Insertar separador visual entre secciones (después de E, antes de H siguiente)
+                    if (lastWasE && r.StartsWith("H"))
+                    {
+                        sb.AppendLine("=====================================");
+                    }
+
                     sb.AppendLine(r);
+                    lastWasE = r.StartsWith("E");
+                }
             }
 
             return sb.ToString();
@@ -1133,8 +1207,9 @@ namespace laboratorioPractica3
 
         private sealed class BloqueResumen
         {
-            public BloqueResumen(int numero, string nombre, int inicio, int fin, int longitud)
+            public BloqueResumen(string seccion, int numero, string nombre, int inicio, int fin, int longitud)
             {
+                Seccion = seccion;
                 Numero = numero;
                 Nombre = nombre;
                 Inicio = inicio;
@@ -1142,6 +1217,7 @@ namespace laboratorioPractica3
                 Longitud = longitud;
             }
 
+            public string Seccion { get; }
             public int Numero { get; }
             public string Nombre { get; }
             public int Inicio { get; }

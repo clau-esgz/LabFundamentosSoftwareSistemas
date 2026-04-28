@@ -75,7 +75,7 @@ namespace laboratorioPractica3
                     // Actualizar el valor actual de BASE.
                     if (operacion == "BASE" && !string.IsNullOrEmpty(linea.Operand))
                     {
-                        if (_tablaSimbolos.TryGetValue(linea.Operand, out var symInfo))
+                        if (_tablaSimbolos.TryGetValue(linea.Operand, out var symInfo, linea.ControlSectionName))
                             _baseActual = symInfo.Value;
                         else if (TryParseNumeric(linea.Operand, out int numVal))
                             _baseActual = numVal;
@@ -286,7 +286,7 @@ namespace laboratorioPractica3
             int targetAddress;
             SymbolType targetType;
 
-            var (evalVal, evalType, evalErr, evalMeta) = _tablaSimbolos.EvaluateExpressionForObject(operandoLimpio, linea.Address);
+            var (evalVal, evalType, evalErr, evalMeta) = _tablaSimbolos.EvaluateExpressionForObject(operandoLimpio, linea.Address, controlSectionName: linea.ControlSectionName);
             
             if (evalErr != null)
             {
@@ -423,7 +423,7 @@ namespace laboratorioPractica3
 
             bool isImmediate = (n == 0 && i == 1);
 
-            var (evalVal, evalType, evalErr, evalMeta) = _tablaSimbolos.EvaluateExpressionForObject(operandoLimpio, linea.Address);
+            var (evalVal, evalType, evalErr, evalMeta) = _tablaSimbolos.EvaluateExpressionForObject(operandoLimpio, linea.Address, controlSectionName: linea.ControlSectionName);
 
             // Si no se puede resolver el operando, reportar símbolo/operando inválido.
             if (evalErr != null)
@@ -495,7 +495,7 @@ namespace laboratorioPractica3
             return op switch
             {
                 "BYTE" => GenerateByteObjCode(line.Operand),
-                "WORD" => GenerateWordObjCode(line.Operand, line.Address),
+                "WORD" => GenerateWordObjCode(line.Operand, line.Address, line.ControlSectionName),
                 "END" => ValidateEndDirective(line),
                 _ => ("", "") // START, END, BASE, NOBASE, RESB, RESW, etc.
             };
@@ -509,7 +509,7 @@ namespace laboratorioPractica3
             if (string.IsNullOrEmpty(operando))
                 return ("", "");
 
-            if (_tablaSimbolos.TryGetValue(operando, out _))
+            if (_tablaSimbolos.TryGetValue(operando, out _, line.ControlSectionName))
                 return ("", "");
 
             return ("", "Error: Simbolo no encontrado en directiva END");
@@ -548,11 +548,11 @@ namespace laboratorioPractica3
 
         /// WORD expresion -> valor entero en 24 bits (6 digitos hex)
         /// Ejemplo: WORD 3 -> 000003, WORD BUFFER-BUFEND
-        private (string ObjCode, string Error) GenerateWordObjCode(string operand, int pc)
+        private (string ObjCode, string Error) GenerateWordObjCode(string operand, int pc, string? controlSectionName)
         {
             // WORD: empaqueta valor en 24 bits.
             // Si la expresión es relativa, agrega '*' para generar registro M en objeto.
-            var (val, type, err, evalMeta) = _tablaSimbolos.EvaluateExpressionForObject(operand, pc);
+            var (val, type, err, evalMeta) = _tablaSimbolos.EvaluateExpressionForObject(operand, pc, controlSectionName: controlSectionName);
             if (err != null)
                 return ("FFFFFF", "Error: " + err); // Error base para WORD invalido
 

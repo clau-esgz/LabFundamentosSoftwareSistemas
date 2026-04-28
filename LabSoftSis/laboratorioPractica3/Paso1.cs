@@ -71,6 +71,10 @@ namespace laboratorioPractica3
         {
             ["Por Omision"] = new List<BloqueInfo>()
         };
+        private readonly Dictionary<string, HashSet<string>> TABREG_BY_CSECT = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Por Omision"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        };
         private readonly Dictionary<string, List<string>> EXTDEF_BY_CSECT = new(StringComparer.OrdinalIgnoreCase)
         {
             ["Por Omision"] = new List<string>()
@@ -78,6 +82,10 @@ namespace laboratorioPractica3
         private readonly Dictionary<string, List<string>> EXTREF_BY_CSECT = new(StringComparer.OrdinalIgnoreCase)
         {
             ["Por Omision"] = new List<string>()
+        };
+        private readonly Dictionary<string, Dictionary<string, List<int>>> EXTDEF_DECL_LINES_BY_CSECT = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Por Omision"] = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase)
         };
 
         private void EnsureControlSectionContainers(string sectionName)
@@ -93,6 +101,12 @@ namespace laboratorioPractica3
 
             if (!EXTREF_BY_CSECT.ContainsKey(sectionName))
                 EXTREF_BY_CSECT[sectionName] = new List<string>();
+
+            if (!EXTDEF_DECL_LINES_BY_CSECT.ContainsKey(sectionName))
+                EXTDEF_DECL_LINES_BY_CSECT[sectionName] = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+
+            if (!TABREG_BY_CSECT.ContainsKey(sectionName))
+                TABREG_BY_CSECT[sectionName] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             if (!CSECT_CP_BY_NAME.ContainsKey(sectionName))
                 CSECT_CP_BY_NAME[sectionName] = 0;
@@ -118,6 +132,11 @@ namespace laboratorioPractica3
 
             BLOCKS.SwitchBlock("Por Omision");
             CONTLOC = CSECT_CP_BY_NAME[sectionName];
+            // Registrar el bloque por omisión en la tabla de bloques de la sección
+            EnsureControlSectionContainers(sectionName);
+            var defaultBlock = BLOCKS.CurrentBlock;
+            if (!TABBLK_BY_CSECT[sectionName].Any(b => string.Equals(b.Name, defaultBlock.Name, StringComparison.OrdinalIgnoreCase)))
+                TABBLK_BY_CSECT[sectionName].Add(defaultBlock);
         }
 
         private List<string> ParseSymbolList(string? operand)
@@ -135,10 +154,10 @@ namespace laboratorioPractica3
 
         private void AddSymbolToCurrentSection(string name, int value, SymbolType type, bool isExternal = false)
         {
-            TABSIM_EXT.AddSymbol(name, value, type, BLOCKS.CurrentBlockName, BLOCKS.CurrentBlockNumber, isExternal);
+            TABSIM_EXT.AddSymbol(name, value, type, BLOCKS.CurrentBlockName, BLOCKS.CurrentBlockNumber, isExternal, CurrentControlSectionName);
 
             EnsureControlSectionContainers(CurrentControlSectionName);
-            if (TABSIM_EXT.TryGetValue(name, out var info))
+            if (TABSIM_EXT.TryGetValue(name, out var info, CurrentControlSectionName))
                 TABSIM_BY_CSECT[CurrentControlSectionName][name] = info;
         }
         
@@ -408,7 +427,7 @@ namespace laboratorioPractica3
                             AddressingMode = "-"
                         };
 
-                        if (TABSIM_EXT.ContainsKey(parsedLine.Label))
+                        if (TABSIM_EXT.ContainsKey(parsedLine.Label, CurrentControlSectionName))
                         {
                             string dupMsg = $"Símbolo duplicado: {parsedLine.Label}";
                             intermediateLine.Error = dupMsg;
@@ -416,7 +435,7 @@ namespace laboratorioPractica3
                         }
                         else
                         {
-                            if (HasRelativeSymbolsFromDifferentBlocks(parsedLine.Operand) || IsStrictInvalidEquExpression(parsedLine.Operand))
+                            if (HasRelativeSymbolsFromDifferentBlocks(parsedLine.Operand))
                             {
                                 const string blockExprError = "Error: Expresión (diferentes bloques)";
                                 AddSymbolToCurrentSection(parsedLine.Label, -1, SymbolType.Absolute);
@@ -430,7 +449,7 @@ namespace laboratorioPractica3
                                 return;
                             }
 
-                            if (TABSIM_EXT.ContainsExternalSymbol(parsedLine.Operand))
+                            if (TABSIM_EXT.ContainsExternalSymbol(parsedLine.Operand, CurrentControlSectionName))
                             {
                                 const string equExternalError = "EQU no permite símbolos externos";
                                 AddSymbolToCurrentSection(parsedLine.Label, -1, SymbolType.Absolute);
@@ -443,7 +462,7 @@ namespace laboratorioPractica3
                                 return;
                             }
 
-                            var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(parsedLine.Operand, CONTLOC, allowUndefinedSymbols: false);
+                            var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(parsedLine.Operand, CONTLOC, allowUndefinedSymbols: false, controlSectionName: CurrentControlSectionName);
                             if (evalErr != null)
                             {
                                 string expressionMsg = evalErr.Contains("más de un término relativo positivo", StringComparison.OrdinalIgnoreCase)
@@ -485,7 +504,7 @@ namespace laboratorioPractica3
 
                         if (!string.IsNullOrEmpty(parsedLine.Label))
                         {
-                            if (TABSIM_EXT.ContainsKey(parsedLine.Label))
+                            if (TABSIM_EXT.ContainsKey(parsedLine.Label, CurrentControlSectionName))
                             {
                                 string dupMsg = $"Símbolo duplicado: {parsedLine.Label}";
                                 intermediateLine.Error = string.IsNullOrWhiteSpace(intermediateLine.Error)
@@ -502,7 +521,7 @@ namespace laboratorioPractica3
                         // Intentar evaluar la expresión ORG
                         if (!string.IsNullOrEmpty(parsedLine.Operand))
                         {
-                            var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(parsedLine.Operand, CONTLOC, allowUndefinedSymbols: true);
+                            var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(parsedLine.Operand, CONTLOC, allowUndefinedSymbols: true, controlSectionName: CurrentControlSectionName);
                             if (evalErr != null)
                             {
                                 intermediateLine.Error = evalErr;
@@ -541,7 +560,7 @@ namespace laboratorioPractica3
 
                         if (!string.IsNullOrEmpty(parsedLine.Label))
                         {
-                            if (TABSIM_EXT.ContainsKey(parsedLine.Label))
+                            if (TABSIM_EXT.ContainsKey(parsedLine.Label, CurrentControlSectionName))
                             {
                                 string dupMsg = $"Símbolo duplicado: {parsedLine.Label}";
                                 intermediateLine.Error = string.IsNullOrWhiteSpace(intermediateLine.Error)
@@ -558,7 +577,7 @@ namespace laboratorioPractica3
                         // Intentar evaluar la expresión
                         if (!string.IsNullOrEmpty(parsedLine.Operand))
                         {
-                            var (evalVal, evalType, evalErr, evalMeta) = TABSIM_EXT.EvaluateExpressionForObject(parsedLine.Operand, CONTLOC, allowUndefinedSymbols: true);
+                            var (evalVal, evalType, evalErr, evalMeta) = TABSIM_EXT.EvaluateExpressionForObject(parsedLine.Operand, CONTLOC, allowUndefinedSymbols: true, controlSectionName: CurrentControlSectionName);
                             if (evalErr == null && parsedLine.Operation.Equals("WORD", StringComparison.OrdinalIgnoreCase))
                             {
                                 intermediateLine.SemanticValue = $"{evalVal:X4}h";
@@ -618,7 +637,7 @@ namespace laboratorioPractica3
 
                             if (!string.IsNullOrEmpty(parsedLine.Label))
                             {
-                                if (TABSIM_EXT.ContainsKey(parsedLine.Label))
+                                if (TABSIM_EXT.ContainsKey(parsedLine.Label, CurrentControlSectionName))
                                 {
                                     string dupMsg = $"Símbolo duplicado: {parsedLine.Label}";
                                     intermediateLine.Error = string.IsNullOrWhiteSpace(intermediateLine.Error)
@@ -638,7 +657,7 @@ namespace laboratorioPractica3
                                 // Quitar prefijos de modo deDireccionamiento si existen
                                 string operandForEvaluation = NormalizeOperandForExpressionEvaluation(parsedLine.Operand);
 
-                                var (evalVal, evalType, evalErr, evalMeta) = TABSIM_EXT.EvaluateExpressionForObject(operandForEvaluation, CONTLOC, allowUndefinedSymbols: true);
+                                var (evalVal, evalType, evalErr, evalMeta) = TABSIM_EXT.EvaluateExpressionForObject(operandForEvaluation, CONTLOC, allowUndefinedSymbols: true, controlSectionName: CurrentControlSectionName);
                                 if (evalErr != null)
                                 {
                                     intermediateLine.Error = evalErr;
@@ -805,6 +824,17 @@ namespace laboratorioPractica3
                 CSECT_CP_BY_NAME[startSectionName] = 0;
                 BLOCKS.SwitchBlock("Por Omision");
                 CONTLOC = 0;
+
+                // Registrar el bloque por omisión en la tabla de bloques de la nueva sección CSECT
+                EnsureControlSectionContainers(CurrentControlSectionName);
+                var defBlk = BLOCKS.CurrentBlock;
+                if (!TABBLK_BY_CSECT[CurrentControlSectionName].Any(b => string.Equals(b.Name, defBlk.Name, StringComparison.OrdinalIgnoreCase)))
+                    TABBLK_BY_CSECT[CurrentControlSectionName].Add(defBlk);
+                // Registrar el bloque por omisión en la tabla de bloques de la sección START
+                EnsureControlSectionContainers(startSectionName);
+                var defaultBlk = BLOCKS.CurrentBlock;
+                if (!TABBLK_BY_CSECT[startSectionName].Any(b => string.Equals(b.Name, defaultBlk.Name, StringComparison.OrdinalIgnoreCase)))
+                    TABBLK_BY_CSECT[startSectionName].Add(defaultBlk);
                 intermediateLine2.Address = CONTLOC;
                 intermediateLine2.ControlSectionName = CurrentControlSectionName;
                 intermediateLine2.ControlSectionNumber = CurrentControlSectionNumber;
@@ -903,18 +933,17 @@ namespace laboratorioPractica3
                 {
                     foreach (var symbol in symbols)
                     {
-                        if (!TABSIM_BY_CSECT[CurrentControlSectionName].ContainsKey(symbol))
-                        {
-                            string msg = $"EXTDEF inválido: símbolo '{symbol}' no definido en sección actual";
-                            intermediateLine2.Error = string.IsNullOrWhiteSpace(intermediateLine2.Error)
-                                ? msg
-                                : intermediateLine2.Error + "; " + msg;
-                            Errors.Add(new SICXEError(antlrLine, 0, msg, SICXEErrorType.Semantico));
-                            continue;
-                        }
-
                         if (!EXTDEF_BY_CSECT[CurrentControlSectionName].Contains(symbol, StringComparer.OrdinalIgnoreCase))
                             EXTDEF_BY_CSECT[CurrentControlSectionName].Add(symbol);
+
+                        if (!EXTDEF_DECL_LINES_BY_CSECT[CurrentControlSectionName].TryGetValue(symbol, out var declLines))
+                        {
+                            declLines = new List<int>();
+                            EXTDEF_DECL_LINES_BY_CSECT[CurrentControlSectionName][symbol] = declLines;
+                        }
+
+                        if (!declLines.Contains(antlrLine))
+                            declLines.Add(antlrLine);
                     }
                 }
 
@@ -951,7 +980,7 @@ namespace laboratorioPractica3
                 {
                     foreach (var symbol in symbols)
                     {
-                        if (!TABSIM_EXT.TryGetValue(symbol, out var existing) || !existing.IsExternal)
+                        if (!TABSIM_EXT.TryGetValue(symbol, out var existing, CurrentControlSectionName) || !existing.IsExternal)
                             AddSymbolToCurrentSection(symbol, -1, SymbolType.Absolute, isExternal: true);
 
                         if (!EXTREF_BY_CSECT[CurrentControlSectionName].Contains(symbol, StringComparer.OrdinalIgnoreCase))
@@ -974,7 +1003,7 @@ namespace laboratorioPractica3
                 // Si la línea USE define etiqueta, se registra en el bloque actual antes del cambio
                 if (!string.IsNullOrEmpty(label))
                 {
-                    if (TABSIM_EXT.ContainsKey(label))
+                    if (TABSIM_EXT.ContainsKey(label, CurrentControlSectionName))
                     {
                         var dupErr = new SICXEError(antlrLine, 0, $"Símbolo duplicado: {label}", SICXEErrorType.Semantico);
                         Errors.Add(dupErr);
@@ -990,6 +1019,10 @@ namespace laboratorioPractica3
                 }
 
                 var selectedBlock = BLOCKS.SwitchBlock(operand);
+                // Registrar bloque seleccionado en la tabla de bloques de la sección actual
+                EnsureControlSectionContainers(CurrentControlSectionName);
+                if (!TABBLK_BY_CSECT[CurrentControlSectionName].Any(b => string.Equals(b.Name, selectedBlock.Name, StringComparison.OrdinalIgnoreCase)))
+                    TABBLK_BY_CSECT[CurrentControlSectionName].Add(selectedBlock);
                 intermediateLine2.SemanticValue = $"BLQ={selectedBlock.Number}, CP={selectedBlock.LocationCounter:X4}h";
                 intermediateLine2.Increment = 0;
                 intermediateLine2.BlockName = selectedBlock.Name;
@@ -1002,7 +1035,7 @@ namespace laboratorioPractica3
             if (operationContext?.directive()?.BASE() != null)
             {
                 BASE_OPERAND = operand ?? "";
-                if (!string.IsNullOrEmpty(operand) && TABSIM_EXT.TryGetValue(operand, out var symInfo))
+                if (!string.IsNullOrEmpty(operand) && TABSIM_EXT.TryGetValue(operand, out var symInfo, CurrentControlSectionName))
                     BASE_VALUE = symInfo.Value;
             }
 
@@ -1097,7 +1130,7 @@ namespace laboratorioPractica3
             {
                 if (!string.IsNullOrEmpty(label))
                 {
-                    if (TABSIM_EXT.ContainsKey(label))
+                    if (TABSIM_EXT.ContainsKey(label, CurrentControlSectionName))
                     {
                         var dupErr = new SICXEError(antlrLine, 0, $"Símbolo duplicado: {label}", SICXEErrorType.Semantico);
                         lineErrors.Add(dupErr);
@@ -1109,7 +1142,7 @@ namespace laboratorioPractica3
                     }
                     else
                     {
-                        if (HasRelativeSymbolsFromDifferentBlocks(operand) || IsStrictInvalidEquExpression(operand))
+                        if (HasRelativeSymbolsFromDifferentBlocks(operand))
                         {
                             const string blockExprError = "Error: Expresión (diferentes bloques)";
                             AddSymbolToCurrentSection(label, -1, SymbolType.Absolute);
@@ -1127,7 +1160,7 @@ namespace laboratorioPractica3
                         // Evalua expresión para EQU y obtiene tipo (absoluto/relativo).
                         // Regla de este ensamblador: EQU NO permite referencias adelantadas;
                         // todos los símbolos usados deben estar previamente definidos en TABSIM.
-                        if (TABSIM_EXT.ContainsExternalSymbol(operand))
+                        if (TABSIM_EXT.ContainsExternalSymbol(operand, CurrentControlSectionName))
                         {
                             const string equExternalError = "EQU no permite símbolos externos";
                             AddSymbolToCurrentSection(label, -1, SymbolType.Absolute);
@@ -1141,7 +1174,7 @@ namespace laboratorioPractica3
                             return;
                         }
 
-                        var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operand, CONTLOC, allowUndefinedSymbols: false);
+                        var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operand, CONTLOC, allowUndefinedSymbols: false, controlSectionName: CurrentControlSectionName);
                         if (evalErr != null)
                         {
                             var errEq = new SICXEError(antlrLine, 0, evalErr, SICXEErrorType.Semantico);
@@ -1170,7 +1203,7 @@ namespace laboratorioPractica3
                 if (!string.IsNullOrEmpty(operand))
                 {
                     // Evaluar la expresión del operando ORG
-                    var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operand, CONTLOC, allowUndefinedSymbols: true);
+                    var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operand, CONTLOC, allowUndefinedSymbols: true, controlSectionName: CurrentControlSectionName);
                     if (evalErr != null)
                     {
                         var errOrg = new SICXEError(antlrLine, 0, evalErr, SICXEErrorType.Semantico);
@@ -1220,7 +1253,7 @@ namespace laboratorioPractica3
 
                     if (hasExpressionOperators || startsWithSymbol)
                     {
-                        var (evalVal, evalType, evalErr, evalMeta) = TABSIM_EXT.EvaluateExpressionForObject(operand, CONTLOC, allowUndefinedSymbols: true);
+                        var (evalVal, evalType, evalErr, evalMeta) = TABSIM_EXT.EvaluateExpressionForObject(operand, CONTLOC, allowUndefinedSymbols: true, controlSectionName: CurrentControlSectionName);
                         if (evalErr != null)
                         {
                             var errExpr = new SICXEError(antlrLine, 0, evalErr, SICXEErrorType.Semantico);
@@ -1261,7 +1294,7 @@ namespace laboratorioPractica3
                 if (operandForEvaluation.Contains('*') || operandForEvaluation.Contains('/') || operandForEvaluation.Contains('+') || 
                     operandForEvaluation.Contains('-') || operandForEvaluation.Contains('(') || operandForEvaluation.Contains(')'))
                 {
-                    var (evalVal, evalType, evalErr, evalMeta) = TABSIM_EXT.EvaluateExpressionForObject(operandForEvaluation, CONTLOC, allowUndefinedSymbols: true);
+                    var (evalVal, evalType, evalErr, evalMeta) = TABSIM_EXT.EvaluateExpressionForObject(operandForEvaluation, CONTLOC, allowUndefinedSymbols: true, controlSectionName: CurrentControlSectionName);
                     if (evalErr == null && string.IsNullOrEmpty(intermediateLine2.Error))
                     {
                         intermediateLine2.SemanticValue = $"{evalVal:X4}h";
@@ -1282,7 +1315,7 @@ namespace laboratorioPractica3
             // Para otras instrucciones/directivas, si hay etiqueta y no está duplicada, insertar
             if (!string.IsNullOrEmpty(label))
             {
-                if (TABSIM_EXT.ContainsKey(label))
+                if (TABSIM_EXT.ContainsKey(label, CurrentControlSectionName))
                 {
                     var dupErr = new SICXEError(antlrLine, 0, $"Símbolo duplicado: {label}", SICXEErrorType.Semantico);
                     lineErrors.Add(dupErr);
@@ -1321,7 +1354,7 @@ namespace laboratorioPractica3
                 if (!string.IsNullOrEmpty(operand))
                 {
                     // Buscar el símbolo en TABSIM para obtener su dirección absoluta
-                    if (TABSIM_EXT.TryGetValue(operand, out var entrySymbol))
+                    if (TABSIM_EXT.TryGetValue(operand, out var entrySymbol, CurrentControlSectionName))
                     {
                         EXECUTION_ENTRY_POINT = entrySymbol.Value;
                     }
@@ -1338,6 +1371,7 @@ namespace laboratorioPractica3
                     EXECUTION_ENTRY_POINT = FIRST_EXECUTABLE_ADDRESS ?? START_ADDRESS;
                 }
 
+                ValidateExternalDefinitions();
                 CheckUndefinedSymbols();
                 return;
             }
@@ -1683,6 +1717,17 @@ namespace laboratorioPractica3
                 !cleanOperand.StartsWith("X'") &&
                 !cleanOperand.EndsWith("H", StringComparison.OrdinalIgnoreCase))
             {
+                // Detectar registros referenciados y registrarlos por sección
+                foreach (Match m in Regex.Matches(operand, "[A-Za-z_][A-Za-z0-9_]*"))
+                {
+                    string tok = m.Value;
+                    if (REGISTERS.Contains(tok))
+                    {
+                        EnsureControlSectionContainers(CurrentControlSectionName);
+                        TABREG_BY_CSECT[CurrentControlSectionName].Add(tok);
+                    }
+                }
+
                 ReferencedSymbols.Add(cleanOperand);
                 
                 // Rastrear en qué líneas se usa este símbolo
@@ -1734,6 +1779,61 @@ namespace laboratorioPractica3
                         if (alreadyReported.Add(key))
                         {
                             Errors.Add(new SICXEError(0, 0, fallbackMsg, SICXEErrorType.Semantico));
+                        }
+                    }
+                }
+            }
+        }
+
+        private void ValidateExternalDefinitions()
+        {
+            var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var secEntry in EXTDEF_BY_CSECT)
+            {
+                string sectionName = secEntry.Key;
+                var definedSymbols = TABSIM_BY_CSECT.ContainsKey(sectionName)
+                    ? TABSIM_BY_CSECT[sectionName]
+                    : new Dictionary<string, SymbolInfo>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var symbol in secEntry.Value.Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    bool existsInSection = definedSymbols.TryGetValue(symbol, out var symInfo);
+                    bool invalid = !existsInSection || (symInfo != null && symInfo.IsExternal);
+                    if (!invalid)
+                        continue;
+
+                    string msg = $"EXTDEF inválido: símbolo '{symbol}' no definido en sección actual";
+
+                    var declLines = EXTDEF_DECL_LINES_BY_CSECT.ContainsKey(sectionName) &&
+                                    EXTDEF_DECL_LINES_BY_CSECT[sectionName].TryGetValue(symbol, out var lines)
+                        ? lines
+                        : new List<int>();
+
+                    if (declLines.Count == 0)
+                    {
+                        string key = $"0|{msg}|{sectionName}|{symbol}";
+                        if (emitted.Add(key))
+                            Errors.Add(new SICXEError(0, 0, msg, SICXEErrorType.Semantico));
+                        continue;
+                    }
+
+                    foreach (int line in declLines)
+                    {
+                        string key = $"{line}|{msg}|{sectionName}|{symbol}";
+                        if (!emitted.Add(key))
+                            continue;
+
+                        Errors.Add(new SICXEError(line, 0, msg, SICXEErrorType.Semantico));
+
+                        var il = IntermediateLines.FirstOrDefault(l => l.SourceLine == line &&
+                            string.Equals(l.Operation.TrimStart('+'), "EXTDEF", StringComparison.OrdinalIgnoreCase));
+                        if (il != null)
+                        {
+                            if (string.IsNullOrWhiteSpace(il.Error))
+                                il.Error = msg;
+                            else if (!il.Error.Contains(msg, StringComparison.OrdinalIgnoreCase))
+                                il.Error += "; " + msg;
                         }
                     }
                 }
@@ -1844,7 +1944,7 @@ namespace laboratorioPractica3
                 return "";
 
             if (directive.BASE() != null && !string.IsNullOrEmpty(operand))
-                return TABSIM_EXT.TryGetValue(operand, out var symInfo) ? $"{symInfo.Value:X4}h" : operand;
+                return TABSIM_EXT.TryGetValue(operand, out var symInfo, CurrentControlSectionName) ? $"{symInfo.Value:X4}h" : operand;
 
             return "";
         }
@@ -1858,7 +1958,7 @@ namespace laboratorioPractica3
             foreach (Match match in Regex.Matches(expression, "[A-Za-z_][A-Za-z0-9_]*"))
             {
                 string token = match.Value;
-                if (TABSIM_EXT.TryGetValue(token, out var symbolInfo) && symbolInfo.Type == SymbolType.Relative)
+                if (TABSIM_EXT.TryGetValue(token, out var symbolInfo, CurrentControlSectionName) && symbolInfo.Type == SymbolType.Relative)
                 {
                     blocks.Add(symbolInfo.BlockName ?? "Por Omision");
                     if (blocks.Count > 1)
@@ -1880,7 +1980,7 @@ namespace laboratorioPractica3
             foreach (Match match in Regex.Matches(expression, "[A-Za-z_][A-Za-z0-9_]*"))
             {
                 string token = match.Value;
-                if (TABSIM_EXT.TryGetValue(token, out var symbolInfo) && symbolInfo.Type == SymbolType.Relative)
+                if (TABSIM_EXT.TryGetValue(token, out var symbolInfo, CurrentControlSectionName) && symbolInfo.Type == SymbolType.Relative)
                 {
                     return true;
                 }
@@ -1982,24 +2082,62 @@ namespace laboratorioPractica3
                 sb.AppendLine($"Valor BASE      : {baseDisplay}{BASE_VALUE.Value:X4}h  ({BASE_VALUE.Value})  [almacenado para Paso 2]");
             }
             sb.AppendLine();
-
-            sb.AppendLine("------------------- TABLA DE SIMBOLOS (TABSIM) -------------------");
-            sb.AppendLine($"{"SIMBOLO",-20} | {"DIRECCION (HEX)",-18} | {"DIRECCION (DEC)",-18} | {"TIPO",-10} | {"BLOQUE",-14}");
-            sb.AppendLine(new string('-', 102));
-
-            foreach (var symbol in TABSIM_EXT.GetAllSymbols())
+            // Imprimir tablas por sección de control
+            foreach (var sec in TABSIM_BY_CSECT.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
             {
-                int displayValue = symbol.Value.Type == SymbolType.Relative ? symbol.Value.RelativeValue : symbol.Value.Value;
-                string typeDisplay = symbol.Value.Type == SymbolType.Relative ? "R" : "A";
-                string bloque = $"{symbol.Value.BlockName} ({symbol.Value.BlockNumber})";
-                sb.AppendLine($"{symbol.Key,-20} | {(displayValue & 0xFFFF):X4}h{"",-13} | {displayValue,-18} | {typeDisplay,-10} | {bloque,-14}");
+                sb.AppendLine($"=== SECCION: {sec} ===");
+
+                sb.AppendLine("  - TABLA DE SÍMBOLOS (TABSIM)");
+                sb.AppendLine($"    {"SIMBOLO",-20} | {"DIRECCION (HEX)",-18} | {"DIRECCION (DEC)",-18} | {"TIPO",-10} | {"BLOQUE",-14}");
+                sb.AppendLine("    " + new string('-', 90));
+                var symtab = TABSIM_BY_CSECT[sec];
+                if (symtab != null && symtab.Count > 0)
+                {
+                    foreach (var kv in symtab.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+                    {
+                        var s = kv.Value;
+                        int displayValue = s.Type == SymbolType.Relative ? s.RelativeValue : s.Value;
+                        string typeDisplay = s.Type == SymbolType.Relative ? "R" : "A";
+                        string bloque = $"{s.BlockName} ({s.BlockNumber})";
+                        sb.AppendLine($"    {s.Name,-20} | {(displayValue & 0xFFFF):X4}h{"",-13} | {displayValue,-18} | {typeDisplay,-10} | {bloque,-14}");
+                    }
+                }
+                else
+                {
+                    sb.AppendLine("    (No hay simbolos definidos en esta sección)");
+                }
+
+                sb.AppendLine();
+                sb.AppendLine("  - TABLA DE BLOQUES (TABBLK)");
+                sb.AppendLine($"    {"NUM",-6} | {"NOMBRE",-12} | {"DIR_INI_HEX",-12} | {"DIR_INI_DEC",-12} | {"LONG_HEX",-10} | {"LONG_DEC",-10}");
+                sb.AppendLine("    " + new string('-', 80));
+                var blks = TABBLK_BY_CSECT.ContainsKey(sec) ? TABBLK_BY_CSECT[sec] : new List<BloqueInfo>();
+                if (blks != null && blks.Count > 0)
+                {
+                    foreach (var block in blks)
+                    {
+                        sb.AppendLine($"    {block.Number,-6} | {block.Name,-12} | {block.StartAddress:X4}h{"",-7} | {block.StartAddress,-12} | {block.Length:X4}h{"",-5} | {block.Length,-10}");
+                    }
+                }
+                else
+                {
+                    sb.AppendLine("    (No hay bloques definidos en esta sección)");
+                }
+
+                sb.AppendLine();
+                sb.AppendLine("  - TABLA DE REGISTROS (USADOS EN LA SECCIÓN)");
+                var regs = TABREG_BY_CSECT.ContainsKey(sec) ? TABREG_BY_CSECT[sec] : new HashSet<string>();
+                if (regs != null && regs.Count > 0)
+                {
+                    sb.AppendLine("    Registro(s): " + string.Join(", ", regs.OrderBy(r => r, StringComparer.OrdinalIgnoreCase)));
+                }
+                else
+                {
+                    sb.AppendLine("    (No se usaron registros en esta sección)");
+                }
+
+                sb.AppendLine();
             }
-            
-            if (TABSIM_EXT.Count == 0)
-            {
-                sb.AppendLine("  (No hay simbolos definidos)");
-            }
-            sb.AppendLine();
 
             sb.AppendLine("------------------- TABLA DE BLOQUES (TABBLK) -------------------");
             sb.AppendLine($"{"NUM",-6} | {"NOMBRE",-12} | {"DIR_INI_HEX",-12} | {"DIR_INI_DEC",-12} | {"LONG_HEX",-10} | {"LONG_DEC",-10}");
@@ -2128,13 +2266,25 @@ namespace laboratorioPractica3
             FinalizeBlocksAndRelocate();
 
             var sb = new StringBuilder();
-            sb.AppendLine("SIMBOLO,DIRECCION_HEX,DIRECCION_DEC,TIPO,BLOQUE,NUM_BLOQUE");
-            
-            foreach (var symbol in TABSIM_EXT.GetAllSymbols())
+            sb.AppendLine("SECCION,SIMBOLO,DIRECCION_HEX,DIRECCION_DEC,TIPO,BLOQUE,NUM_BLOQUE");
+
+            bool firstSection = true;
+            foreach (var sec in TABSIM_BY_CSECT.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
             {
-                int displayValue = symbol.Value.Type == SymbolType.Relative ? symbol.Value.RelativeValue : symbol.Value.Value;
-                string typeDisplay = symbol.Value.Type == SymbolType.Relative ? "R" : "A";
-                sb.AppendLine($"{symbol.Key},{(displayValue & 0xFFFF):X4},{displayValue},{typeDisplay},{symbol.Value.BlockName},{symbol.Value.BlockNumber}");
+                if (!firstSection)
+                    sb.AppendLine(",,,,,,"); // renglón en blanco entre secciones
+
+                firstSection = false;
+                var symbols = TABSIM_BY_CSECT[sec]
+                    .OrderBy(k => k.Value.Value)
+                    .ThenBy(k => k.Key, StringComparer.OrdinalIgnoreCase);
+
+                foreach (var symbol in symbols)
+                {
+                    int displayValue = symbol.Value.Type == SymbolType.Relative ? symbol.Value.RelativeValue : symbol.Value.Value;
+                    string typeDisplay = symbol.Value.Type == SymbolType.Relative ? "R" : "A";
+                    sb.AppendLine($"{FormatCSVCell(sec)},{FormatCSVCell(symbol.Value.Name)},{(displayValue & 0xFFFF):X4},{displayValue},{typeDisplay},{FormatCSVCell(symbol.Value.BlockName)},{symbol.Value.BlockNumber}");
+                }
             }
             
             File.WriteAllText(outputPath, sb.ToString(), Encoding.UTF8);
@@ -2252,33 +2402,75 @@ namespace laboratorioPractica3
             
             // ═══════════════════ SECCIÓN 1: TABLA DE SÍMBOLOS (TABSIM) ═══════════════════
             sb.AppendLine("=== TABLA DE SIMBOLOS (TABSIM) ===");
-            sb.AppendLine("SIMBOLO,DIRECCION_HEX,DIRECCION_DEC,TIPO,BLOQUE,NUM_BLOQUE");
+            sb.AppendLine("SECCION,SIMBOLO,DIRECCION_HEX,DIRECCION_DEC,TIPO,BLOQUE,NUM_BLOQUE");
 
-            foreach (var symbol in TABSIM_EXT.GetAllSymbols())
+            bool firstSymSection = true;
+            foreach (var sec in TABSIM_BY_CSECT.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
             {
-                int displayValue = symbol.Value.Type == SymbolType.Relative ? symbol.Value.RelativeValue : symbol.Value.Value;
-                string typeDisplay = symbol.Value.Type == SymbolType.Relative ? "R" : "A";
-                sb.AppendLine($"\"{symbol.Key}\",\"{(displayValue & 0xFFFF):X4}\",{displayValue},{typeDisplay},{symbol.Value.BlockName},{symbol.Value.BlockNumber}");
+                if (!firstSymSection)
+                    sb.AppendLine(",,,,,,"); // renglón en blanco entre secciones
+
+                firstSymSection = false;
+                var symbols = TABSIM_BY_CSECT[sec]
+                    .OrderBy(k => k.Value.Value)
+                    .ThenBy(k => k.Key, StringComparer.OrdinalIgnoreCase);
+
+                foreach (var symbol in symbols)
+                {
+                    int displayValue = symbol.Value.Type == SymbolType.Relative ? symbol.Value.RelativeValue : symbol.Value.Value;
+                    string typeDisplay = symbol.Value.Type == SymbolType.Relative ? "R" : "A";
+                    sb.AppendLine($"{FormatCSVCell(sec)},{FormatCSVCell(symbol.Value.Name)},\"{(displayValue & 0xFFFF):X4}\",{displayValue},{typeDisplay},{FormatCSVCell(symbol.Value.BlockName)},{symbol.Value.BlockNumber}");
+                }
             }
 
             if (TABSIM_EXT.Count == 0)
-            {
-                sb.AppendLine("\"(Sin símbolos)\",\"\",\"\",\"\",\"\",\"\"");
-            }
+                sb.AppendLine("\"\",\"(Sin símbolos)\",\"\",\"\",\"\",\"\",\"\"");
 
             sb.AppendLine();
 
             // ═══════════════════ SECCIÓN 2: TABLA DE BLOQUES (TABBLK) ═══════════════════
             sb.AppendLine("=== TABLA DE BLOQUES (TABBLK) ===");
-            sb.AppendLine("NUM_BLOQUE,NOMBRE,DIR_INICIO_HEX,DIR_INICIO_DEC,LONGITUD_HEX,LONGITUD_DEC");
-            foreach (var block in BLOCKS.GetAllBlocks())
+            sb.AppendLine("SECCION,NUM_BLOQUE,NOMBRE,DIR_INICIO_HEX,DIR_INICIO_DEC,LONGITUD_HEX,LONGITUD_DEC");
+            bool firstBlkSection = true;
+            foreach (var sec in TABBLK_BY_CSECT.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
             {
-                sb.AppendLine($"{block.Number},{FormatCSVCell(block.Name)},\"{block.StartAddress:X4}\",{block.StartAddress},\"{block.Length:X4}\",{block.Length}");
+                if (!firstBlkSection)
+                    sb.AppendLine(",,,,,,"); // renglón en blanco entre secciones
+
+                firstBlkSection = false;
+                foreach (var block in TABBLK_BY_CSECT[sec].OrderBy(b => b.Number))
+                {
+                    sb.AppendLine($"{FormatCSVCell(sec)},{block.Number},{FormatCSVCell(block.Name)},\"{block.StartAddress:X4}\",{block.StartAddress},\"{block.Length:X4}\",{block.Length}");
+                }
+            }
+
+            sb.AppendLine();
+
+            // ═══════════════════ SECCIÓN 3: TABLA DE REGISTROS (TABREG) ═══════════════════
+            sb.AppendLine("=== TABLA DE REGISTROS (TABREG) ===");
+            sb.AppendLine("SECCION,REGISTRO");
+            bool firstRegSection = true;
+            foreach (var sec in TABREG_BY_CSECT.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
+            {
+                if (!firstRegSection)
+                    sb.AppendLine(","); // renglón en blanco entre secciones
+
+                firstRegSection = false;
+                var regs = TABREG_BY_CSECT[sec].OrderBy(r => r, StringComparer.OrdinalIgnoreCase).ToList();
+                if (regs.Count == 0)
+                {
+                    sb.AppendLine($"{FormatCSVCell(sec)},{FormatCSVCell("(Sin registros)")}");
+                }
+                else
+                {
+                    foreach (var reg in regs)
+                        sb.AppendLine($"{FormatCSVCell(sec)},{FormatCSVCell(reg)}");
+                }
             }
 
             sb.AppendLine();
             
-            // ═══════════════════ SECCIÓN 3: ARCHIVO INTERMEDIO ═══════════════════
+            // ═══════════════════ SECCIÓN 4: ARCHIVO INTERMEDIO ═══════════════════
             sb.AppendLine("=== ARCHIVO INTERMEDIO ===");
             sb.AppendLine("NL,CONTLOC_HEX,CONTLOC_DEC,BLOQUE,ETQ,CODOP,OPR,VALOR_SEM,FMT,MOD,ERR,COMENTARIO");
             
@@ -2300,7 +2492,7 @@ namespace laboratorioPractica3
                 sb.AppendLine($"{line.LineNumber},{addressHex},{addressDec},{FormatCSVCell(line.BlockName)},{FormatCSVCell(line.Label)},{FormatCSVCell(line.Operation)},{FormatCSVCell(line.Operand)},{FormatCSVCell(line.SemanticValue)},{fmt},{FormatCSVCell(line.AddressingMode)},{FormatCSVCell(errorMsg)},{FormatCSVCell(line.Comment)}");
             }
 
-            // ═══════════════════ SECCIÓN 4: RESUMEN DEL PASO 1 ═══════════════════
+            // ═══════════════════ SECCIÓN 5: RESUMEN DEL PASO 1 ═══════════════════
             sb.AppendLine();
             sb.AppendLine("=== RESUMEN DEL PASO 1 ===");
             sb.AppendLine("PROPIEDAD,VALOR_HEX,VALOR_DEC,DESCRIPCION");
@@ -2420,7 +2612,7 @@ namespace laboratorioPractica3
             }
 
             // Ajustar BASE si era símbolo
-            if (!string.IsNullOrEmpty(BASE_OPERAND) && TABSIM_EXT.TryGetValue(BASE_OPERAND, out var baseSymbol))
+            if (!string.IsNullOrEmpty(BASE_OPERAND) && TABSIM_EXT.TryGetValue(BASE_OPERAND, out var baseSymbol, CurrentControlSectionName))
             {
                 BASE_VALUE = baseSymbol.Value;
             }
