@@ -29,7 +29,24 @@ namespace laboratorioPractica3
     {
         // ═══════════════════ VARIABLES DEL PASO 1 ═══════════════════
         
-        private readonly Bloques BLOCKS = new Bloques();
+        private readonly Dictionary<string, Bloques> BLOCKS_BY_CSECT = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Por Omision"] = new Bloques()
+        };
+
+        private Bloques BLOCKS => GetBlocksForSection(CurrentControlSectionName);
+
+        private Bloques GetBlocksForSection(string? sectionName)
+        {
+            string normalized = string.IsNullOrWhiteSpace(sectionName) ? "Por Omision" : sectionName.Trim();
+            if (!BLOCKS_BY_CSECT.TryGetValue(normalized, out var blocks))
+            {
+                blocks = new Bloques();
+                BLOCKS_BY_CSECT[normalized] = blocks;
+            }
+
+            return blocks;
+        }
         private int CONTLOC
         {
             get => BLOCKS.CurrentLocation;
@@ -167,6 +184,7 @@ namespace laboratorioPractica3
         
         // Diccionario para rastrear en qué línea se usa cada símbolo (para reportar errores correctamente)
         private Dictionary<string, List<int>> SymbolUsageLines = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Dictionary<string, List<int>>> SymbolUsageLinesBySection = new(StringComparer.OrdinalIgnoreCase);
         
         private int CurrentLine = 0;
         private bool ProgramStarted = false;
@@ -287,6 +305,94 @@ namespace laboratorioPractica3
         public string ProgramName => PROGRAM_NAME;
         public int? BaseValue => BASE_VALUE;
         public int ExecutionEntryPoint => EXECUTION_ENTRY_POINT;
+
+        public IReadOnlyDictionary<string, IReadOnlyList<BloqueInfo>> GetBlockTableBySection()
+        {
+            FinalizeBlocksAndRelocate();
+
+            var snapshot = new Dictionary<string, IReadOnlyList<BloqueInfo>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kv in TABBLK_BY_CSECT)
+            {
+                var list = kv.Value
+                    .OrderBy(b => b.Number)
+                    .Select(b => new BloqueInfo
+                    {
+                        Name = b.Name,
+                        Number = b.Number,
+                        StartAddress = b.StartAddress,
+                        LocationCounter = b.LocationCounter,
+                        Length = b.Length
+                    })
+                    .ToList();
+                snapshot[kv.Key] = list;
+            }
+
+            return snapshot;
+        }
+
+        public IReadOnlyList<ControlSection> GetControlSections()
+        {
+            FinalizeBlocksAndRelocate();
+
+            var result = new List<ControlSection>();
+            foreach (var sec in CSECT_NUMBER_BY_NAME.OrderBy(k => k.Value))
+            {
+                string sectionName = sec.Key;
+                var cs = new ControlSection
+                {
+                    Name = sectionName,
+                    Number = sec.Value,
+                    ProgramCounter = CSECT_CP_BY_NAME.TryGetValue(sectionName, out int cp) ? cp : 0,
+                    Length = GetBlocksForSection(sectionName).GetAllBlocks().Sum(b => b.Length)
+                };
+
+                if (TABSIM_BY_CSECT.TryGetValue(sectionName, out var symbols))
+                {
+                    foreach (var s in symbols.Values)
+                    {
+                        cs.SymbolTable[s.Name] = new Symbol
+                        {
+                            Name = s.Name,
+                            AddressOrValue = s.IsExternal ? null : s.Value,
+                            Type = s.IsExternal ? '-' : (s.Type == SymbolType.Relative ? 'R' : 'A'),
+                            BlockNumber = s.BlockNumber,
+                            IsExternal = s.IsExternal
+                        };
+                    }
+                }
+
+                if (TABBLK_BY_CSECT.TryGetValue(sectionName, out var blocks))
+                {
+                    foreach (var b in blocks)
+                    {
+                        cs.BlockTable[b.Name] = new Block
+                        {
+                            Name = b.Name,
+                            Number = b.Number,
+                            StartAddress = b.StartAddress,
+                            Length = b.Length,
+                            LocationCounter = b.LocationCounter
+                        };
+                    }
+                }
+
+                if (EXTDEF_BY_CSECT.TryGetValue(sectionName, out var extDef))
+                {
+                    foreach (var symbol in extDef)
+                        cs.ExternalDefinitions.Add(symbol);
+                }
+
+                if (EXTREF_BY_CSECT.TryGetValue(sectionName, out var extRef))
+                {
+                    foreach (var symbol in extRef)
+                        cs.ExternalReferences.Add(symbol);
+                }
+
+                result.Add(cs);
+            }
+
+            return result;
+        }
 
         /// <summary>
         /// Agrega errores externos (léxicos/sintácticos) para asociarlos con líneas del archivo intermedio
@@ -545,6 +651,7 @@ namespace laboratorioPractica3
                     if (isWordOrByteWithExpression)
                     {
                         // Crear intermediateLine similar a lo normal
+                        string baseOp = parsedLine.Operation.TrimStart('+');
                         var intermediateLine = new IntermediateLine
                         {
                             LineNumber = IntermediateLines.Count + 1,
@@ -589,19 +696,19 @@ namespace laboratorioPractica3
                             }
 
                             if (evalMeta.ExternalSymbols.Count > 0)
-                            {
                                 intermediateLine.ExternalReferenceSymbols = evalMeta.ExternalSymbols;
-                                intermediateLine.RequiresModification = true;
-                            }
-                            else if (evalMeta.HasUnpairedRelative)
+
+                            if (baseOp.Equals("WORD", StringComparison.OrdinalIgnoreCase))
                             {
-                                intermediateLine.RequiresModification = true;
+                                intermediateLine.ModificationRequests = evalMeta.ModificationRequests;
+                                intermediateLine.HasInternalRelativeModification = evalType == SymbolType.Relative || evalMeta.HasUnpairedRelative;
+                                intermediateLine.RelativeModuleSign = evalMeta.RelativeModuleSign;
+                                intermediateLine.RequiresModification = intermediateLine.ModificationRequests.Count > 0 || intermediateLine.HasInternalRelativeModification;
                             }
                         }
 
                         // Calcular incremento
                         int wordByteIncrement = 0;
-                        string baseOp = parsedLine.Operation.TrimStart('+');
                         if (baseOp.Equals("BYTE", StringComparison.OrdinalIgnoreCase))
                             wordByteIncrement = CalculateByteSize(parsedLine.Operand);
                         else if (baseOp.Equals("WORD", StringComparison.OrdinalIgnoreCase))
@@ -669,13 +776,19 @@ namespace laboratorioPractica3
                                 }
 
                                 if (evalMeta.ExternalSymbols.Count > 0)
-                                {
                                     intermediateLine.ExternalReferenceSymbols = evalMeta.ExternalSymbols;
+
+                                if (evalMeta.ModificationRequests.Count > 0)
+                                {
+                                    intermediateLine.ModificationRequests = evalMeta.ModificationRequests;
                                     intermediateLine.RequiresModification = true;
                                 }
-                                else if (evalMeta.HasUnpairedRelative)
+
+                                if (parsedLine.Operation.StartsWith("+", StringComparison.OrdinalIgnoreCase))
                                 {
-                                    intermediateLine.RequiresModification = true;
+                                    intermediateLine.HasInternalRelativeModification = evalType == SymbolType.Relative || evalMeta.HasUnpairedRelative;
+                                    intermediateLine.RelativeModuleSign = evalMeta.RelativeModuleSign;
+                                    intermediateLine.RequiresModification = intermediateLine.RequiresModification || intermediateLine.HasInternalRelativeModification;
                                 }
                             }
 
@@ -1023,6 +1136,8 @@ namespace laboratorioPractica3
                 EnsureControlSectionContainers(CurrentControlSectionName);
                 if (!TABBLK_BY_CSECT[CurrentControlSectionName].Any(b => string.Equals(b.Name, selectedBlock.Name, StringComparison.OrdinalIgnoreCase)))
                     TABBLK_BY_CSECT[CurrentControlSectionName].Add(selectedBlock);
+                // En USE se muestra el CP del bloque destino (después del cambio)
+                intermediateLine2.Address = selectedBlock.LocationCounter;
                 intermediateLine2.SemanticValue = $"BLQ={selectedBlock.Number}, CP={selectedBlock.LocationCounter:X4}h";
                 intermediateLine2.Increment = 0;
                 intermediateLine2.BlockName = selectedBlock.Name;
@@ -1269,14 +1384,19 @@ namespace laboratorioPractica3
                         }
 
                         if (evalMeta.ExternalSymbols.Count > 0)
-                        {
                             intermediateLine2.ExternalReferenceSymbols = evalMeta.ExternalSymbols;
+
+                        if (evalMeta.HasUnpairedRelative)
                             intermediateLine2.RequiresModification = true;
-                        }
-                        else if (evalMeta.HasUnpairedRelative)
+
+                        if (isWordDirective)
                         {
-                            intermediateLine2.RequiresModification = true;
+                            intermediateLine2.ModificationRequests = evalMeta.ModificationRequests;
+                            intermediateLine2.RelativeModuleSign = evalMeta.RelativeModuleSign;
                         }
+
+                        if (isWordDirective)
+                            intermediateLine2.HasInternalRelativeModification = evalType == SymbolType.Relative || evalMeta.HasUnpairedRelative;
                     }
                 }
             }
@@ -1301,13 +1421,50 @@ namespace laboratorioPractica3
                     }
 
                     if (evalMeta.ExternalSymbols.Count > 0)
-                    {
                         intermediateLine2.ExternalReferenceSymbols = evalMeta.ExternalSymbols;
+
+                    if (evalMeta.ModificationRequests.Count > 0)
+                    {
+                        intermediateLine2.ModificationRequests = evalMeta.ModificationRequests;
                         intermediateLine2.RequiresModification = true;
                     }
-                    else if (evalMeta.HasUnpairedRelative)
-                    {
+
+                    if (evalMeta.HasUnpairedRelative)
                         intermediateLine2.RequiresModification = true;
+
+                    if (format == 4)
+                        intermediateLine2.HasInternalRelativeModification = evalType == SymbolType.Relative || evalMeta.HasUnpairedRelative;
+                }
+            }
+
+            // Formato 4 también requiere metadatos de relocalización para operandos simples
+            // (ejemplo: +LDT ENDA), no solo para expresiones con operadores.
+            if (format == 4 && !string.IsNullOrWhiteSpace(operand))
+            {
+                string operandForEvaluation = NormalizeOperandForExpressionEvaluation(operand);
+                if (!string.IsNullOrWhiteSpace(operandForEvaluation))
+                {
+                    var (evalVal, evalType, evalErr, evalMeta) = TABSIM_EXT.EvaluateExpressionForObject(
+                        operandForEvaluation,
+                        CONTLOC,
+                        allowUndefinedSymbols: true,
+                        controlSectionName: CurrentControlSectionName);
+
+                    if (evalErr == null)
+                    {
+                        if (string.IsNullOrWhiteSpace(intermediateLine2.SemanticValue))
+                            intermediateLine2.SemanticValue = $"{evalVal:X4}h";
+
+                        if (evalMeta.ExternalSymbols.Count > 0)
+                            intermediateLine2.ExternalReferenceSymbols = evalMeta.ExternalSymbols;
+
+                        if (evalMeta.ModificationRequests.Count > 0)
+                            intermediateLine2.ModificationRequests = evalMeta.ModificationRequests;
+
+                        intermediateLine2.HasInternalRelativeModification = evalType == SymbolType.Relative || evalMeta.HasUnpairedRelative;
+                        intermediateLine2.RelativeModuleSign = evalMeta.RelativeModuleSign;
+                        if (intermediateLine2.HasInternalRelativeModification)
+                            intermediateLine2.RequiresModification = true;
                     }
                 }
             }
@@ -1344,6 +1501,17 @@ namespace laboratorioPractica3
             // Directiva END
             if (operationContext?.directive()?.END() != null)
             {
+                SaveCurrentControlSectionState();
+
+                // END se reporta con el CP final de la sección principal (bloque por omisión)
+                string mainSection = string.IsNullOrWhiteSpace(PROGRAM_NAME) ? "Por Omision" : PROGRAM_NAME;
+                if (CSECT_CP_BY_NAME.TryGetValue(mainSection, out int endCpMain))
+                {
+                    intermediateLine2.Address = endCpMain;
+                    intermediateLine2.BlockName = "Por Omision";
+                    intermediateLine2.BlockNumber = 0;
+                }
+
                 // END cierra el Paso 1:
                 // - finaliza bloques USE
                 // - reubica símbolos y líneas a direcciones absolutas
@@ -1696,51 +1864,50 @@ namespace laboratorioPractica3
         {
             if (string.IsNullOrEmpty(operand))
                 return;
-                
-            // Remover prefijos y sufijos
-            string cleanOperand = operand.TrimStart('#', '@', '=').Split(',')[0].Trim();
-            
-            // IMPORTANTE: Si el operando contiene OPERADORES DE EXPRESIÓN (*, +, -, /, paréntesis),
-            // NO registrarlo como símbolo porque las expresiones se evalúan en Paso 2.
-            // Solo registrar símbolos simples (referencias directas).
-            bool isExpression = cleanOperand.Contains('*') || cleanOperand.Contains('/') || 
-                              cleanOperand.Contains('+') || cleanOperand.Contains('-') || 
-                              cleanOperand.Contains('(') || cleanOperand.Contains(')');
-            
-            if (isExpression)
-                return;  // Ignorar expresiones - Paso 2 las evaluará
-            
-            // Si no es un número ni un literal, es una referencia a símbolo
-            if (!string.IsNullOrEmpty(cleanOperand) && 
-                !char.IsDigit(cleanOperand[0]) && 
-                !cleanOperand.StartsWith("C'") &&
-                !cleanOperand.StartsWith("X'") &&
-                !cleanOperand.EndsWith("H", StringComparison.OrdinalIgnoreCase))
+
+            // Quitar literales C'..' y X'..' para no capturar tokens internos como símbolos.
+            string scanOperand = Regex.Replace(operand, "[cCxX]'[^']*'", string.Empty);
+
+            foreach (Match m in Regex.Matches(scanOperand, "[A-Za-z_][A-Za-z0-9_]*"))
             {
-                // Detectar registros referenciados y registrarlos por sección
-                foreach (Match m in Regex.Matches(operand, "[A-Za-z_][A-Za-z0-9_]*"))
+                string token = m.Value;
+                if (REGISTERS.Contains(token))
                 {
-                    string tok = m.Value;
-                    if (REGISTERS.Contains(tok))
-                    {
-                        EnsureControlSectionContainers(CurrentControlSectionName);
-                        TABREG_BY_CSECT[CurrentControlSectionName].Add(tok);
-                    }
+                    EnsureControlSectionContainers(CurrentControlSectionName);
+                    TABREG_BY_CSECT[CurrentControlSectionName].Add(token);
+                    continue;
                 }
 
-                ReferencedSymbols.Add(cleanOperand);
-                
-                // Rastrear en qué líneas se usa este símbolo
-                if (!SymbolUsageLines.ContainsKey(cleanOperand))
+                if (token.EndsWith("H", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                ReferencedSymbols.Add(token);
+
+                string sectionName = string.IsNullOrWhiteSpace(CurrentControlSectionName)
+                    ? "Por Omision"
+                    : CurrentControlSectionName;
+
+                if (!SymbolUsageLinesBySection.TryGetValue(sectionName, out var sectionUsages))
                 {
-                    SymbolUsageLines[cleanOperand] = new List<int>();
+                    sectionUsages = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+                    SymbolUsageLinesBySection[sectionName] = sectionUsages;
                 }
 
-                // Evita repetir la misma línea para el mismo símbolo.
-                if (!SymbolUsageLines[cleanOperand].Contains(lineNumber))
+                if (!sectionUsages.TryGetValue(token, out var sectionLines))
                 {
-                    SymbolUsageLines[cleanOperand].Add(lineNumber);
+                    sectionLines = new List<int>();
+                    sectionUsages[token] = sectionLines;
                 }
+                if (!sectionLines.Contains(lineNumber))
+                    sectionLines.Add(lineNumber);
+
+                if (!SymbolUsageLines.TryGetValue(token, out var globalLines))
+                {
+                    globalLines = new List<int>();
+                    SymbolUsageLines[token] = globalLines;
+                }
+                if (!globalLines.Contains(lineNumber))
+                    globalLines.Add(lineNumber);
             }
         }
         
@@ -1754,14 +1921,42 @@ namespace laboratorioPractica3
             // revisa símbolos usados en operandos que nunca se definieron en TABSIM.
             var alreadyReported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var symbol in ReferencedSymbols)
+            foreach (var sectionEntry in SymbolUsageLinesBySection)
             {
-                if (!TABSIM_EXT.ContainsKey(symbol) && !REGISTERS.Contains(symbol))
+                string sectionName = sectionEntry.Key;
+
+                foreach (var symbolEntry in sectionEntry.Value)
                 {
-                    // Obtener las líneas donde se usa este símbolo
-                    if (SymbolUsageLines.ContainsKey(symbol))
+                    string symbol = symbolEntry.Key;
+                    if (REGISTERS.Contains(symbol))
+                        continue;
+
+                    bool existsInCurrentSection = TABSIM_EXT.ContainsKey(symbol, sectionName);
+                    bool existsInAnySection = TABSIM_EXT.ContainsKey(symbol);
+                    bool declaredAsExtRefInSection = EXTREF_BY_CSECT.TryGetValue(sectionName, out var extRefs) &&
+                                                    extRefs.Contains(symbol, StringComparer.OrdinalIgnoreCase);
+
+                    if (existsInCurrentSection)
+                        continue;
+
+                    if (existsInAnySection && !declaredAsExtRefInSection)
                     {
-                        foreach (var lineNum in SymbolUsageLines[symbol])
+                        foreach (var lineNum in symbolEntry.Value)
+                        {
+                            string errorMsg = $"Uso externo no declarado: '{symbol}' debe declararse en EXTREF de la sección '{sectionName}'";
+                            string key = $"{lineNum}|{errorMsg}|{SICXEErrorType.Semantico}";
+                            if (alreadyReported.Add(key))
+                            {
+                                Errors.Add(new SICXEError(lineNum, 0, errorMsg, SICXEErrorType.Semantico));
+                            }
+                        }
+
+                        continue;
+                    }
+
+                    if (!existsInAnySection)
+                    {
+                        foreach (var lineNum in symbolEntry.Value)
                         {
                             string errorMsg = $"[Simbolo no definido] La etiqueta '{symbol}' no esta definida en TABSIM";
                             string key = $"{lineNum}|{errorMsg}|{SICXEErrorType.Semantico}";
@@ -1771,15 +1966,23 @@ namespace laboratorioPractica3
                             }
                         }
                     }
-                    else
+                }
+            }
+
+            // Compatibilidad: conserva recorrido global para casos viejos donde no se pudo mapear sección.
+            foreach (var symbol in ReferencedSymbols)
+            {
+                if (TABSIM_EXT.ContainsKey(symbol) || REGISTERS.Contains(symbol))
+                    continue;
+
+                if (SymbolUsageLines.ContainsKey(symbol))
+                {
+                    foreach (var lineNum in SymbolUsageLines[symbol])
                     {
-                        // Si no tenemos la línea específica, reportar en línea 0
-                        string fallbackMsg = $"Símbolo no definido: '{symbol}'";
-                        string key = $"0|{fallbackMsg}|{SICXEErrorType.Semantico}";
+                        string errorMsg = $"[Simbolo no definido] La etiqueta '{symbol}' no esta definida en TABSIM";
+                        string key = $"{lineNum}|{errorMsg}|{SICXEErrorType.Semantico}";
                         if (alreadyReported.Add(key))
-                        {
-                            Errors.Add(new SICXEError(0, 0, fallbackMsg, SICXEErrorType.Semantico));
-                        }
+                            Errors.Add(new SICXEError(lineNum, 0, errorMsg, SICXEErrorType.Semantico));
                     }
                 }
             }
@@ -2093,13 +2296,28 @@ namespace laboratorioPractica3
                 var symtab = TABSIM_BY_CSECT[sec];
                 if (symtab != null && symtab.Count > 0)
                 {
-                    foreach (var kv in symtab.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+                    // Si todos los símbolos de la sección son externos, mostrar marcador
+                    if (symtab.Values.All(s => s.IsExternal))
                     {
-                        var s = kv.Value;
-                        int displayValue = s.Type == SymbolType.Relative ? s.RelativeValue : s.Value;
-                        string typeDisplay = s.Type == SymbolType.Relative ? "R" : "A";
-                        string bloque = $"{s.BlockName} ({s.BlockNumber})";
-                        sb.AppendLine($"    {s.Name,-20} | {(displayValue & 0xFFFF):X4}h{"",-13} | {displayValue,-18} | {typeDisplay,-10} | {bloque,-14}");
+                        sb.AppendLine("    (Solo externos) | -    | -                | -         | -             ");
+                    }
+                    else
+                    {
+                        foreach (var kv in symtab.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+                        {
+                            var s = kv.Value;
+                            if (s.IsExternal)
+                            {
+                                sb.AppendLine(string.Format("    {0,-20} | {1,-18} | {2,-18} | {3,-10} | {4,-14}", s.Name, "-", "-", "-", "-"));
+                            }
+                            else
+                            {
+                                int displayValue = s.Type == SymbolType.Relative ? s.RelativeValue : s.Value;
+                                string typeDisplay = s.Type == SymbolType.Relative ? "R" : "A";
+                                string bloque = $"{s.BlockName} ({s.BlockNumber})";
+                                sb.AppendLine(string.Format("    {0,-20} | {1,-18} | {2,-18} | {3,-10} | {4,-14}", s.Name, (displayValue & 0xFFFF).ToString("X4") + "h", displayValue.ToString(), typeDisplay, bloque));
+                            }
+                        }
                     }
                 }
                 else
@@ -2140,16 +2358,19 @@ namespace laboratorioPractica3
             }
 
             sb.AppendLine("------------------- TABLA DE BLOQUES (TABBLK) -------------------");
-            sb.AppendLine($"{"NUM",-6} | {"NOMBRE",-12} | {"DIR_INI_HEX",-12} | {"DIR_INI_DEC",-12} | {"LONG_HEX",-10} | {"LONG_DEC",-10}");
+            sb.AppendLine($"{"CSECT",-14} | {"NUM",-6} | {"NOMBRE",-12} | {"DIR_INI_HEX",-12} | {"DIR_INI_DEC",-12} | {"LONG_HEX",-10} | {"LONG_DEC",-10}");
             sb.AppendLine(new string('-', 80));
-            foreach (var block in BLOCKS.GetAllBlocks())
+            foreach (var sec in TABBLK_BY_CSECT.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
             {
-                sb.AppendLine($"{block.Number,-6} | {block.Name,-12} | {block.StartAddress:X4}h{"",-7} | {block.StartAddress,-12} | {block.Length:X4}h{"",-5} | {block.Length,-10}");
+                foreach (var block in TABBLK_BY_CSECT[sec].OrderBy(b => b.Number))
+                {
+                    sb.AppendLine($"{sec,-14} | {block.Number,-6} | {block.Name,-12} | {block.StartAddress:X4}h{"",-7} | {block.StartAddress,-12} | {block.Length:X4}h{"",-5} | {block.Length,-10}");
+                }
             }
             sb.AppendLine();
 
             sb.AppendLine("------------------- ARCHIVO INTERMEDIO -------------------");
-            sb.AppendLine($"{"#",-4} | {"CONTLOC",-8} | {"BLQ",-8} | {"ETQ",-10} | {"CODOP",-10} | {"OPR",-15} | {"VALOR_SEM",-15} | {"FMT",-4} | {"MOD",-12} | {"COD_OBJ",-12} | {"ERR"}");
+            sb.AppendLine($"{"#",-4} | {"CONTLOC",-8} | {"BLQ",-8} | {"ETQ",-10} | {"CODOP",-10} | {"OPR",-15} | {"VALOR_SEM",-15} | {"FMT",-4} | {"MOD",-12} | {"MARCA",-6} | {"COD_OBJ",-12} | {"ERR"}");
             sb.AppendLine(new string('-', 150));
 
             foreach (var line in IntermediateLines)
@@ -2185,8 +2406,9 @@ namespace laboratorioPractica3
                 string codObj = "";
                 if (objectCodes != null && objectCodes.TryGetValue(line.LineNumber, out var oc))
                     codObj = oc;
+                string relocationMark = line.ExternalReferenceSymbols.Count > 0 ? "*SE" : (line.RequiresModification ? "*R" : "");
                 
-                sb.AppendLine($"{line.LineNumber,-4} | {loc,-8} | {line.BlockNumber,-8} | {line.Label,-10} | {line.Operation,-10} | {line.Operand,-15} | {line.SemanticValue,-15} | {fmt,-4} | {line.AddressingMode,-12} | {codObj,-12} | {errorDisplay}");
+                sb.AppendLine($"{line.LineNumber,-4} | {loc,-8} | {line.BlockNumber,-8} | {line.Label,-10} | {line.Operation,-10} | {line.Operand,-15} | {line.SemanticValue,-15} | {fmt,-4} | {line.AddressingMode,-12} | {relocationMark,-6} | {codObj,-12} | {errorDisplay}");
             }
             sb.AppendLine();
 
@@ -2244,7 +2466,7 @@ namespace laboratorioPractica3
             sb.AppendLine();
             sb.AppendLine("------------------- RESUMEN DEL ANALISIS -------------------");
             sb.AppendLine($"  * Tabla de simbolos (TABSIM): {TABSIM_EXT.Count} simbolo(s) definido(s)");
-            sb.AppendLine($"  * Tabla de bloques (TABBLK): {BLOCKS.GetAllBlocks().Count} bloque(s)");
+            sb.AppendLine($"  * Tabla de bloques (TABBLK): {BLOCKS_BY_CSECT.Values.Sum(b => b.GetAllBlocks().Count)} bloque(s)");
             sb.AppendLine($"  * Longitud del programa: {PROGRAM_LENGTH:X4}h ({PROGRAM_LENGTH} bytes)");
             if (BASE_VALUE.HasValue)
             {
@@ -2281,9 +2503,17 @@ namespace laboratorioPractica3
 
                 foreach (var symbol in symbols)
                 {
-                    int displayValue = symbol.Value.Type == SymbolType.Relative ? symbol.Value.RelativeValue : symbol.Value.Value;
-                    string typeDisplay = symbol.Value.Type == SymbolType.Relative ? "R" : "A";
-                    sb.AppendLine($"{FormatCSVCell(sec)},{FormatCSVCell(symbol.Value.Name)},{(displayValue & 0xFFFF):X4},{displayValue},{typeDisplay},{FormatCSVCell(symbol.Value.BlockName)},{symbol.Value.BlockNumber}");
+                    // Para símbolos externos omitimos dir/valor/tipo/bloque
+                    if (symbol.Value.IsExternal)
+                    {
+                        sb.AppendLine($"{FormatCSVCell(sec)},{FormatCSVCell(symbol.Value.Name)},\"-\",\"-\",\"-\",\"-\",\"-\"");
+                    }
+                    else
+                    {
+                        int displayValue = symbol.Value.Type == SymbolType.Relative ? symbol.Value.RelativeValue : symbol.Value.Value;
+                        string typeDisplay = symbol.Value.Type == SymbolType.Relative ? "R" : "A";
+                        sb.AppendLine($"{FormatCSVCell(sec)},{FormatCSVCell(symbol.Value.Name)},{(displayValue & 0xFFFF):X4},{displayValue},{typeDisplay},{FormatCSVCell(symbol.Value.BlockName)},{symbol.Value.BlockNumber}");
+                    }
                 }
             }
             
@@ -2298,7 +2528,7 @@ namespace laboratorioPractica3
             FinalizeBlocksAndRelocate();
 
             var sb = new StringBuilder();
-            sb.AppendLine("NL,CONTLOC_HEX,CONTLOC_DEC,BLOQUE,ETQ,CODOP,OPR,VALOR_SEM,FMT,MOD,ERR,COMENTARIO");
+            sb.AppendLine("NL,CONTLOC_HEX,CONTLOC_DEC,BLOQUE,ETQ,CODOP,OPR,VALOR_SEM,FMT,MOD,MARCA_RELOC,ERR,COMENTARIO");
             
             foreach (var line in IntermediateLines)
             {
@@ -2309,8 +2539,9 @@ namespace laboratorioPractica3
                 string errorMsg = string.IsNullOrEmpty(line.Error)
                     ? string.Join("; ", Errors.Where(e => e.Line == line.SourceLine || e.Line == line.LineNumber).Select(e => e.Message).Distinct())
                     : line.Error;
+                string relocationMark = line.ExternalReferenceSymbols.Count > 0 ? "*SE" : (line.RequiresModification ? "*R" : "");
                 
-                sb.AppendLine($"{line.LineNumber},{addressHex},{addressDec},{FormatCSVCell(line.BlockName)},{FormatCSVCell(line.Label)},{FormatCSVCell(line.Operation)},{FormatCSVCell(line.Operand)},{FormatCSVCell(line.SemanticValue)},{fmt},{FormatCSVCell(line.AddressingMode)},{FormatCSVCell(errorMsg)},{FormatCSVCell(line.Comment)}");
+                sb.AppendLine($"{line.LineNumber},{addressHex},{addressDec},{FormatCSVCell(line.BlockName)},{FormatCSVCell(line.Label)},{FormatCSVCell(line.Operation)},{FormatCSVCell(line.Operand)},{FormatCSVCell(line.SemanticValue)},{fmt},{FormatCSVCell(line.AddressingMode)},{FormatCSVCell(relocationMark)},{FormatCSVCell(errorMsg)},{FormatCSVCell(line.Comment)}");
             }
 
             File.WriteAllText(outputPath, sb.ToString(), Encoding.UTF8);
@@ -2328,7 +2559,7 @@ namespace laboratorioPractica3
             sb.AppendLine($"NOMBRE_PROGRAMA,{PROGRAM_NAME},{PROGRAM_NAME}");
             sb.AppendLine($"DIRECCION_INICIO,{START_ADDRESS:X4},{START_ADDRESS}");
             sb.AppendLine($"LONGITUD_PROGRAMA,{PROGRAM_LENGTH:X4},{PROGRAM_LENGTH}");
-            sb.AppendLine($"TOTAL_BLOQUES,,{BLOCKS.GetAllBlocks().Count}");
+            sb.AppendLine($"TOTAL_BLOQUES,,{BLOCKS_BY_CSECT.Values.Sum(b => b.GetAllBlocks().Count)}");
             sb.AppendLine($"TOTAL_SIMBOLOS,,{TABSIM_EXT.Count}");
             sb.AppendLine($"TOTAL_LINEAS,,{IntermediateLines.Count}");
             sb.AppendLine($"TOTAL_ERRORES,,{Errors.Count}");
@@ -2415,11 +2646,26 @@ namespace laboratorioPractica3
                     .OrderBy(k => k.Value.Value)
                     .ThenBy(k => k.Key, StringComparer.OrdinalIgnoreCase);
 
-                foreach (var symbol in symbols)
+                // Si la sección sólo tiene símbolos externos, añadir una línea marcador
+                if (symbols.All(kv => kv.Value.IsExternal) && symbols.Count() > 0)
                 {
-                    int displayValue = symbol.Value.Type == SymbolType.Relative ? symbol.Value.RelativeValue : symbol.Value.Value;
-                    string typeDisplay = symbol.Value.Type == SymbolType.Relative ? "R" : "A";
-                    sb.AppendLine($"{FormatCSVCell(sec)},{FormatCSVCell(symbol.Value.Name)},\"{(displayValue & 0xFFFF):X4}\",{displayValue},{typeDisplay},{FormatCSVCell(symbol.Value.BlockName)},{symbol.Value.BlockNumber}");
+                    sb.AppendLine($"{FormatCSVCell(sec)},{FormatCSVCell("(Solo externos)" )},\"-\",\"-\",\"-\",\"-\",\"\"");
+                }
+                else
+                {
+                    foreach (var symbol in symbols)
+                    {
+                        if (symbol.Value.IsExternal)
+                        {
+                            sb.AppendLine($"{FormatCSVCell(sec)},{FormatCSVCell(symbol.Value.Name)},\"-\",\"-\",\"-\",\"-\",\"-\"");
+                        }
+                        else
+                        {
+                            int displayValue = symbol.Value.Type == SymbolType.Relative ? symbol.Value.RelativeValue : symbol.Value.Value;
+                            string typeDisplay = symbol.Value.Type == SymbolType.Relative ? "R" : "A";
+                            sb.AppendLine($"{FormatCSVCell(sec)},{FormatCSVCell(symbol.Value.Name)},\"{(displayValue & 0xFFFF):X4}\",{displayValue},{typeDisplay},{FormatCSVCell(symbol.Value.BlockName)},{symbol.Value.BlockNumber}");
+                        }
+                    }
                 }
             }
 
@@ -2472,7 +2718,7 @@ namespace laboratorioPractica3
             
             // ═══════════════════ SECCIÓN 4: ARCHIVO INTERMEDIO ═══════════════════
             sb.AppendLine("=== ARCHIVO INTERMEDIO ===");
-            sb.AppendLine("NL,CONTLOC_HEX,CONTLOC_DEC,BLOQUE,ETQ,CODOP,OPR,VALOR_SEM,FMT,MOD,ERR,COMENTARIO");
+            sb.AppendLine("NL,CONTLOC_HEX,CONTLOC_DEC,BLOQUE,ETQ,CODOP,OPR,VALOR_SEM,FMT,MOD,MARCA_RELOC,ERR,COMENTARIO");
             
             foreach (var line in IntermediateLines)
             {
@@ -2488,8 +2734,9 @@ namespace laboratorioPractica3
                     if (!string.IsNullOrWhiteSpace(additional))
                         errorMsg = string.IsNullOrWhiteSpace(errorMsg) ? additional : errorMsg + "; " + additional;
                 }
+                string relocationMark = line.ExternalReferenceSymbols.Count > 0 ? "*SE" : (line.RequiresModification ? "*R" : "");
                 
-                sb.AppendLine($"{line.LineNumber},{addressHex},{addressDec},{FormatCSVCell(line.BlockName)},{FormatCSVCell(line.Label)},{FormatCSVCell(line.Operation)},{FormatCSVCell(line.Operand)},{FormatCSVCell(line.SemanticValue)},{fmt},{FormatCSVCell(line.AddressingMode)},{FormatCSVCell(errorMsg)},{FormatCSVCell(line.Comment)}");
+                sb.AppendLine($"{line.LineNumber},{addressHex},{addressDec},{FormatCSVCell(line.BlockName)},{FormatCSVCell(line.Label)},{FormatCSVCell(line.Operation)},{FormatCSVCell(line.Operand)},{FormatCSVCell(line.SemanticValue)},{fmt},{FormatCSVCell(line.AddressingMode)},{FormatCSVCell(relocationMark)},{FormatCSVCell(errorMsg)},{FormatCSVCell(line.Comment)}");
             }
 
             // ═══════════════════ SECCIÓN 5: RESUMEN DEL PASO 1 ═══════════════════
@@ -2501,7 +2748,7 @@ namespace laboratorioPractica3
             sb.AppendLine($"\"DIR_INICIO\",\"{START_ADDRESS:X4}\",\"{START_ADDRESS}\",\"Dirección de inicio (operando de START)\"");
             sb.AppendLine($"\"CONTLOC_FINAL\",\"{csvFinalContloc:X4}\",\"{csvFinalContloc}\",\"Dirección final absoluta del programa\"");
             sb.AppendLine($"\"LONGITUD_PROGRAMA\",\"{PROGRAM_LENGTH:X4}\",\"{PROGRAM_LENGTH}\",\"Suma de longitudes de todos los bloques\"");
-            sb.AppendLine($"\"TOTAL_BLOQUES\",\"\",{BLOCKS.GetAllBlocks().Count},\"Bloques definidos con USE\"");
+            sb.AppendLine($"\"TOTAL_BLOQUES\",\"\",{BLOCKS_BY_CSECT.Values.Sum(b => b.GetAllBlocks().Count)},\"Bloques definidos con USE\"");
             sb.AppendLine($"\"TOTAL_SIMBOLOS\",\"\",{TABSIM_EXT.Count},\"Símbolos definidos en TABSIM\"");
             sb.AppendLine($"\"TOTAL_LINEAS\",\"\",{IntermediateLines.Count},\"Líneas en archivo intermedio\"");
             sb.AppendLine($"\"TOTAL_ERRORES\",\"\",{(allErrors?.Count ?? Errors.Count)},\"Total de errores detectados\"");
@@ -2566,15 +2813,32 @@ namespace laboratorioPractica3
             if (BLOCKS_FINALIZED)
                 return;
 
-            PROGRAM_LENGTH = BLOCKS.FinalizeBlocks(START_ADDRESS);
+            // Finalizar bloques por CSECT (cada sección comienza en 0 de forma independiente)
+            int mainSectionLength = 0;
+            foreach (var sec in CSECT_NUMBER_BY_NAME
+                .OrderBy(kv => kv.Value)
+                .Select(kv => kv.Key))
+            {
+                var blocks = GetBlocksForSection(sec);
+                int sectionLength = blocks.FinalizeBlocks(0);
+
+                if (string.Equals(sec, PROGRAM_NAME, StringComparison.OrdinalIgnoreCase) ||
+                    (CSECT_NUMBER_BY_NAME.TryGetValue(sec, out int secNum) && secNum == 0))
+                {
+                    mainSectionLength = sectionLength;
+                }
+            }
+
+            PROGRAM_LENGTH = mainSectionLength;
             CONTLOC_FINAL = START_ADDRESS + PROGRAM_LENGTH;
 
             var missingBlocks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             // Reubicar símbolos relativos a direcciones absolutas
-            TABSIM_EXT.RelocateRelativeSymbols(blockName =>
+            TABSIM_EXT.RelocateRelativeSymbols((sectionName, blockName) =>
             {
-                if (BLOCKS.TryGetBlockStartAddress(blockName, out int startAddress))
+                var blocks = GetBlocksForSection(sectionName);
+                if (blocks.TryGetBlockStartAddress(blockName, out int startAddress))
                     return startAddress;
 
                 string normalized = string.IsNullOrWhiteSpace(blockName) ? "Por Omision" : blockName.Trim();
@@ -2585,17 +2849,20 @@ namespace laboratorioPractica3
                 return 0;
             });
 
-            // Reubicar direcciones del archivo intermedio según su bloque
+            // Calcular dirección absoluta del archivo intermedio según su bloque
+            // y conservar Address como CP local del bloque.
             foreach (var line in IntermediateLines)
             {
                 if (line.Address >= 0)
                 {
-                    if (BLOCKS.TryGetBlockStartAddress(line.BlockName, out int blockStart))
+                    var blocks = GetBlocksForSection(line.ControlSectionName);
+                    if (blocks.TryGetBlockStartAddress(line.BlockName, out int blockStart))
                     {
-                        line.Address += blockStart;
+                        line.AbsoluteAddress = line.Address + blockStart;
                     }
                     else
                     {
+                        line.AbsoluteAddress = line.Address;
                         string normalized = string.IsNullOrWhiteSpace(line.BlockName) ? "Por Omision" : line.BlockName.Trim();
                         if (missingBlocks.Add(normalized))
                         {
@@ -2609,6 +2876,10 @@ namespace laboratorioPractica3
                             line.Error += "; " + blockErr;
                     }
                 }
+                else
+                {
+                    line.AbsoluteAddress = -1;
+                }
             }
 
             // Ajustar BASE si era símbolo
@@ -2620,7 +2891,7 @@ namespace laboratorioPractica3
             // Ajustar primer ejecutable después de reubicar
             var firstExecutableLine = IntermediateLines
                 .FirstOrDefault(l => l.Increment > 0 && !DIRECTIVES.Contains(l.Operation.TrimStart('+').ToUpperInvariant()));
-            FIRST_EXECUTABLE_ADDRESS = firstExecutableLine?.Address;
+            FIRST_EXECUTABLE_ADDRESS = firstExecutableLine?.AbsoluteAddress;
 
             BLOCKS_FINALIZED = true;
         }
@@ -2634,6 +2905,7 @@ namespace laboratorioPractica3
         public int LineNumber { get; set; }
         public int SourceLine { get; set; }  // Número de línea ANTLR (fuente original)
         public int Address { get; set; }
+        public int AbsoluteAddress { get; set; } = -1;
         public string ControlSectionName { get; set; } = "Por Omision";
         public int ControlSectionNumber { get; set; }
         public string BlockName { get; set; } = "Por Omision";
@@ -2646,7 +2918,10 @@ namespace laboratorioPractica3
         public int Format { get; set; }
         public string AddressingMode { get; set; } = "-";
         public List<string> ExternalReferenceSymbols { get; set; } = new List<string>();
+        public List<ModificationRequest> ModificationRequests { get; set; } = new List<ModificationRequest>();
+        public bool HasInternalRelativeModification { get; set; }
         public bool RequiresModification { get; set; }
+        public char? RelativeModuleSign { get; set; }
         public int Increment { get; set; }
         public string Error { get; set; } = "";
     }

@@ -8,7 +8,15 @@ namespace laboratorioPractica3
     public class ExpressionEvaluationMetadata
     {
         public List<string> ExternalSymbols { get; } = new();
+        public List<ModificationRequest> ModificationRequests { get; } = new();
         public bool HasUnpairedRelative { get; set; }
+        public char? RelativeModuleSign { get; set; }
+    }
+
+    public sealed class ModificationRequest
+    {
+        public string Symbol { get; init; } = string.Empty;
+        public char Sign { get; init; }
     }
 
     // Tipos de símbolos en SIC/XE: Absoluto (constante) o Relativo (dirección)
@@ -167,7 +175,7 @@ namespace laboratorioPractica3
             sectionTable[name] = new SymbolInfo(name, value, type, blockName, blockNumber, value, isExternal, section);
         }
 
-        public void RelocateRelativeSymbols(Func<string, int> blockStartResolver)
+        public void RelocateRelativeSymbols(Func<string, string, int> blockStartResolver)
         {
             foreach (var sectionTable in _symbolTableBySection.Values)
             {
@@ -175,7 +183,7 @@ namespace laboratorioPractica3
                 {
                     if (symbol.Type == SymbolType.Relative)
                     {
-                        int blockStart = blockStartResolver(symbol.BlockName);
+                        int blockStart = blockStartResolver(symbol.ControlSectionName, symbol.BlockName);
                         symbol.Value = blockStart + symbol.RelativeValue;
                     }
                 }
@@ -212,21 +220,127 @@ namespace laboratorioPractica3
             if (string.IsNullOrWhiteSpace(expression))
                 return (0, SymbolType.Absolute, "Expresión vacía", metadata);
 
+            CollectModificationRequests(expression, metadata, controlSectionName);
             string normalizedExpression = NormalizeExternalsToZero(expression, metadata, controlSectionName);
-            var (value, type, error) = EvaluateExpression(normalizedExpression, currentAddress, allowUndefinedSymbols, controlSectionName);
+            var (value, relCount, error) = EvaluateExpressionWithRelativeCount(normalizedExpression, currentAddress, allowUndefinedSymbols, controlSectionName);
 
-            if (error != null)
-            {
-                metadata.HasUnpairedRelative =
-                    error.Contains("término relativo", StringComparison.OrdinalIgnoreCase) ||
-                    error.Contains("más de un término relativo", StringComparison.OrdinalIgnoreCase);
-            }
-            else if (type == SymbolType.Relative)
+            if (error == null && Math.Abs(relCount) == 1)
             {
                 metadata.HasUnpairedRelative = true;
+                metadata.RelativeModuleSign = relCount > 0 ? '+' : '-';
+            }
+            else
+            {
+                metadata.HasUnpairedRelative = false;
+                metadata.RelativeModuleSign = null;
             }
 
+            var type = Math.Abs(relCount) == 1 && error == null
+                ? SymbolType.Relative
+                : SymbolType.Absolute;
+
             return (value, type, error, metadata);
+        }
+
+        private int CollectModificationRequests(string expression, ExpressionEvaluationMetadata metadata, string? controlSectionName)
+        {
+            var tokens = Tokenize(expression);
+            int pos = 0;
+            return CollectAddSubModificationRequests(tokens, ref pos, metadata, controlSectionName, +1);
+        }
+
+        private int CollectAddSubModificationRequests(List<string> tokens, ref int pos, ExpressionEvaluationMetadata metadata, string? controlSectionName, int sign)
+        {
+            int relCount = CollectMulDivModificationRequests(tokens, ref pos, metadata, controlSectionName, sign);
+
+            while (pos < tokens.Count && (tokens[pos] == "+" || tokens[pos] == "-"))
+            {
+                string op = tokens[pos++];
+                int nextSign = op == "+" ? sign : -sign;
+                relCount += CollectMulDivModificationRequests(tokens, ref pos, metadata, controlSectionName, nextSign);
+            }
+
+            return relCount;
+        }
+
+        private int CollectMulDivModificationRequests(List<string> tokens, ref int pos, ExpressionEvaluationMetadata metadata, string? controlSectionName, int sign)
+        {
+            int relCount = CollectFactorModificationRequests(tokens, ref pos, metadata, controlSectionName, sign);
+
+            while (pos < tokens.Count && (tokens[pos] == "*" || tokens[pos] == "/"))
+            {
+                string op = tokens[pos++];
+                int rightRel = CollectFactorModificationRequests(tokens, ref pos, metadata, controlSectionName, sign);
+
+                // Las multiplicaciones y divisiones no deben generar registros M propios.
+                // Si incluyen símbolos relativos/externos, la expresión será validada por el evaluador.
+                if (op == "*" || op == "/")
+                {
+                    relCount = 0;
+                }
+
+                // Consumir el término derecho para no romper el recorrido.
+                _ = rightRel;
+            }
+
+            return relCount;
+        }
+
+        private int CollectFactorModificationRequests(List<string> tokens, ref int pos, ExpressionEvaluationMetadata metadata, string? controlSectionName, int sign)
+        {
+            if (pos >= tokens.Count)
+                return 0;
+
+            string token = tokens[pos];
+
+            if (token == "+" || token == "-")
+            {
+                pos++;
+                int nextSign = token == "+" ? sign : -sign;
+                return CollectFactorModificationRequests(tokens, ref pos, metadata, controlSectionName, nextSign);
+            }
+
+            if (token == "(")
+            {
+                pos++;
+                int rel = CollectAddSubModificationRequests(tokens, ref pos, metadata, controlSectionName, sign);
+                if (pos < tokens.Count && tokens[pos] == ")")
+                    pos++;
+                return rel;
+            }
+
+            if (token == ")")
+            {
+                pos++;
+                return 0;
+            }
+
+            pos++;
+
+            if (token == "*")
+                return sign;
+
+            if (TryResolveSymbol(token, controlSectionName, out var symbolInfo))
+            {
+                if (symbolInfo.IsExternal)
+                {
+                    metadata.ModificationRequests.Add(new ModificationRequest
+                    {
+                        Symbol = symbolInfo.Name,
+                        Sign = sign >= 0 ? '+' : '-'
+                    });
+                    if (!metadata.ExternalSymbols.Contains(symbolInfo.Name, StringComparer.OrdinalIgnoreCase))
+                        metadata.ExternalSymbols.Add(symbolInfo.Name);
+                    return 0;
+                }
+
+                return symbolInfo.Type == SymbolType.Relative ? sign : 0;
+            }
+
+            if (TryParseTokenAsNumber(token, out _))
+                return 0;
+
+            return 0;
         }
 
         private string NormalizeExternalsToZero(string expression, ExpressionEvaluationMetadata metadata, string? controlSectionName)
@@ -266,11 +380,15 @@ namespace laboratorioPractica3
             if (string.IsNullOrWhiteSpace(expression))
                 return (0, SymbolType.Absolute, "Expresión vacía");
 
-            return ParseExpressionTokens(expression, currentAddress, allowUndefinedSymbols, controlSectionName);
+            var (value, relCount, error) = EvaluateExpressionWithRelativeCount(expression, currentAddress, allowUndefinedSymbols, controlSectionName);
+            if (error != null)
+                return (-1, SymbolType.Absolute, error);
+
+            return (value, Math.Abs(relCount) == 1 ? SymbolType.Relative : SymbolType.Absolute, null);
         }
 
         // Procesa los tokens de la expresión mediante parser recursivo descendente
-        private (int value, SymbolType type, string? error) ParseExpressionTokens(string expression, int currentAddress, bool allowUndefinedSymbols, string? controlSectionName)
+        private (int value, int relCount, string? error) EvaluateExpressionWithRelativeCount(string expression, int currentAddress, bool allowUndefinedSymbols, string? controlSectionName)
         {
             try
             {
@@ -283,24 +401,22 @@ namespace laboratorioPractica3
                 // relCount != 0,1 -> error (mezcla inválida de relativos)
                 var (value, relCount, error) = ParseAddSubInternal(tokens, ref pos, currentAddress, allowUndefinedSymbols, controlSectionName);
                 if (error != null)
-                    return (-1, SymbolType.Absolute, error);
+                    return (-1, 0, error);
 
                 if (pos < tokens.Count)
-                    return (-1, SymbolType.Absolute, "Tokens adicionales inesperados");
+                    return (-1, 0, "Tokens adicionales inesperados");
 
-                // Determinar tipo final según relCount
-                if (relCount == 0)
-                    return (value, SymbolType.Absolute, null);
-                if (relCount == 1)
-                    return (value, SymbolType.Relative, null);
-                if (relCount < 0)
-                    return (-1, SymbolType.Absolute, "La expresión deja un término relativo negativo sin cancelar");
+                // Determinar validez final según la magnitud del término relativo neto.
+                // +1 y -1 son válidos: representan una expresión relativa que debe
+                // relocalizarse con signo explícito.
+                if (relCount == 0 || Math.Abs(relCount) == 1)
+                    return (value, relCount, null);
 
-                return (-1, SymbolType.Absolute, "La expresión contiene más de un término relativo positivo sin cancelar");
+                return (-1, 0, "La expresión contiene más de un término relativo sin cancelar");
             }
             catch (Exception ex)
             {
-                return (-1, SymbolType.Absolute, $"Error al evaluar la expresión: {ex.Message}");
+                return (-1, 0, $"Error al evaluar la expresión: {ex.Message}");
             }
         }
 

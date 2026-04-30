@@ -18,12 +18,16 @@ namespace laboratorioPractica3
         private readonly int _direccionInicio;
         private readonly int _longitudPrograma;
         private readonly string _nombrePrograma;
+        private readonly int _direccionEjecucion;
 
         private int? _baseActual; //Valor actual de BASE, se actualiza al procesar directivas BASE/NOBASE
 
         /// RESULTADOS DEL PASO 2:
         public List<SICXEError> Errors { get; } = new();                   // Lista de errores semanticos
         public List<ObjectCodeLine> ObjectCodeLines { get; } = new();      // Lineas con codigo objeto generado
+        public List<ObjectModule> GeneratedModules { get; } = new();       // Módulos H/D/R/T/M/E por CSECT
+
+        private readonly Dictionary<string, ModuleBuilderState> _moduleStates = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// Constructor: recibe datos compartidos del Paso 1
@@ -34,7 +38,8 @@ namespace laboratorioPractica3
             int dirInicio,
             int longPrograma,
             string nombrePrograma,
-            int? valorBase)
+            int? valorBase,
+            int direccionEjecucion)
         {
             _lineasIntermedias = lineas;
             _tablaSimbolos = tablaSimExt;
@@ -42,6 +47,7 @@ namespace laboratorioPractica3
             _longitudPrograma = longPrograma;
             _nombrePrograma = nombrePrograma;
             _baseActual = valorBase;
+            _direccionEjecucion = direccionEjecucion;
         }
 
         /// <summary>
@@ -50,6 +56,10 @@ namespace laboratorioPractica3
         /// </summary>
         public void ObjectCodeGeneration()
         {
+            GeneratedModules.Clear();
+            _moduleStates.Clear();
+            InitializeModuleBuilders();
+
             // Motor principal del Paso 2:
             // recorre el intermedio, genera código por formato y conserva trazabilidad
             // de errores semánticos por línea.
@@ -62,6 +72,7 @@ namespace laboratorioPractica3
                 if (linea.Address < 0 || string.IsNullOrWhiteSpace(linea.Operation))
                 {
                     ObjectCodeLines.Add(new ObjectCodeLine(linea, "", ""));
+                    RegisterObjectEvent(linea, string.Empty);
                     continue;
                 }
 
@@ -89,6 +100,7 @@ namespace laboratorioPractica3
                         Errors.Add(new SICXEError(linea.SourceLine, 0, errorPaso2, SICXEErrorType.Semantico));
 
                     ObjectCodeLines.Add(new ObjectCodeLine(linea, codigoObjeto, errorPaso2));
+                    RegisterObjectEvent(linea, codigoObjeto);
                     continue;
                 }
 
@@ -98,6 +110,7 @@ namespace laboratorioPractica3
                     errorPaso2 = "Error: Instrucción desconocida";
                     Errors.Add(new SICXEError(linea.SourceLine, 0, errorPaso2, SICXEErrorType.Semantico));
                     ObjectCodeLines.Add(new ObjectCodeLine(linea, "", errorPaso2));
+                    RegisterObjectEvent(linea, string.Empty);
                     continue;
                 }
                 // Generar codigo objeto segun formato.
@@ -114,8 +127,186 @@ namespace laboratorioPractica3
                     Errors.Add(new SICXEError(linea.SourceLine, 0, errorPaso2, SICXEErrorType.Semantico));
 
                 ObjectCodeLines.Add(new ObjectCodeLine(linea, codigoObjeto, errorPaso2));
+                RegisterObjectEvent(linea, codigoObjeto);
+            }
+
+            FinalizeModuleBuilders();
+        }
+
+        private void InitializeModuleBuilders()
+        {
+            static int Addr(IntermediateLine l) => l.AbsoluteAddress >= 0 ? l.AbsoluteAddress : l.Address;
+
+            var groups = _lineasIntermedias
+                .Where(l => !string.IsNullOrWhiteSpace(l.ControlSectionName))
+                .GroupBy(l => (Name: l.ControlSectionName, Number: l.ControlSectionNumber))
+                .OrderBy(g => g.Key.Number)
+                .ThenBy(g => g.Min(x => x.LineNumber))
+                .ToList();
+
+            foreach (var group in groups)
+            {
+                string sectionName = string.IsNullOrWhiteSpace(group.Key.Name) ? "Por Omision" : group.Key.Name;
+                var lines = group.OrderBy(l => l.LineNumber).ToList();
+
+                int sectionStart = lines
+                    .Where(l => Addr(l) >= 0)
+                    .Select(Addr)
+                    .DefaultIfEmpty(0)
+                    .Min();
+
+                int sectionEnd = lines
+                    .Where(l => Addr(l) >= 0)
+                    .Select(l => Addr(l) + Math.Max(0, l.Increment))
+                    .DefaultIfEmpty(sectionStart)
+                    .Max();
+
+                var module = new ObjectModule
+                {
+                    Name = sectionName,
+                    StartAddress = sectionStart,
+                    Length = Math.Max(0, sectionEnd - sectionStart)
+                };
+
+                var state = new ModuleBuilderState(module, sectionName, group.Key.Number);
+                _moduleStates[sectionName] = state;
+
+                var extDefSymbols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var extRefSymbols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var line in lines)
+                {
+                    string op = (line.Operation ?? string.Empty).Trim().TrimStart('+').ToUpperInvariant();
+                    if (op == "EXTDEF")
+                    {
+                        foreach (var symbol in ParseSymbolList(line.Operand))
+                            extDefSymbols.Add(symbol);
+                    }
+                    else if (op == "EXTREF")
+                    {
+                        foreach (var symbol in ParseSymbolList(line.Operand))
+                            extRefSymbols.Add(symbol);
+                    }
+                }
+
+                foreach (var symbol in extDefSymbols)
+                {
+                    var defLine = lines.FirstOrDefault(l => string.Equals(l.Label, symbol, StringComparison.OrdinalIgnoreCase));
+                    int relAddr = defLine == null ? 0 : Math.Max(0, Addr(defLine) - sectionStart);
+                    module.D.Add(new DefineRecord(symbol, relAddr));
+                }
+
+                foreach (var symbol in extRefSymbols)
+                    module.R.Add(new ReferRecord(symbol));
             }
         }
+
+        private void RegisterObjectEvent(IntermediateLine line, string objectCode)
+        {
+            string sectionName = string.IsNullOrWhiteSpace(line.ControlSectionName) ? "Por Omision" : line.ControlSectionName;
+            if (!_moduleStates.TryGetValue(sectionName, out var state))
+                return;
+
+            string op = (line.Operation ?? string.Empty).Trim().TrimStart('+').ToUpperInvariant();
+            bool isCutDirective = op is "RESB" or "RESW" or "USE" or "CSECT" or "ORG" or "END";
+            if (isCutDirective)
+                state.FlushText();
+
+            if (!string.IsNullOrWhiteSpace(objectCode))
+            {
+                string cleanedObjectCode = objectCode.Replace("*", "");
+                int address = GetEffectiveAddress(line);
+                state.AppendText(address, cleanedObjectCode);
+
+                bool isWord = op == "WORD";
+                bool isFormat4 = line.Format == 4;
+                bool isWordOrFormat4 = isWord || isFormat4;
+                int modAddress = isWord ? address : address + 1;
+                int halfBytesLength = isWord ? 0x06 : 0x05;
+
+                if (isWordOrFormat4)
+                {
+                    string operandForEvaluation = NormalizeOperandForExpressionEvaluation(line.Operand);
+                    if (!string.IsNullOrWhiteSpace(operandForEvaluation))
+                    {
+                        var (evalVal, evalType, evalErr, evalMeta) = _tablaSimbolos.EvaluateExpressionForObject(
+                            operandForEvaluation,
+                            address,
+                            allowUndefinedSymbols: true,
+                            controlSectionName: line.ControlSectionName);
+
+                        if (evalErr == null)
+                        {
+                            foreach (var req in evalMeta.ModificationRequests)
+                            {
+                                if (req is null)
+                                    continue;
+
+                                if (string.IsNullOrWhiteSpace(req.Symbol))
+                                    continue;
+
+                                if (req.Sign != '+' && req.Sign != '-')
+                                    continue;
+
+                                state.AddModification(modAddress, halfBytesLength, req.Sign, req.Symbol);
+                            }
+
+                            if (evalType == SymbolType.Relative)
+                            {
+                                char moduleSign = evalMeta.RelativeModuleSign ?? '+';
+                                state.AddModification(modAddress, halfBytesLength, moduleSign, state.Module.Name);
+                            }
+                        }
+                    }
+                }
+
+                if (!state.FirstExecutableAddress.HasValue && line.Format > 0)
+                    state.FirstExecutableAddress = address;
+            }
+        }
+
+        private static string NormalizeOperandForExpressionEvaluation(string operand)
+        {
+            if (string.IsNullOrWhiteSpace(operand))
+                return operand;
+
+            string value = operand.Trim();
+            if (value.StartsWith("#", StringComparison.Ordinal) || value.StartsWith("@", StringComparison.Ordinal))
+                value = value.Substring(1).Trim();
+
+            string compact = value.Replace(" ", string.Empty);
+            if (compact.EndsWith(",X", StringComparison.OrdinalIgnoreCase))
+            {
+                int commaIndex = compact.LastIndexOf(',');
+                if (commaIndex > 0)
+                    compact = compact.Substring(0, commaIndex);
+            }
+
+            return compact;
+        }
+
+        private void FinalizeModuleBuilders()
+        {
+            var ordered = _moduleStates.Values
+                .OrderBy(s => s.SectionNumber)
+                .ThenBy(s => s.Module.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            foreach (var state in ordered)
+            {
+                state.FlushText();
+
+                int eAddress = string.Equals(state.Module.Name, _nombrePrograma, StringComparison.OrdinalIgnoreCase)
+                    ? _direccionEjecucion
+                    : (state.FirstExecutableAddress ?? 0);
+
+                state.Module.E = new EndRecord(eAddress);
+                GeneratedModules.Add(state.Module);
+            }
+        }
+
+        private static int GetEffectiveAddress(IntermediateLine linea)
+            => linea.AbsoluteAddress >= 0 ? linea.AbsoluteAddress : linea.Address;
 
         // FORMATO 1: [opcode] (1 byte)
         /// <summary>
@@ -286,7 +477,8 @@ namespace laboratorioPractica3
             int targetAddress;
             SymbolType targetType;
 
-            var (evalVal, evalType, evalErr, evalMeta) = _tablaSimbolos.EvaluateExpressionForObject(operandoLimpio, linea.Address, controlSectionName: linea.ControlSectionName);
+            int effectiveAddress = GetEffectiveAddress(linea);
+            var (evalVal, evalType, evalErr, evalMeta) = _tablaSimbolos.EvaluateExpressionForObject(operandoLimpio, effectiveAddress, controlSectionName: linea.ControlSectionName);
             
             if (evalErr != null)
             {
@@ -321,7 +513,7 @@ namespace laboratorioPractica3
 
             // Calcular desplazamiento (PC-relativo o BASE-relativo) 
             // 7) Calculo de banderas b/p y desplazamiento (PC o BASE)
-            int pc = linea.Address + linea.Increment; // PC = dirección actual + tamaño instrucción
+            int pc = effectiveAddress + linea.Increment; // PC = dirección actual + tamaño instrucción
             int bBit = 0, pBit = 0;
             int displacement;
 
@@ -423,7 +615,8 @@ namespace laboratorioPractica3
 
             bool isImmediate = (n == 0 && i == 1);
 
-            var (evalVal, evalType, evalErr, evalMeta) = _tablaSimbolos.EvaluateExpressionForObject(operandoLimpio, linea.Address, controlSectionName: linea.ControlSectionName);
+            int effectiveAddress = GetEffectiveAddress(linea);
+            var (evalVal, evalType, evalErr, evalMeta) = _tablaSimbolos.EvaluateExpressionForObject(operandoLimpio, effectiveAddress, controlSectionName: linea.ControlSectionName);
 
             // Si no se puede resolver el operando, reportar símbolo/operando inválido.
             if (evalErr != null)
@@ -477,7 +670,9 @@ namespace laboratorioPractica3
                 int firstByte = (infoOp.Opcode & 0xFC) | (n << 1) | i;
                 int xbpe = (x << 3) | 1; // b=0, p=0, e=1
                 int objCode = (firstByte << 24) | (xbpe << 20) | (targetAddress & 0xFFFFF);
-                string suffix = (evalType == SymbolType.Relative || evalMeta.ExternalSymbols.Count > 0 || evalMeta.HasUnpairedRelative) ? "*" : "";
+                string suffix = (evalMeta.ModificationRequests.Count > 0 || evalType == SymbolType.Relative || evalMeta.HasUnpairedRelative)
+                    ? "*"
+                    : "";
                 return (objCode.ToString("X8") + suffix, "");
             }
         }
@@ -495,7 +690,7 @@ namespace laboratorioPractica3
             return op switch
             {
                 "BYTE" => GenerateByteObjCode(line.Operand),
-                "WORD" => GenerateWordObjCode(line.Operand, line.Address, line.ControlSectionName),
+                "WORD" => GenerateWordObjCode(line.Operand, GetEffectiveAddress(line), line.ControlSectionName),
                 "END" => ValidateEndDirective(line),
                 _ => ("", "") // START, END, BASE, NOBASE, RESB, RESW, etc.
             };
@@ -557,7 +752,7 @@ namespace laboratorioPractica3
                 return ("FFFFFF", "Error: " + err); // Error base para WORD invalido
 
             string code = (val & 0xFFFFFF).ToString("X6");
-            if (type == SymbolType.Relative || evalMeta.ExternalSymbols.Count > 0 || evalMeta.HasUnpairedRelative)
+            if (evalMeta.ModificationRequests.Count > 0 || type == SymbolType.Relative || evalMeta.HasUnpairedRelative)
                 code += "*";
 
             return (code, "");
@@ -618,6 +813,84 @@ namespace laboratorioPractica3
             return compact;
         }
 
+        private static List<string> ParseSymbolList(string? operand)
+        {
+            if (string.IsNullOrWhiteSpace(operand))
+                return new List<string>();
+
+            return operand
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private sealed class ModuleBuilderState
+        {
+            private readonly HashSet<string> _modificationKeys = new(StringComparer.OrdinalIgnoreCase);
+            private int _textStart = -1;
+            private readonly StringBuilder _textBytes = new();
+            private int _textByteCount;
+
+            public ModuleBuilderState(ObjectModule module, string sectionName, int sectionNumber)
+            {
+                Module = module;
+                SectionName = sectionName;
+                SectionNumber = sectionNumber;
+            }
+
+            public ObjectModule Module { get; }
+            public string SectionName { get; }
+            public int SectionNumber { get; }
+            public int? FirstExecutableAddress { get; set; }
+
+            public void AppendText(int address, string hexBytes)
+            {
+                int bytes = string.IsNullOrWhiteSpace(hexBytes) ? 0 : hexBytes.Length / 2;
+                if (bytes <= 0)
+                    return;
+
+                bool isContiguous = _textStart >= 0 && (_textStart + _textByteCount) == address;
+                bool exceedsLimit = (_textByteCount + bytes) > 30;
+
+                if (_textStart >= 0 && (!isContiguous || exceedsLimit))
+                    FlushText();
+
+                if (_textStart < 0)
+                    _textStart = address;
+
+                _textBytes.Append(hexBytes);
+                _textByteCount += bytes;
+            }
+
+            public void FlushText()
+            {
+                if (_textByteCount <= 0)
+                    return;
+
+                Module.T.Add(new TextRecord
+                {
+                    StartAddress = _textStart,
+                    HexBytes = _textBytes.ToString()
+                });
+
+                _textStart = -1;
+                _textBytes.Clear();
+                _textByteCount = 0;
+            }
+
+            public void AddModification(int address, int halfBytesLength, char sign, string symbol)
+            {
+                string normalizedSymbol = string.IsNullOrWhiteSpace(symbol) ? Module.Name : symbol.Trim();
+                string key = $"{address:X6}|{halfBytesLength:X2}|{sign}|{normalizedSymbol}";
+                if (!_modificationKeys.Add(key))
+                    return;
+
+                Module.M.Add(new ModificationRecord(address, halfBytesLength, sign, normalizedSymbol));
+            }
+        }
+
        
         public string GenerateReport()
         {
@@ -673,7 +946,7 @@ namespace laboratorioPractica3
             var utf8WithBom = new UTF8Encoding(true);
 
             sb.AppendLine("=== PASO 2 - CODIGO OBJETO ===");
-            sb.AppendLine("NL,CONTLOC_HEX,CONTLOC_DEC,ETQ,CODOP,OPR,FMT,MOD,COD_OBJ,ERR_PASO1,ERR_PASO2,COMENTARIO");
+            sb.AppendLine("NL,CONTLOC_HEX,CONTLOC_DEC,ETQ,CODOP,OPR,FMT,MOD,MARCA_RELOC,COD_OBJ,ERR_PASO1,ERR_PASO2,COMENTARIO");
 
             foreach (var objLine in ObjectCodeLines)
             {
@@ -682,6 +955,7 @@ namespace laboratorioPractica3
                 string addressDec = (line.Address >= 0) ? $"{line.Address}" : "\"\"";
                 string fmt = (line.Format > 0) ? $"{line.Format}" : "\"\"";
                 string codObj = string.IsNullOrEmpty(objLine.ObjectCode) ? "----" : objLine.ObjectCode;
+                string relocationMark = line.ExternalReferenceSymbols.Count > 0 ? "*SE" : (line.RequiresModification ? "*R" : "");
 
                 sb.AppendLine(string.Join(",",
                     line.LineNumber,
@@ -692,6 +966,7 @@ namespace laboratorioPractica3
                     FormatearCeldaCSV(line.Operand),
                     fmt,
                     FormatearCeldaCSV(line.AddressingMode),
+                    FormatearCeldaCSV(relocationMark),
                     FormatearCeldaCSV(codObj),
                     FormatearCeldaCSV(line.Error),
                     FormatearCeldaCSV(objLine.ErrorPaso2),
@@ -740,7 +1015,10 @@ namespace laboratorioPractica3
         public string SectionName { get; }
         public int SectionNumber { get; }
         public bool RequiresModification { get; }
+        public bool HasInternalRelativeModification { get; }
+        public char? RelativeModuleSign { get; }
         public List<string> ExternalReferenceSymbols { get; }
+        public List<ModificationRequest> ModificationRequests { get; }
 
         public ObjectCodeLine(IntermediateLine intermLine, string objectCode, string errorPaso2)
         {
@@ -750,7 +1028,10 @@ namespace laboratorioPractica3
             SectionName = intermLine.ControlSectionName;
             SectionNumber = intermLine.ControlSectionNumber;
             RequiresModification = intermLine.RequiresModification;
+            HasInternalRelativeModification = intermLine.HasInternalRelativeModification;
+            RelativeModuleSign = intermLine.RelativeModuleSign;
             ExternalReferenceSymbols = new List<string>(intermLine.ExternalReferenceSymbols);
+            ModificationRequests = new List<ModificationRequest>(intermLine.ModificationRequests);
         }
     }
 }

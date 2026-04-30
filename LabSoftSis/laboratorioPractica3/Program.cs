@@ -11,8 +11,15 @@ using System.Windows.Forms;
 class Program
 {
     [STAThread]
-    static void Main()
+    static void Main(string[] args)
     {
+        // Si se proporcionan argumentos, ejecutar en modo consola para pruebas/automatización.
+        if (args != null && args.Length > 0)
+        {
+            Main_old(args);
+            return;
+        }
+
         ApplicationConfiguration.Initialize();
         Application.Run(new Form1());
     }
@@ -285,7 +292,8 @@ class Program
             paso1.ProgramStartAddress,
             paso1.ProgramSize,
             paso1.ProgramName,
-            paso1.BaseValue);
+            paso1.BaseValue,
+            paso1.ExecutionEntryPoint);
 
         // Paso 2: resuelvedireccionamiento y genera código objeto por línea.
         paso2.ObjectCodeGeneration();
@@ -334,6 +342,7 @@ class Program
         // --------------- EJECUTAR PROGRAMA OBJETO ---------------
         var progObjeto = new ProgramaObjeto(
             paso2.ObjectCodeLines,
+            paso2.GeneratedModules,
             paso1.ProgramName,
             paso1.ProgramStartAddress,
             paso1.ProgramSize,

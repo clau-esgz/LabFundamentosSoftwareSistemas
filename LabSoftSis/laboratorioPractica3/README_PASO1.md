@@ -11,6 +11,18 @@ El **Paso 1** del ensamblador de dos pasadas realiza:
 
 ---
 
+## Convenciones de salida (bloques, secciones y marcas)
+
+- En el **archivo intermedio**, la columna `CONTLOC` muestra el **CP local del bloque activo** (no la dirección absoluta reubicada).
+- En líneas `USE`, el `CONTLOC` reportado corresponde al CP del **bloque destino**.
+- La tabla de símbolos valida **tipo absoluto/relativo** como `A` / `R`.
+- Si un símbolo es **externo** (`EXTREF`), en `DIRECCION/VALOR`, `TIPO`, `BLOQUE` y `NO_BLOQUE` se muestra `-`.
+- Las marcas de relocalización se reportan en **intermedio/objeto**:
+   - `*R` → reubicable relativo
+   - `*SE` → referencia a símbolo externo
+
+---
+
 ##  Cómo usar
 
 ### Opción 1: Menú interactivo

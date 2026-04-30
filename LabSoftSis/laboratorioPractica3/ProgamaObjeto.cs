@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -9,6 +10,7 @@ namespace laboratorioPractica3
     public class ProgramaObjeto
     {
         private readonly IReadOnlyList<ObjectCodeLine> _lineasCodigoObjeto;
+        private readonly IReadOnlyList<ObjectModule>? _modulosPreconstruidos;
         private readonly string _nombrePrograma;
         private readonly int _direccionInicio;
         private readonly int _direccionEjecucion;
@@ -26,11 +28,48 @@ namespace laboratorioPractica3
             _direccionInicio = dirInicio;
             _longitudPrograma = longPrograma;
             _direccionEjecucion = dirEjecucion;
+            _modulosPreconstruidos = null;
+        }
+
+        public ProgramaObjeto(
+            IReadOnlyList<ObjectCodeLine> lineas,
+            IReadOnlyList<ObjectModule> modulos,
+            string nombrePrograma,
+            int dirInicio,
+            int longPrograma,
+            int dirEjecucion)
+        {
+            _lineasCodigoObjeto = lineas;
+            _modulosPreconstruidos = modulos;
+            _nombrePrograma = nombrePrograma;
+            _direccionInicio = dirInicio;
+            _longitudPrograma = longPrograma;
+            _direccionEjecucion = dirEjecucion;
         }
 
         public List<string> GenerarRegistros()
         {
+            var modulos = GenerarModulos();
             var registros = new List<string>();
+
+            foreach (var modulo in modulos)
+            {
+                bool isPrimarySection = string.Equals(modulo.Name, _nombrePrograma, StringComparison.OrdinalIgnoreCase) ||
+                                       string.Equals(modulo.Name, "Por Omision", StringComparison.OrdinalIgnoreCase);
+                registros.AddRange(modulo.ToRecords(isPrimarySection));
+            }
+
+            return registros;
+        }
+
+        public List<ObjectModule> GenerarModulos()
+        {
+            if (_modulosPreconstruidos != null && _modulosPreconstruidos.Count > 0)
+                return _modulosPreconstruidos.ToList();
+
+            static int Addr(IntermediateLine l) => l.AbsoluteAddress >= 0 ? l.AbsoluteAddress : l.Address;
+
+            var modulos = new List<ObjectModule>();
             var lineasPorSeccion = _lineasCodigoObjeto
                 .GroupBy(l => (l.SectionName ?? "Por Omision", l.SectionNumber))
                 .OrderBy(g => g.Key.Item2)
@@ -43,61 +82,62 @@ namespace laboratorioPractica3
                 var lineasSeccion = grupo.OrderBy(l => l.IntermLine.LineNumber).ToList();
 
                 int sectionStart = lineasSeccion
-                    .Where(l => l.IntermLine.Address >= 0)
-                    .Select(l => l.IntermLine.Address)
+                    .Where(l => Addr(l.IntermLine) >= 0)
+                    .Select(l => Addr(l.IntermLine))
                     .DefaultIfEmpty(_direccionInicio)
                     .Min();
 
                 int sectionEnd = lineasSeccion
-                    .Where(l => l.IntermLine.Address >= 0)
-                    .Select(l => l.IntermLine.Address + Math.Max(0, l.IntermLine.Increment))
+                    .Where(l => Addr(l.IntermLine) >= 0)
+                    .Select(l => Addr(l.IntermLine) + Math.Max(0, l.IntermLine.Increment))
                     .DefaultIfEmpty(sectionStart)
                     .Max();
 
                 int sectionLength = Math.Max(0, sectionEnd - sectionStart);
-                string nombreH = sectionName.PadRight(6).Substring(0, 6);
-                registros.Add($"H{nombreH}{sectionStart:X6}{sectionLength:X6}");
+                var modulo = new ObjectModule
+                {
+                    Name = sectionName,
+                    StartAddress = sectionStart,
+                    Length = sectionLength
+                };
 
-                var extDefSymbols = new List<string>();
-                var extRefSymbols = new List<string>();
+                var emittedExtDefSymbols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var emittedExtRefSymbols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var linea in lineasSeccion)
                 {
                     string op = linea.IntermLine.Operation?.Trim().ToUpperInvariant() ?? string.Empty;
                     if (op == "EXTDEF")
                     {
-                        extDefSymbols.AddRange(ParseSymbolList(linea.IntermLine.Operand));
+                        var symbolsInLine = ParseSymbolList(linea.IntermLine.Operand)
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+                        if (symbolsInLine.Count > 0)
+                        {
+                            foreach (var symbol in symbolsInLine)
+                            {
+                                if (!emittedExtDefSymbols.Add(symbol))
+                                    continue;
+
+                                var defLine = lineasSeccion.FirstOrDefault(l =>
+                                    string.Equals(l.IntermLine.Label, symbol, StringComparison.OrdinalIgnoreCase));
+                                int relAddr = defLine == null ? 0 : Math.Max(0, Addr(defLine.IntermLine) - sectionStart);
+                                modulo.D.Add(new DefineRecord(symbol, relAddr));
+                            }
+                        }
                     }
                     else if (op == "EXTREF")
                     {
-                        extRefSymbols.AddRange(ParseSymbolList(linea.IntermLine.Operand));
-                    }
-                }
+                        var symbolsInLine = ParseSymbolList(linea.IntermLine.Operand)
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .Where(s => emittedExtRefSymbols.Add(s))
+                            .ToList();
 
-                extDefSymbols = extDefSymbols.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                extRefSymbols = extRefSymbols.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-
-                if (extDefSymbols.Count > 0)
-                {
-                    var dBuilder = new StringBuilder("D");
-                    foreach (var symbol in extDefSymbols)
-                    {
-                        var defLine = lineasSeccion.FirstOrDefault(l =>
-                            string.Equals(l.IntermLine.Label, symbol, StringComparison.OrdinalIgnoreCase));
-                        int relAddr = defLine == null ? 0 : Math.Max(0, defLine.IntermLine.Address - sectionStart);
-                        dBuilder.Append(symbol.PadRight(6).Substring(0, 6));
-                        dBuilder.Append(relAddr.ToString("X6"));
+                        if (symbolsInLine.Count > 0)
+                        {
+                            foreach (var symbol in symbolsInLine)
+                                modulo.R.Add(new ReferRecord(symbol));
+                        }
                     }
-                    registros.Add(dBuilder.ToString());
-                }
-
-                if (extRefSymbols.Count > 0)
-                {
-                    var rBuilder = new StringBuilder("R");
-                    foreach (var symbol in extRefSymbols)
-                    {
-                        rBuilder.Append(symbol.PadRight(6).Substring(0, 6));
-                    }
-                    registros.Add(rBuilder.ToString());
                 }
 
                 int inicioTexto = -1;
@@ -108,7 +148,11 @@ namespace laboratorioPractica3
                 {
                     if (conteoBytesTexto <= 0)
                         return;
-                    registros.Add($"T{inicioTexto:X6}{conteoBytesTexto:X2}{codigoTexto}");
+                    modulo.T.Add(new TextRecord
+                    {
+                        StartAddress = inicioTexto,
+                        HexBytes = codigoTexto
+                    });
                     inicioTexto = -1;
                     codigoTexto = string.Empty;
                     conteoBytesTexto = 0;
@@ -130,48 +174,45 @@ namespace laboratorioPractica3
                     string codigoLimpio = codigoCrudo.Replace("*", "");
                     int bytesLinea = codigoLimpio.Length / 2;
 
-                    bool esContiguo = (inicioTexto != -1) && ((inicioTexto + conteoBytesTexto) == linea.IntermLine.Address);
+                    int lineAddress = Addr(linea.IntermLine);
+                    bool esContiguo = (inicioTexto != -1) && ((inicioTexto + conteoBytesTexto) == lineAddress);
                     bool excedeLimite = (conteoBytesTexto + bytesLinea) > 30;
                     if (inicioTexto != -1 && (!esContiguo || excedeLimite))
                         VaciarTexto();
 
                     if (inicioTexto == -1)
-                        inicioTexto = linea.IntermLine.Address;
+                        inicioTexto = lineAddress;
 
                     codigoTexto += codigoLimpio;
                     conteoBytesTexto += bytesLinea;
 
-                    bool requiereM = linea.RequiresModification || codigoCrudo.EndsWith("*", StringComparison.Ordinal);
-                    if (!requiereM)
-                        continue;
-
                     int direccionMod = string.Equals(linea.IntermLine.Operation, "WORD", StringComparison.OrdinalIgnoreCase)
-                        ? linea.IntermLine.Address
-                        : linea.IntermLine.Address + 1;
+                        ? lineAddress
+                        : lineAddress + 1;
                     int longitudHalfBytes = string.Equals(linea.IntermLine.Operation, "WORD", StringComparison.OrdinalIgnoreCase) ? 0x06 : 0x05;
 
-                    // Construir marcadores de relocalización
-                    var marcadores = new StringBuilder();
+                    var modificaciones = new List<ModificationRequest>();
+                    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-                    if (linea.ExternalReferenceSymbols.Count > 0)
+                    void AddMod(ModificationRequest mod)
                     {
-                        // Hay símbolos externos: agregar *SE por cada uno
-                        foreach (var ext in linea.ExternalReferenceSymbols.Distinct(StringComparer.OrdinalIgnoreCase))
-                        {
-                            marcadores.Append("*SE");
-                        }
-                        registrosModificacion.Add(new RegistroModificacion(direccionMod, longitudHalfBytes, marcadores.ToString()));
+                        string key = $"{mod.Sign}|{mod.Symbol}";
+                        if (seen.Add(key))
+                            modificaciones.Add(mod);
                     }
-                    else if (linea.RequiresModification)
+
+                    foreach (var mod in linea.ModificationRequests)
+                        AddMod(mod);
+
+                    foreach (var mod in InferModificationRequests(linea))
+                        AddMod(mod);
+
+                    if (modificaciones.Count == 0)
+                        continue;
+
+                    foreach (var mod in modificaciones)
                     {
-                        // Es relativo puro (no es R-R=A porque RequiresModification sería false si lo fuera)
-                        marcadores.Append("*R");
-                        registrosModificacion.Add(new RegistroModificacion(direccionMod, longitudHalfBytes, marcadores.ToString()));
-                    }
-                    else
-                    {
-                        // No requiere relocalización (puede ser absoluto o R-R=A)
-                        // No agregar registro M en este caso
+                        registrosModificacion.Add(new RegistroModificacion(direccionMod, longitudHalfBytes, mod.Sign, mod.Symbol));
                     }
                 }
 
@@ -179,20 +220,19 @@ namespace laboratorioPractica3
 
                 foreach (var registro in registrosModificacion)
                 {
-                    registros.Add($"M{registro.Direccion:X6}{registro.LongitudMediosBytes:X2}+{registro.Nombre}");
+                    modulo.M.Add(new ModificationRecord(
+                        registro.Direccion,
+                        registro.LongitudMediosBytes,
+                        registro.Sign,
+                        registro.Symbol));
                 }
 
-                // Emitir registro E para esta sección
-                // Sólo la primera sección (PRINCIPAL) usa la dirección de ejecución
-                // Las demás secciones emiten E con 6 espacios en blanco
-                bool isPrimarySection = (grupo.Key.Item2 == 0) || string.Equals(sectionName, "Por Omision", StringComparison.OrdinalIgnoreCase);
-                string eRecord = isPrimarySection
-                    ? $"E{_direccionEjecucion:X6}"
-                    : "E      "; // 6 espacios: secciones secundarias sin punto de entrada
-                registros.Add(eRecord);
+                // El registro E siempre pertenece al módulo; la serialización decide si imprime dirección.
+                modulo.E = new EndRecord(_direccionEjecucion);
+                modulos.Add(modulo);
             }
 
-            return registros;
+            return modulos;
         }
 
         private static List<string> ParseSymbolList(string? operand)
@@ -205,6 +245,112 @@ namespace laboratorioPractica3
                 .Select(s => s.Trim())
                 .Where(s => !string.IsNullOrEmpty(s))
                 .ToList();
+        }
+
+        private List<ModificationRequest> InferModificationRequests(ObjectCodeLine linea)
+        {
+            var result = new List<ModificationRequest>();
+            string operand = linea.IntermLine.Operand ?? string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(operand) && linea.ExternalReferenceSymbols.Count > 0)
+            {
+                var externalSet = new HashSet<string>(linea.ExternalReferenceSymbols, StringComparer.OrdinalIgnoreCase);
+                int pos = 0;
+                CollectExternalModificationRequests(TokenizeExpression(operand), ref pos, externalSet, result, +1);
+            }
+
+            bool isWordOrFormat4 =
+                string.Equals(linea.IntermLine.Operation, "WORD", StringComparison.OrdinalIgnoreCase) ||
+                linea.IntermLine.Format == 4;
+            if (isWordOrFormat4 && linea.RelativeModuleSign.HasValue)
+            {
+                result.Add(new ModificationRequest
+                {
+                    Symbol = string.IsNullOrWhiteSpace(linea.SectionName) ? _nombrePrograma : linea.SectionName,
+                    Sign = linea.RelativeModuleSign.Value
+                });
+            }
+
+            return result;
+        }
+
+        private static List<string> TokenizeExpression(string expression)
+        {
+            var tokens = new List<string>();
+            var current = new StringBuilder();
+
+            foreach (char ch in expression)
+            {
+                if (char.IsWhiteSpace(ch))
+                    continue;
+
+                if ("+-*/()".Contains(ch))
+                {
+                    if (current.Length > 0)
+                    {
+                        tokens.Add(current.ToString());
+                        current.Clear();
+                    }
+
+                    tokens.Add(ch.ToString());
+                }
+                else
+                {
+                    current.Append(ch);
+                }
+            }
+
+            if (current.Length > 0)
+                tokens.Add(current.ToString());
+
+            return tokens;
+        }
+
+        private void CollectExternalModificationRequests(List<string> tokens, ref int pos, HashSet<string> externalSet, List<ModificationRequest> result, int sign)
+        {
+            while (pos < tokens.Count)
+            {
+                string token = tokens[pos];
+
+                if (token == ")")
+                {
+                    pos++;
+                    return;
+                }
+
+                if (token == "(")
+                {
+                    pos++;
+                    CollectExternalModificationRequests(tokens, ref pos, externalSet, result, sign);
+                    continue;
+                }
+
+                if (token == "+" || token == "-")
+                {
+                    int nextSign = token == "+" ? sign : -sign;
+                    pos++;
+                    if (pos < tokens.Count && tokens[pos] == "(")
+                    {
+                        pos++;
+                        CollectExternalModificationRequests(tokens, ref pos, externalSet, result, nextSign);
+                    }
+                    else if (pos < tokens.Count)
+                    {
+                        string next = tokens[pos++];
+                        if (externalSet.Contains(next))
+                        {
+                            result.Add(new ModificationRequest { Symbol = next, Sign = nextSign >= 0 ? '+' : '-' });
+                        }
+                    }
+                    continue;
+                }
+
+                pos++;
+                if (externalSet.Contains(token))
+                {
+                    result.Add(new ModificationRequest { Symbol = token, Sign = sign >= 0 ? '+' : '-' });
+                }
+            }
         }
 
         public void ExportarACSV(string filePath)
@@ -247,17 +393,18 @@ namespace laboratorioPractica3
 
         private readonly struct RegistroModificacion
         {
-            public RegistroModificacion(int direccion, int longitudMediosBytes, string nombre)
+            public RegistroModificacion(int direccion, int longitudMediosBytes, char sign, string symbol)
             {
                 Direccion = direccion;
                 LongitudMediosBytes = longitudMediosBytes;
-                // Nombre ahora contiene los marcadores (*R, *SE*SE, etc.)
-                Nombre = nombre;
+                Sign = sign;
+                Symbol = symbol;
             }
 
             public int Direccion { get; }
             public int LongitudMediosBytes { get; }
-            public string Nombre { get; }
+            public char Sign { get; }
+            public string Symbol { get; }
         }
     }
 }
