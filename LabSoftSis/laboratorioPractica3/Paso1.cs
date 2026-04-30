@@ -788,7 +788,15 @@ namespace laboratorioPractica3
                             }
 
                             if (evalMeta.ExternalSymbols.Count > 0)
+                            {
                                 intermediateLine.ExternalReferenceSymbols = evalMeta.ExternalSymbols;
+                                // Insertar símbolos externos en TABSIM si aún no existen
+                                foreach (var sym in evalMeta.ExternalSymbols)
+                                {
+                                    if (!TABSIM_EXT.ContainsKey(sym, CurrentControlSectionName))
+                                        AddSymbolToCurrentSection(sym, -1, SymbolType.Absolute, isExternal: true);
+                                }
+                            }
 
                             if (baseOp.Equals("WORD", StringComparison.OrdinalIgnoreCase))
                             {
@@ -863,7 +871,14 @@ namespace laboratorioPractica3
                                 }
 
                                 if (evalMeta.ExternalSymbols.Count > 0)
+                                {
                                     intermediateLine.ExternalReferenceSymbols = evalMeta.ExternalSymbols;
+                                    foreach (var sym in evalMeta.ExternalSymbols)
+                                    {
+                                        if (!TABSIM_EXT.ContainsKey(sym, CurrentControlSectionName))
+                                            AddSymbolToCurrentSection(sym, -1, SymbolType.Absolute, isExternal: true);
+                                    }
+                                }
 
                                 if (evalMeta.ModificationRequests.Count > 0)
                                 {
@@ -1472,6 +1487,11 @@ namespace laboratorioPractica3
 
                         if (evalMeta.ExternalSymbols.Count > 0)
                             intermediateLine2.ExternalReferenceSymbols = evalMeta.ExternalSymbols;
+                            foreach (var sym in evalMeta.ExternalSymbols)
+                            {
+                                if (!TABSIM_EXT.ContainsKey(sym, CurrentControlSectionName))
+                                    AddSymbolToCurrentSection(sym, -1, SymbolType.Absolute, isExternal: true);
+                            }
 
                         if (evalMeta.HasUnpairedRelative)
                             intermediateLine2.RequiresModification = true;
@@ -1509,6 +1529,11 @@ namespace laboratorioPractica3
 
                     if (evalMeta.ExternalSymbols.Count > 0)
                         intermediateLine2.ExternalReferenceSymbols = evalMeta.ExternalSymbols;
+                        foreach (var sym in evalMeta.ExternalSymbols)
+                        {
+                            if (!TABSIM_EXT.ContainsKey(sym, CurrentControlSectionName))
+                                AddSymbolToCurrentSection(sym, -1, SymbolType.Absolute, isExternal: true);
+                        }
 
                     if (evalMeta.ModificationRequests.Count > 0)
                     {
@@ -1544,6 +1569,11 @@ namespace laboratorioPractica3
 
                         if (evalMeta.ExternalSymbols.Count > 0)
                             intermediateLine2.ExternalReferenceSymbols = evalMeta.ExternalSymbols;
+                            foreach (var sym in evalMeta.ExternalSymbols)
+                            {
+                                if (!TABSIM_EXT.ContainsKey(sym, CurrentControlSectionName))
+                                    AddSymbolToCurrentSection(sym, -1, SymbolType.Absolute, isExternal: true);
+                            }
 
                         if (evalMeta.ModificationRequests.Count > 0)
                             intermediateLine2.ModificationRequests = evalMeta.ModificationRequests;
@@ -1611,16 +1641,72 @@ namespace laboratorioPractica3
                 SaveCurrentControlSectionState();
 
                 // Validación arquitectural: END solo es válido en la sección PRINCIPAL
+                // Nota: permitir el caso práctico donde el operando de END referencia explícitamente
+                // un símbolo definido en la sección principal aunque la directiva aparezca después
+                // de abrir otra CSECT; en ese caso se considera que END cierra el programa.
                 string mainSection = string.IsNullOrWhiteSpace(PROGRAM_NAME) ? "Por Omision" : PROGRAM_NAME;
-                
+
                 if (!string.Equals(CurrentControlSectionName, mainSection, StringComparison.OrdinalIgnoreCase))
                 {
-                    // ERROR: END en sección incorrecta (CSECT)
-                    string endInWrongSection = $"END solo es válido en la sección principal '{mainSection}', no en '{CurrentControlSectionName}'";
-                    intermediateLine2.Error = endInWrongSection;
-                    Errors.Add(new SICXEError(antlrLine, 0, endInWrongSection, SICXEErrorType.Semantico));
-                    IntermediateLines.Add(intermediateLine2);
-                    return;
+                    // Si el operando de END referencia un símbolo definido en la sección PRINCIPAL,
+                    // tratamos END como perteneciente a la sección principal (aceptamos y cambiamos
+                    // el contexto para realizar el cierre). Si no, es error arquitectural.
+                    if (!string.IsNullOrEmpty(operand) && TABSIM_EXT.TryGetValue(operand, out var entrySym, mainSection))
+                    {
+                        // Mover registros de uso del/los símbolos del operando desde la sección actual
+                        // hacia la sección principal para que las validaciones posteriores no reporten
+                        // uso externo no declarado.
+                        string oldSection = CurrentControlSectionName;
+                        int thisLine = intermediateLine2.LineNumber;
+
+                        // Extraer tokens simbólicos del operando
+                        var tokens = Regex.Matches(operand ?? string.Empty, "[A-Za-z_][A-Za-z0-9_]*").Cast<Match>().Select(m => m.Value).Distinct(StringComparer.OrdinalIgnoreCase);
+                        foreach (var tok in tokens)
+                        {
+                            // Remover de la sección vieja
+                            if (SymbolUsageLinesBySection.TryGetValue(oldSection, out var oldSecDict) && oldSecDict.TryGetValue(tok, out var oldList))
+                            {
+                                if (oldList.Contains(thisLine))
+                                    oldList.Remove(thisLine);
+                                // Si la lista quedó vacía, quitar la clave
+                                if (oldList.Count == 0)
+                                    oldSecDict.Remove(tok);
+                            }
+
+                            // Añadir a la sección principal
+                            if (!SymbolUsageLinesBySection.TryGetValue(mainSection, out var mainSecDict))
+                            {
+                                mainSecDict = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+                                SymbolUsageLinesBySection[mainSection] = mainSecDict;
+                            }
+                            if (!mainSecDict.TryGetValue(tok, out var mainList))
+                            {
+                                mainList = new List<int>();
+                                mainSecDict[tok] = mainList;
+                            }
+                            if (!mainList.Contains(thisLine))
+                                mainList.Add(thisLine);
+                        }
+
+                        // Forzar que la sección actual sea la principal para el cierre
+                        CurrentControlSectionName = mainSection;
+                        if (CSECT_NUMBER_BY_NAME.TryGetValue(mainSection, out var num))
+                            CurrentControlSectionNumber = num;
+                        else
+                            CurrentControlSectionNumber = 0;
+                        // Asegurar que exista un CP registrado para la sección principal
+                        if (!CSECT_CP_BY_NAME.ContainsKey(mainSection))
+                            CSECT_CP_BY_NAME[mainSection] = 0;
+                    }
+                    else
+                    {
+                        // ERROR: END en sección incorrecta (CSECT)
+                        string endInWrongSection = $"END solo es válido en la sección principal '{mainSection}', no en '{CurrentControlSectionName}'";
+                        intermediateLine2.Error = endInWrongSection;
+                        Errors.Add(new SICXEError(antlrLine, 0, endInWrongSection, SICXEErrorType.Semantico));
+                        IntermediateLines.Add(intermediateLine2);
+                        return;
+                    }
                 }
 
                 // END está en sección PRINCIPAL - obtener CP final de PRINCIPAL
@@ -2029,6 +2115,20 @@ namespace laboratorioPractica3
                 if (!globalLines.Contains(lineNumber))
                     globalLines.Add(lineNumber);
             }
+        }
+
+        /// <summary>
+        /// Limpia duplicados en la lista de líneas intermedias dejando la última aparición
+        /// para cada número de línea. Esto evita que la misma línea fuente aparezca
+        /// repetida en el archivo intermedio/CSV cuando se insertó por varios caminos.
+        /// </summary>
+        public void FinalizeIntermediateLines()
+        {
+            IntermediateLines = IntermediateLines
+                .GroupBy(l => l.LineNumber)
+                .Select(g => g.Last())
+                .OrderBy(l => l.LineNumber)
+                .ToList();
         }
         
         /// <summary>
@@ -2447,9 +2547,11 @@ namespace laboratorioPractica3
 
                 sb.AppendLine();
                 sb.AppendLine("  - TABLA DE BLOQUES (TABBLK)");
+                var blks = TABBLK_BY_CSECT.ContainsKey(sec) ? TABBLK_BY_CSECT[sec] : new List<BloqueInfo>();
+                int totalSectionLength = blks?.Sum(b => b.Length) ?? 0;
+                sb.AppendLine($"    Tamaño total de la sección: {totalSectionLength:X4}h ({totalSectionLength} bytes)");
                 sb.AppendLine($"    {"#",-4} | {"NUM",-6} | {"NOMBRE",-12} | {"DIR_INI_HEX",-12} | {"DIR_INI_DEC",-12} | {"LONG_HEX",-10} | {"LONG_DEC",-10}");
                 sb.AppendLine("    " + new string('-', 87));
-                var blks = TABBLK_BY_CSECT.ContainsKey(sec) ? TABBLK_BY_CSECT[sec] : new List<BloqueInfo>();
                 if (blks != null && blks.Count > 0)
                 {
                     int row = 1;
@@ -2610,7 +2712,7 @@ namespace laboratorioPractica3
             FinalizeBlocksAndRelocate();
 
             var sb = new StringBuilder();
-            sb.AppendLine("SECCION,SIMBOLO,DIRECCION_HEX,DIRECCION_DEC,TIPO,BLOQUE,NUM_BLOQUE");
+            sb.AppendLine("SECCION,SIMBOLO,DIRECCION_HEX,DIRECCION_DEC,TIPO,BLOQUE,NUM_BLOQUE,EXTERNO");
 
             bool firstSection = true;
             foreach (var sec in TABSIM_BY_CSECT.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
@@ -2620,7 +2722,8 @@ namespace laboratorioPractica3
 
                 firstSection = false;
                 var symbols = TABSIM_BY_CSECT[sec]
-                    .OrderBy(k => k.Value.Value)
+                    .OrderByDescending(k => k.Value.IsExternal)
+                    .ThenBy(k => k.Value.Value)
                     .ThenBy(k => k.Key, StringComparer.OrdinalIgnoreCase);
 
                 foreach (var symbol in symbols)
@@ -2779,13 +2882,14 @@ namespace laboratorioPractica3
                     {
                         if (symbol.Value.IsExternal)
                         {
-                            sb.AppendLine($"{FormatCSVCell(sec)},{FormatCSVCell(symbol.Value.Name)},\"-\",\"-\",\"-\",\"-\",\"-\"");
+                            // Externos: placeholders según especificación
+                            sb.AppendLine($"{FormatCSVCell(sec)},{FormatCSVCell(symbol.Value.Name)},\"-----\",,\"-\",\"----\",\"----\",Sí");
                         }
                         else
                         {
                             int displayValue = symbol.Value.Type == SymbolType.Relative ? symbol.Value.RelativeValue : symbol.Value.Value;
                             string typeDisplay = symbol.Value.Type == SymbolType.Relative ? "R" : "A";
-                            sb.AppendLine($"{FormatCSVCell(sec)},{FormatCSVCell(symbol.Value.Name)},\"{(displayValue & 0xFFFF):X4}\",{displayValue},{typeDisplay},{FormatCSVCell(symbol.Value.BlockName)},{symbol.Value.BlockNumber}");
+                            sb.AppendLine($"{FormatCSVCell(sec)},{FormatCSVCell(symbol.Value.Name)},\"{(displayValue & 0xFFFF):X4}\",{displayValue},{typeDisplay},{FormatCSVCell(symbol.Value.BlockName)},{symbol.Value.BlockNumber},No");
                         }
                     }
                 }
@@ -2798,17 +2902,18 @@ namespace laboratorioPractica3
 
             // ═══════════════════ SECCIÓN 2: TABLA DE BLOQUES (TABBLK) ═══════════════════
             sb.AppendLine("=== TABLA DE BLOQUES (TABBLK) ===");
-            sb.AppendLine("SECCION,NUM_BLOQUE,NOMBRE,DIR_INICIO_HEX,DIR_INICIO_DEC,LONGITUD_HEX,LONGITUD_DEC");
+            sb.AppendLine("SECCION,TAM_SECCION_HEX,TAM_SECCION_DEC,NUM_BLOQUE,NOMBRE,DIR_INICIO_HEX,DIR_INICIO_DEC,LONGITUD_HEX,LONGITUD_DEC");
             bool firstBlkSection = true;
             foreach (var sec in TABBLK_BY_CSECT.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
             {
                 if (!firstBlkSection)
-                    sb.AppendLine(",,,,,,"); // renglón en blanco entre secciones
+                    sb.AppendLine(",,,,,,,,"); // renglón en blanco entre secciones
 
                 firstBlkSection = false;
+                int totalSectionLength = TABBLK_BY_CSECT[sec].Sum(b => b.Length);
                 foreach (var block in TABBLK_BY_CSECT[sec].OrderBy(b => b.Number))
                 {
-                    sb.AppendLine($"{FormatCSVCell(sec)},{block.Number},{FormatCSVCell(block.Name)},\"{block.StartAddress:X4}\",{block.StartAddress},\"{block.Length:X4}\",{block.Length}");
+                    sb.AppendLine($"{FormatCSVCell(sec)},\"{totalSectionLength:X4}\",{totalSectionLength},{block.Number},{FormatCSVCell(block.Name)},\"{block.StartAddress:X4}\",{block.StartAddress},\"{block.Length:X4}\",{block.Length}");
                 }
             }
 

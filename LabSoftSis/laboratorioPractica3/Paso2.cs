@@ -169,8 +169,69 @@ namespace laboratorioPractica3
         /// </summary>
         private void RegistrarSalidaLinea(IntermediateLine linea, string codigoObjeto, string errorPaso2)
         {
-            ObjectCodeLines.Add(new ObjectCodeLine(linea, codigoObjeto, errorPaso2));
-            RegisterObjectEvent(linea, codigoObjeto);
+            // Centralizar marcas (*SE, *R) en un único punto antes de almacenar el código objeto
+            string marked = AddObjectCodeMarks(codigoObjeto, linea);
+            ObjectCodeLines.Add(new ObjectCodeLine(linea, marked, errorPaso2));
+            RegisterObjectEvent(linea, marked);
+        }
+
+        /// <summary>
+        /// Añade las marcas de codigo objeto (*SE por cada simbolo externo, *R para relativo interno no emparejado)
+        /// Centraliza la decision y evita duplicados de asteriscos generados por los generadores.
+        /// Para WORD se reevalua la expresion en Paso2 (tabla completa) para recalcular marcas por forward refs.
+        /// </summary>
+        private string AddObjectCodeMarks(string objectCode, IntermediateLine line)
+        {
+            if (string.IsNullOrEmpty(objectCode))
+                return objectCode;
+
+            // Eliminar cualquier sufijo asterisco previo
+            string cleaned = objectCode.TrimEnd('*');
+            var marks = new List<string>();
+
+            // Para WORD, re-evaluar expresión con la tabla de símbolos final para detectar externals y relativos no emparejados
+            if (string.Equals(line.Operation, "WORD", StringComparison.OrdinalIgnoreCase))
+            {
+                int addr = line.AbsoluteAddress >= 0 ? line.AbsoluteAddress : line.Address;
+                var (val, type, err, meta) = _tablaSimbolos.EvaluateExpressionForObject(line.Operand, addr, allowUndefinedSymbols: true, controlSectionName: line.ControlSectionName);
+                // Propagar símbolos externos encontrados a la línea
+                foreach (var ext in meta.ExternalSymbols)
+                {
+                    if (!line.ExternalReferenceSymbols.Contains(ext, StringComparer.OrdinalIgnoreCase))
+                        line.ExternalReferenceSymbols.Add(ext);
+                }
+                // Si hay modificación interna no emparejada -> marcar *R
+                if (meta.HasUnpairedRelative || type == SymbolType.Relative)
+                {
+                    line.HasInternalRelativeModification = true;
+                }
+                // Incorporar modification requests
+                if (meta.ModificationRequests.Count > 0)
+                {
+                    line.ModificationRequests = meta.ModificationRequests;
+                    line.RequiresModification = true;
+                }
+            }
+
+            // Agregar *SE por cada simbolo externo involucrado (una vez por simbolo)
+            if (line.ExternalReferenceSymbols != null && line.ExternalReferenceSymbols.Count > 0)
+            {
+                foreach (var s in line.ExternalReferenceSymbols.Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    marks.Add("*SE");
+                }
+            }
+
+            // Agregar *R solo si hay relativo interno no emparejado
+            if (line.HasInternalRelativeModification)
+            {
+                marks.Add("*R");
+            }
+
+            if (marks.Count == 0)
+                return cleaned;
+
+            return cleaned + string.Join(string.Empty, marks);
         }
 
         private void InitializeModuleBuilders()
@@ -745,10 +806,7 @@ namespace laboratorioPractica3
                 int firstByte = (infoOp.Opcode & 0xFC) | (n << 1) | i;
                 int xbpe = (x << 3) | 1; // b=0, p=0, e=1
                 int objCode = (firstByte << 24) | (xbpe << 20) | (targetAddress & 0xFFFFF);
-                string suffix = (evalMeta.ModificationRequests.Count > 0 || evalType == SymbolType.Relative || evalMeta.HasUnpairedRelative)
-                    ? "*"
-                    : "";
-                return (objCode.ToString("X8") + suffix, "");
+                return (objCode.ToString("X8"), "");
             }
         }
 
@@ -827,9 +885,6 @@ namespace laboratorioPractica3
                 return ("FFFFFF", "Error: " + err); // Error base para WORD invalido
 
             string code = (val & 0xFFFFFF).ToString("X6");
-            if (evalMeta.ModificationRequests.Count > 0 || type == SymbolType.Relative || evalMeta.HasUnpairedRelative)
-                code += "*";
-
             return (code, "");
         }
 

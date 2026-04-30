@@ -218,7 +218,7 @@ HEXNUMBER    : [0-9][0-9A-Fa-f]* H ;
 // Número decimal
 NUMBER       : [0-9]+ ;
 
-IDENT        : [A-Za-z][A-Za-z0-9]* ;
+IDENT        : [A-Za-z][A-Za-z0-9_]* ;
 
 //aqui establecemos el token para comentarios,
 //que comienza con un punto o punto y coma y continúa hasta el final de la línea.

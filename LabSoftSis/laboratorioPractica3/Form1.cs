@@ -629,7 +629,7 @@ namespace laboratorioPractica3
             tabla.Columns.Add("NoSeccion", typeof(int));
             tabla.Columns.Add("CP", typeof(string));
             tabla.Columns.Add("Bloque", typeof(string));
-            tabla.Columns.Add("NoBloque", typeof(int));
+            tabla.Columns.Add("NoBloque", typeof(string));
             tabla.Columns.Add("ETQ", typeof(string));
             tabla.Columns.Add("CODOP", typeof(string));
             tabla.Columns.Add("OPR", typeof(string));
@@ -668,15 +668,16 @@ namespace laboratorioPractica3
                 else if (baseOperation == "EXTDEF")
                     tipoFormato = "Extdef";
 
+                string noBloqueDisplay = l.BlockNumber >= 0 ? l.BlockNumber.ToString() : "----";
                 if (objectLines == null)
                 {
-                    tabla.Rows.Add(l.LineNumber, l.ControlSectionName, l.ControlSectionNumber, cp, l.BlockName, l.BlockNumber, l.Label, l.Operation, l.Operand,
+                    tabla.Rows.Add(l.LineNumber, l.ControlSectionName, l.ControlSectionNumber, cp, l.BlockName, noBloqueDisplay, l.Label, l.Operation, l.Operand,
                         l.SemanticValue, fmt, l.AddressingMode, externalMark, tipoFormato, l.Error, l.Comment);
                 }
                 else
                 {
                     objByLine.TryGetValue(l.LineNumber, out string? codObj);
-                    tabla.Rows.Add(l.LineNumber, l.ControlSectionName, l.ControlSectionNumber, cp, l.BlockName, l.BlockNumber, l.Label, l.Operation, l.Operand,
+                    tabla.Rows.Add(l.LineNumber, l.ControlSectionName, l.ControlSectionNumber, cp, l.BlockName, noBloqueDisplay, l.Label, l.Operation, l.Operand,
                         l.SemanticValue, fmt, l.AddressingMode, externalMark, tipoFormato, codObj ?? string.Empty, l.Error, l.Comment);
                 }
             }
@@ -698,13 +699,15 @@ namespace laboratorioPractica3
             tabla.Columns.Add("Direccion/Valor", typeof(string));
             tabla.Columns.Add("Tipo", typeof(string));
             tabla.Columns.Add("Bloque", typeof(string));
-            tabla.Columns.Add("NoBloque", typeof(int));
+            tabla.Columns.Add("NoBloque", typeof(string));
             tabla.Columns.Add("Símbolo externo", typeof(string));
             tabla.Columns.Add("EsCabecera", typeof(bool));
 
             var symbolsBySection = simbolos.GetAllSymbols()
                 .Values
                 .OrderBy(s => s.ControlSectionName, StringComparer.OrdinalIgnoreCase)
+                // Externos primero dentro de cada sección
+                .ThenByDescending(s => s.IsExternal)
                 .ThenBy(s => s.Value)
                 .ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
                 .GroupBy(s => s.ControlSectionName, StringComparer.OrdinalIgnoreCase)
@@ -717,10 +720,17 @@ namespace laboratorioPractica3
 
                 foreach (var sym in group)
                 {
-                    string tipo = sym.Type == SymbolType.Relative ? "R" : "A";
-                    string valor = sym.Value.ToString("X4");
-                    string externo = sym.IsExternal ? "Sí" : "No";
-                    tabla.Rows.Add(string.Empty, sym.Name, valor, tipo, sym.BlockName, sym.BlockNumber, externo, false);
+                    if (sym.IsExternal)
+                    {
+                        tabla.Rows.Add(string.Empty, sym.Name, "-----", "-", "----", "----", "Sí", false);
+                    }
+                    else
+                    {
+                        string tipo = sym.Type == SymbolType.Relative ? "R" : "A";
+                        string valor = sym.Value.ToString("X4");
+                        string externo = sym.IsExternal ? "Sí" : "No";
+                        tabla.Rows.Add(string.Empty, sym.Name, valor, tipo, sym.BlockName, sym.BlockNumber.ToString(), externo, false);
+                    }
                 }
             }
 
@@ -1205,9 +1215,9 @@ namespace laboratorioPractica3
         {
             Console.WriteLine();
             Console.WriteLine("[Tabla de Bloques]");
-            Console.WriteLine("Seccion  No  Bloque              Longitud DirIniRel");
+            Console.WriteLine("Seccion  TamSec  No  Bloque              Longitud DirIniRel");
             foreach (var b in bloques)
-                Console.WriteLine($"{b.Seccion,-8} {b.Numero,2}  {b.Nombre,-18} {b.Longitud:X4}    {b.DirIniRel:X4}");
+                Console.WriteLine($"{b.Seccion,-8} {b.TotalSeccion:X4}   {b.Numero,2}  {b.Nombre,-18} {b.Longitud:X4}    {b.DirIniRel:X4}");
         }
 
         private void EscribirRegistrosObjetoConsola(IReadOnlyList<string>? registros)
@@ -1328,10 +1338,10 @@ namespace laboratorioPractica3
             var bloques = ConstruirResumenBloques(paso1);
             var sb = new StringBuilder();
             sb.AppendLine("TABLA DE BLOQUES");
-            sb.AppendLine("Seccion\tNoBloque\tBloque\tLongitud\tDirIniRel");
+            sb.AppendLine("Seccion\tTamSeccion\tNoBloque\tBloque\tLongitud\tDirIniRel");
 
             foreach (var b in bloques)
-                sb.AppendLine($"{b.Seccion}\t{b.Numero}\t{b.Nombre}\t{b.Longitud:X4}\t{b.DirIniRel:X4}");
+                sb.AppendLine($"{b.Seccion}\t{b.TotalSeccion:X4}\t{b.Numero}\t{b.Nombre}\t{b.Longitud:X4}\t{b.DirIniRel:X4}");
 
             File.WriteAllText(path, sb.ToString());
         }
@@ -1339,10 +1349,15 @@ namespace laboratorioPractica3
         private List<BloqueResumen> ConstruirResumenBloques(Paso1 paso1)
         {
             var tabblk = paso1.GetBlockTableBySection();
+            var totalesPorSeccion = tabblk.ToDictionary(
+                kv => kv.Key,
+                kv => kv.Value.Sum(b => b.Length),
+                StringComparer.OrdinalIgnoreCase);
 
             return tabblk
                 .SelectMany(sec => sec.Value.Select(b => new BloqueResumen(
                     sec.Key,
+                    totalesPorSeccion.TryGetValue(sec.Key, out var total) ? total : 0,
                     b.Number,
                     b.Name,
                     b.StartAddress,
@@ -1362,7 +1377,8 @@ namespace laboratorioPractica3
         {
             var tabla = new DataTable();
             tabla.Columns.Add("Seccion", typeof(string));
-            tabla.Columns.Add("NoBloque", typeof(int));
+            tabla.Columns.Add("TamSeccion", typeof(string));
+            tabla.Columns.Add("NoBloque", typeof(string));
             tabla.Columns.Add("Bloque", typeof(string));
             tabla.Columns.Add("Longitud", typeof(string));
             tabla.Columns.Add("DirIniRel", typeof(string));
@@ -1374,10 +1390,10 @@ namespace laboratorioPractica3
                 // Insert blank separator row between sections for visual clarity
                 if (!first && !string.Equals(lastSection, b.Seccion, StringComparison.OrdinalIgnoreCase))
                 {
-                    tabla.Rows.Add(DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value);
+                    tabla.Rows.Add(DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value);
                 }
 
-                tabla.Rows.Add(b.Seccion, b.Numero, b.Nombre, b.Longitud.ToString("X4"), b.DirIniRel.ToString("X4"));
+                tabla.Rows.Add(b.Seccion, b.TotalSeccion.ToString("X4"), b.Numero.ToString(), b.Nombre, b.Longitud.ToString("X4"), b.DirIniRel.ToString("X4"));
                 lastSection = b.Seccion;
                 first = false;
             }
@@ -1468,9 +1484,10 @@ namespace laboratorioPractica3
 
         private sealed class BloqueResumen
         {
-            public BloqueResumen(string seccion, int numero, string nombre, int dirIniRel, int longitud)
+            public BloqueResumen(string seccion, int totalSeccion, int numero, string nombre, int dirIniRel, int longitud)
             {
                 Seccion = seccion;
+                TotalSeccion = totalSeccion;
                 Numero = numero;
                 Nombre = nombre;
                 DirIniRel = dirIniRel;
@@ -1478,6 +1495,7 @@ namespace laboratorioPractica3
             }
 
             public string Seccion { get; }
+            public int TotalSeccion { get; }
             public int Numero { get; }
             public string Nombre { get; }
             public int DirIniRel { get; }

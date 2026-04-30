@@ -278,7 +278,7 @@ namespace laboratorioPractica3
                 case "WORD":
                     // WORD debe tener valor numérico
                     var wordOperand = operands[0].GetText();
-                    if (!int.TryParse(wordOperand, out _) && !wordOperand.StartsWith("#") && !wordOperand.All(c => char.IsLetterOrDigit(c)))
+                    if (!int.TryParse(wordOperand, out _) && !wordOperand.StartsWith("#") && !wordOperand.All(c => char.IsLetterOrDigit(c) || c == '_'))
                     {
                         _errors.Add(new SICXEError(line, column,
                             $"WORD requiere un valor numerico o identificador valido. Se encontro: '{wordOperand}'.",

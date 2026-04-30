@@ -230,6 +230,8 @@ class Program
 
         var contexto = PrepararEjecucionPaso1(inputFile);
         var paso1 = EjecutarPaso1(contexto.Tree, contexto.SourceLines, contexto.ExternalErrors);
+            // Eliminar duplicados de líneas intermedias generados por múltiples rutas
+            paso1.FinalizeIntermediateLines();
         var semanticAnalyzer = EjecutarAnalisisSemantico(contexto.Tree, contexto.LexerErrors, contexto.ParserErrors);
 
         var paso2 = EjecutarPaso2DesdePaso1(paso1);
