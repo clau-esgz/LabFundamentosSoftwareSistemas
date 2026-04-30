@@ -445,6 +445,151 @@ namespace laboratorioPractica3
             return ExternalErrors.Where(e => e.Line == lineNumber).ToList();
         }
 
+        private static bool ContieneExpresion(string? text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return false;
+
+            return text.Contains('*') || text.Contains('/') || text.Contains('+') ||
+                   text.Contains('-') || text.Contains('(') || text.Contains(')');
+        }
+
+        /// <summary>
+        /// Factory method para crear una línea intermedia base.
+        /// Centraliza la creación de IntermediateLine con valores por defecto para reducir duplicación.
+        /// </summary>
+        /// <param name="antlrLine">Número de línea ANTLR original de la gramática</param>
+        /// <param name="label">Etiqueta o símbolo (null se convierte en cadena vacía)</param>
+        /// <param name="operation">Operación (instrucción o directiva)</param>
+        /// <param name="operand">Operando de la instrucción o directiva</param>
+        /// <param name="comment">Comentario al final de la línea</param>
+        /// <returns>Nueva IntermediateLine con direccionamiento inicial CONTLOC</returns>
+        private IntermediateLine CrearLineaIntermediaBase(int antlrLine, string? label, string? operation, string? operand, string? comment)
+        {
+            return new IntermediateLine
+            {
+                LineNumber = IntermediateLines.Count + 1,
+                SourceLine = antlrLine,
+                Address = CONTLOC,
+                Label = label ?? string.Empty,
+                Operation = operation ?? string.Empty,
+                Operand = operand ?? string.Empty,
+                Comment = comment ?? string.Empty,
+                Format = 0,
+                AddressingMode = "-"
+            };
+        }
+
+        /// <summary>
+        /// Registra un error semántico en la lista de errores del Paso 1.
+        /// Unifica el reporte de errores semánticos en un único punto.
+        /// </summary>
+        /// <param name="antlrLine">Número de línea donde ocurrió el error</param>
+        /// <param name="mensaje">Descripción del error semántico</param>
+        private void AgregarErrorSemantico(int antlrLine, string mensaje)
+        {
+            Errors.Add(new SICXEError(antlrLine, 0, mensaje, SICXEErrorType.Semantico));
+        }
+
+        /// <summary>
+        /// Intenta registrar una etiqueta en la tabla de símbolos de la sección actual.
+        /// Detecta duplicados y reporta errores. Retorna true si la etiqueta se registró exitosamente.
+        /// </summary>
+        /// <param name="label">La etiqueta a registrar</param>
+        /// <param name="antlrLine">Línea ANTLR para reportar errores</param>
+        /// <param name="line">IntermediateLine que será modificada si hay error</param>
+        /// <returns>true si la etiqueta se registró; false si es duplicada o inválida</returns>
+        private bool RegistrarEtiquetaSiDisponible(string? label, int antlrLine, IntermediateLine line)
+        {
+            if (string.IsNullOrWhiteSpace(label))
+                return true;
+
+            // Verificar si el símbolo ya existe en la sección actual
+            if (TABSIM_EXT.ContainsKey(label, CurrentControlSectionName))
+            {
+                string dupMsg = $"Símbolo duplicado: {label}";
+                if (string.IsNullOrWhiteSpace(line.Error))
+                    line.Error = dupMsg;
+                else if (!line.Error.Contains(dupMsg))
+                    line.Error += "; " + dupMsg;
+
+                AgregarErrorSemantico(antlrLine, dupMsg);
+                return false;
+            }
+
+            // Registrar el símbolo como relativo en la dirección actual (CONTLOC)
+            AddSymbolToCurrentSection(label, CONTLOC, SymbolType.Relative);
+            return true;
+        }
+
+        /// <summary>
+        /// Adjunta un mensaje de error a una línea intermedia, evitando duplicados.
+        /// Si la línea ya tiene error, lo concatena con "; " para múltiples errores.
+        /// </summary>
+        /// <param name="line">Línea intermedia a modificar</param>
+        /// <param name="mensaje">Mensaje de error a adjuntar</param>
+        private static void AdjuntarErrorALinea(IntermediateLine line, string mensaje)
+        {
+            if (string.IsNullOrWhiteSpace(line.Error))
+                line.Error = mensaje;
+            else if (!line.Error.Contains(mensaje))
+                line.Error += "; " + mensaje;
+        }
+
+        /// <summary>
+        /// Verifica si una operación contiene una expresión en su operando.
+        /// Las expresiones incluyen operadores: +, -, *, /, paréntesis, etc.
+        /// </summary>
+        /// <param name="operacion">La operación a verificar</param>
+        /// <param name="operando">El operando que puede contener expresión</param>
+        /// <returns>true si contiene expresión; false si es un valor simple</returns>
+        private static bool EsOperacionConExpresion(string operacion, string operando)
+        {
+            return !string.IsNullOrWhiteSpace(operacion) && ContieneExpresion(operando);
+        }
+
+        /// <summary>
+        /// Detecta si una directiva WORD o BYTE contiene una expresión en su operando.
+        /// Usado para determinar si se debe analizar y clasificar la expresión para modificación en Paso 2.
+        /// </summary>
+        /// <param name="operacion">Operación (WORD, BYTE, o variantes con + para formato 4)</param>
+        /// <param name="operand">Operando de la directiva</param>
+        /// <returns>true si es WORD/BYTE con expresión; false en caso contrario</returns>
+        private static bool EsWordOBByteConExpresion(string operacion, string operand)
+        {
+            string baseOp = operacion.TrimStart('+');
+            return (baseOp.Equals("WORD", StringComparison.OrdinalIgnoreCase) ||
+                    baseOp.Equals("BYTE", StringComparison.OrdinalIgnoreCase)) &&
+                   ContieneExpresion(operand);
+        }
+
+        /// <summary>
+        /// Detecta si una directiva ORG contiene una expresión en su operando.
+        /// ORG con expresión requiere evaluación y posible generación de modificación en Paso 2.
+        /// </summary>
+        /// <param name="operacion">Operación (ORG o +ORG para formato 4)</param>
+        /// <param name="operand">Operando de la directiva ORG</param>
+        /// <returns>true si es ORG con expresión; false si es ORG con dirección simple</returns>
+        private static bool EsOrgConExpresion(string operacion, string operand)
+        {
+            return operacion.TrimStart('+').Equals("ORG", StringComparison.OrdinalIgnoreCase) && ContieneExpresion(operand);
+        }
+
+        /// <summary>
+        /// Detecta si una directiva EQU contiene una expresión en su operando.
+        /// EQU asigna un símbolo a un valor calculado; requiere un label.
+        /// </summary>
+        /// <param name="operacion">Operación (EQU o +EQU para formato 4)</param>
+        /// <param name="label">La etiqueta siendo definida por EQU</param>
+        /// <param name="operand">La expresión del valor a asignar</param>
+        /// <returns>true si es EQU válido con expresión; false en caso contrario</returns>
+        private static bool EsEquConExpresion(string operacion, string label, string operand)
+        {
+            return operacion.TrimStart('+').Equals("EQU", StringComparison.OrdinalIgnoreCase) &&
+                   !string.IsNullOrWhiteSpace(label) &&
+                   !string.IsNullOrWhiteSpace(operand);
+        }
+
         /// <summary>
         /// MÉTODO PRINCIPAL DEL PASO 1: Usa el contexto de la gramática ANTLR para procesar líneas
         /// 
@@ -480,71 +625,32 @@ namespace laboratorioPractica3
                     var parsedLine = ParseLineManually(originalLine);
 
                     // Detectar si es WORD, BYTE u ORG con expresión, o instrucción con expresión
-                    bool isWordOrByteWithExpression = false;
-                    bool isOrgWithExpression = false;
-                    bool isInstructionWithExpression = false;
-                    bool isEquWithExpression = false;
-                    if (!string.IsNullOrEmpty(parsedLine.Operation))
-                    {
-                        string baseOp = parsedLine.Operation.TrimStart('+');
-                        if ((baseOp.Equals("WORD", StringComparison.OrdinalIgnoreCase) || 
-                             baseOp.Equals("BYTE", StringComparison.OrdinalIgnoreCase)) &&
-                            !string.IsNullOrEmpty(parsedLine.Operand) &&
-                            (parsedLine.Operand.Contains('*') || parsedLine.Operand.Contains('/') || parsedLine.Operand.Contains('+') || 
-                             parsedLine.Operand.Contains('-') || parsedLine.Operand.Contains('(') || parsedLine.Operand.Contains(')')))
-                        {
-                            isWordOrByteWithExpression = true;
-                        }
-                        else if (baseOp.Equals("ORG", StringComparison.OrdinalIgnoreCase) &&
-                                 !string.IsNullOrEmpty(parsedLine.Operand) &&
-                                 (parsedLine.Operand.Contains('*') || parsedLine.Operand.Contains('/') || parsedLine.Operand.Contains('+') || 
-                                  parsedLine.Operand.Contains('-') || parsedLine.Operand.Contains('(') || parsedLine.Operand.Contains(')')))
-                        {
-                            isOrgWithExpression = true;
-                        }
-                        else if (OPTAB.ContainsKey(baseOp) &&
-                                 !string.IsNullOrEmpty(parsedLine.Operand) &&
-                                 (parsedLine.Operand.Contains('*') || parsedLine.Operand.Contains('/') || parsedLine.Operand.Contains('+') || 
-                                  parsedLine.Operand.Contains('-') || parsedLine.Operand.Contains('(') || parsedLine.Operand.Contains(')')))
-                        {
-                            isInstructionWithExpression = true;
-                        }
-                        else if (baseOp.Equals("EQU", StringComparison.OrdinalIgnoreCase) &&
-                                 !string.IsNullOrEmpty(parsedLine.Label) &&
-                                 !string.IsNullOrEmpty(parsedLine.Operand))
-                        {
-                            isEquWithExpression = true;
-                        }
-                    }
+                    bool isWordOrByteWithExpression = EsWordOBByteConExpresion(parsedLine.Operation ?? string.Empty, parsedLine.Operand ?? string.Empty);
+                    bool isOrgWithExpression = EsOrgConExpresion(parsedLine.Operation ?? string.Empty, parsedLine.Operand ?? string.Empty);
+                    bool isInstructionWithExpression = OPTAB.ContainsKey((parsedLine.Operation ?? string.Empty).TrimStart('+')) && ContieneExpresion(parsedLine.Operand);
+                    bool isEquWithExpression = EsEquConExpresion(parsedLine.Operation ?? string.Empty, parsedLine.Label ?? string.Empty, parsedLine.Operand ?? string.Empty);
 
                     // Si es EQU con expresión en fallback por error sintáctico, procesarlo para TABSIM
                     if (isEquWithExpression)
                     {
-                        var intermediateLine = new IntermediateLine
-                        {
-                            LineNumber = IntermediateLines.Count + 1,
-                            SourceLine = antlrLine,
-                            Address = CONTLOC,
-                            Label = parsedLine.Label,
-                            Operation = parsedLine.Operation,
-                            Operand = parsedLine.Operand,
-                            Comment = parsedLine.Comment,
-                            Format = 0,
-                            AddressingMode = "-"
-                        };
+                        string labelSafe = parsedLine.Label ?? string.Empty;
+                        string operationSafe = parsedLine.Operation ?? string.Empty;
+                        string operandSafe = parsedLine.Operand ?? string.Empty;
+                        string commentSafe = parsedLine.Comment ?? string.Empty;
+                        var intermediateLine = CrearLineaIntermediaBase(antlrLine, labelSafe, operationSafe, operandSafe, commentSafe);
 
-                        if (TABSIM_EXT.ContainsKey(parsedLine.Label, CurrentControlSectionName))
+                        if (TABSIM_EXT.ContainsKey(labelSafe, CurrentControlSectionName))
                         {
-                            string dupMsg = $"Símbolo duplicado: {parsedLine.Label}";
+                            string dupMsg = $"Símbolo duplicado: {labelSafe}";
                             intermediateLine.Error = dupMsg;
                             Errors.Add(new SICXEError(antlrLine, 0, dupMsg, SICXEErrorType.Semantico));
                         }
                         else
                         {
-                            if (HasRelativeSymbolsFromDifferentBlocks(parsedLine.Operand))
+                            if (HasRelativeSymbolsFromDifferentBlocks(operandSafe))
                             {
                                 const string blockExprError = "Error: Expresión (diferentes bloques)";
-                                AddSymbolToCurrentSection(parsedLine.Label, -1, SymbolType.Absolute);
+                                AddSymbolToCurrentSection(labelSafe, -1, SymbolType.Absolute);
                                 intermediateLine.Error = blockExprError;
                                 intermediateLine.SemanticValue = "FFFFh";
                                 Errors.Add(new SICXEError(antlrLine, 0, blockExprError, SICXEErrorType.Semantico));
@@ -555,10 +661,10 @@ namespace laboratorioPractica3
                                 return;
                             }
 
-                            if (TABSIM_EXT.ContainsExternalSymbol(parsedLine.Operand, CurrentControlSectionName))
+                            if (TABSIM_EXT.ContainsExternalSymbol(operandSafe, CurrentControlSectionName))
                             {
                                 const string equExternalError = "EQU no permite símbolos externos";
-                                AddSymbolToCurrentSection(parsedLine.Label, -1, SymbolType.Absolute);
+                                AddSymbolToCurrentSection(labelSafe, -1, SymbolType.Absolute);
                                 intermediateLine.Error = equExternalError;
                                 intermediateLine.SemanticValue = "FFFFh";
                                 Errors.Add(new SICXEError(antlrLine, 0, equExternalError, SICXEErrorType.Semantico));
@@ -568,20 +674,20 @@ namespace laboratorioPractica3
                                 return;
                             }
 
-                            var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(parsedLine.Operand, CONTLOC, allowUndefinedSymbols: false, controlSectionName: CurrentControlSectionName);
+                            var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operandSafe, CONTLOC, allowUndefinedSymbols: false, controlSectionName: CurrentControlSectionName);
                             if (evalErr != null)
                             {
                                 string expressionMsg = evalErr.Contains("más de un término relativo positivo", StringComparison.OrdinalIgnoreCase)
                                     ? "Error: Expresión (diferentes bloques)"
                                     : evalErr;
-                                AddSymbolToCurrentSection(parsedLine.Label, -1, SymbolType.Absolute);
+                                AddSymbolToCurrentSection(labelSafe, -1, SymbolType.Absolute);
                                 intermediateLine.Error = expressionMsg;
                                 intermediateLine.SemanticValue = "FFFFh";
                                 Errors.Add(new SICXEError(antlrLine, 0, expressionMsg, SICXEErrorType.Semantico));
                             }
                             else
                             {
-                                AddSymbolToCurrentSection(parsedLine.Label, evalVal, evalType);
+                                AddSymbolToCurrentSection(labelSafe, evalVal, evalType);
                                 intermediateLine.SemanticValue = $"{evalVal:X4}h";
                             }
                         }
@@ -595,24 +701,17 @@ namespace laboratorioPractica3
                     // Si es ORG con expresión, procesarlo
                     if (isOrgWithExpression)
                     {
-                        var intermediateLine = new IntermediateLine
-                        {
-                            LineNumber = IntermediateLines.Count + 1,
-                            SourceLine = antlrLine,
-                            Address = CONTLOC,
-                            Label = parsedLine.Label,
-                            Operation = parsedLine.Operation,
-                            Operand = parsedLine.Operand,
-                            Comment = parsedLine.Comment,
-                            Format = 0,
-                            AddressingMode = "-"
-                        };
+                        string labelSafe = parsedLine.Label ?? string.Empty;
+                        string operationSafe = parsedLine.Operation ?? string.Empty;
+                        string operandSafe = parsedLine.Operand ?? string.Empty;
+                        string commentSafe = parsedLine.Comment ?? string.Empty;
+                        var intermediateLine = CrearLineaIntermediaBase(antlrLine, labelSafe, operationSafe, operandSafe, commentSafe);
 
-                        if (!string.IsNullOrEmpty(parsedLine.Label))
+                        if (!string.IsNullOrEmpty(labelSafe))
                         {
-                            if (TABSIM_EXT.ContainsKey(parsedLine.Label, CurrentControlSectionName))
+                            if (TABSIM_EXT.ContainsKey(labelSafe, CurrentControlSectionName))
                             {
-                                string dupMsg = $"Símbolo duplicado: {parsedLine.Label}";
+                                string dupMsg = $"Símbolo duplicado: {labelSafe}";
                                 intermediateLine.Error = string.IsNullOrWhiteSpace(intermediateLine.Error)
                                     ? dupMsg
                                     : intermediateLine.Error + "; " + dupMsg;
@@ -620,14 +719,14 @@ namespace laboratorioPractica3
                             }
                             else
                             {
-                                AddSymbolToCurrentSection(parsedLine.Label, CONTLOC, SymbolType.Relative);
+                                AddSymbolToCurrentSection(labelSafe, CONTLOC, SymbolType.Relative);
                             }
                         }
 
                         // Intentar evaluar la expresión ORG
-                        if (!string.IsNullOrEmpty(parsedLine.Operand))
+                        if (!string.IsNullOrEmpty(operandSafe))
                         {
-                            var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(parsedLine.Operand, CONTLOC, allowUndefinedSymbols: true, controlSectionName: CurrentControlSectionName);
+                            var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operandSafe, CONTLOC, allowUndefinedSymbols: true, controlSectionName: CurrentControlSectionName);
                             if (evalErr != null)
                             {
                                 intermediateLine.Error = evalErr;
@@ -651,25 +750,18 @@ namespace laboratorioPractica3
                     if (isWordOrByteWithExpression)
                     {
                         // Crear intermediateLine similar a lo normal
-                        string baseOp = parsedLine.Operation.TrimStart('+');
-                        var intermediateLine = new IntermediateLine
-                        {
-                            LineNumber = IntermediateLines.Count + 1,
-                            SourceLine = antlrLine,
-                            Address = CONTLOC,
-                            Label = parsedLine.Label,
-                            Operation = parsedLine.Operation,
-                            Operand = parsedLine.Operand,
-                            Comment = parsedLine.Comment,
-                            Format = 0,
-                            AddressingMode = "-"
-                        };
+                        string labelSafe = parsedLine.Label ?? string.Empty;
+                        string operationSafe = parsedLine.Operation ?? string.Empty;
+                        string operandSafe = parsedLine.Operand ?? string.Empty;
+                        string commentSafe = parsedLine.Comment ?? string.Empty;
+                        string baseOp = operationSafe.TrimStart('+');
+                        var intermediateLine = CrearLineaIntermediaBase(antlrLine, labelSafe, operationSafe, operandSafe, commentSafe);
 
-                        if (!string.IsNullOrEmpty(parsedLine.Label))
+                        if (!string.IsNullOrEmpty(labelSafe))
                         {
-                            if (TABSIM_EXT.ContainsKey(parsedLine.Label, CurrentControlSectionName))
+                            if (TABSIM_EXT.ContainsKey(labelSafe, CurrentControlSectionName))
                             {
-                                string dupMsg = $"Símbolo duplicado: {parsedLine.Label}";
+                                string dupMsg = $"Símbolo duplicado: {labelSafe}";
                                 intermediateLine.Error = string.IsNullOrWhiteSpace(intermediateLine.Error)
                                     ? dupMsg
                                     : intermediateLine.Error + "; " + dupMsg;
@@ -677,15 +769,15 @@ namespace laboratorioPractica3
                             }
                             else
                             {
-                                AddSymbolToCurrentSection(parsedLine.Label, CONTLOC, SymbolType.Relative);
+                                AddSymbolToCurrentSection(labelSafe, CONTLOC, SymbolType.Relative);
                             }
                         }
 
                         // Intentar evaluar la expresión
-                        if (!string.IsNullOrEmpty(parsedLine.Operand))
+                        if (!string.IsNullOrEmpty(operandSafe))
                         {
-                            var (evalVal, evalType, evalErr, evalMeta) = TABSIM_EXT.EvaluateExpressionForObject(parsedLine.Operand, CONTLOC, allowUndefinedSymbols: true, controlSectionName: CurrentControlSectionName);
-                            if (evalErr == null && parsedLine.Operation.Equals("WORD", StringComparison.OrdinalIgnoreCase))
+                            var (evalVal, evalType, evalErr, evalMeta) = TABSIM_EXT.EvaluateExpressionForObject(operandSafe, CONTLOC, allowUndefinedSymbols: true, controlSectionName: CurrentControlSectionName);
+                            if (evalErr == null && operationSafe.Equals("WORD", StringComparison.OrdinalIgnoreCase))
                             {
                                 intermediateLine.SemanticValue = $"{evalVal:X4}h";
                             }
@@ -710,7 +802,7 @@ namespace laboratorioPractica3
                         // Calcular incremento
                         int wordByteIncrement = 0;
                         if (baseOp.Equals("BYTE", StringComparison.OrdinalIgnoreCase))
-                            wordByteIncrement = CalculateByteSize(parsedLine.Operand);
+                            wordByteIncrement = CalculateByteSize(operandSafe);
                         else if (baseOp.Equals("WORD", StringComparison.OrdinalIgnoreCase))
                             wordByteIncrement = 3;
 
@@ -726,27 +818,22 @@ namespace laboratorioPractica3
                     // Si es instrucción con expresión, procesarlo
                     if (isInstructionWithExpression)
                     {
-                        string baseOp = parsedLine.Operation.TrimStart('+');
+                        string labelSafe = parsedLine.Label ?? string.Empty;
+                        string operationSafe = parsedLine.Operation ?? string.Empty;
+                        string operandSafe = parsedLine.Operand ?? string.Empty;
+                        string commentSafe = parsedLine.Comment ?? string.Empty;
+                        string baseOp = operationSafe.TrimStart('+');
                         if (OPTAB.TryGetValue(baseOp, out var opCodeInfo))
                         {
-                            var intermediateLine = new IntermediateLine
-                            {
-                                LineNumber = IntermediateLines.Count + 1,
-                                SourceLine = antlrLine,
-                                Address = CONTLOC,
-                                Label = parsedLine.Label,
-                                Operation = parsedLine.Operation,
-                                Operand = parsedLine.Operand,
-                                Comment = parsedLine.Comment,
-                                Format = parsedLine.Operation.StartsWith("+", StringComparison.OrdinalIgnoreCase) ? 4 : opCodeInfo.Format,
-                                AddressingMode = DetermineAddressingMode(parsedLine.Operand)
-                            };
+                            var intermediateLine = CrearLineaIntermediaBase(antlrLine, labelSafe, operationSafe, operandSafe, commentSafe);
+                            intermediateLine.Format = operationSafe.StartsWith("+", StringComparison.OrdinalIgnoreCase) ? 4 : opCodeInfo.Format;
+                            intermediateLine.AddressingMode = DetermineAddressingMode(operandSafe);
 
-                            if (!string.IsNullOrEmpty(parsedLine.Label))
+                            if (!string.IsNullOrEmpty(labelSafe))
                             {
-                                if (TABSIM_EXT.ContainsKey(parsedLine.Label, CurrentControlSectionName))
+                                if (TABSIM_EXT.ContainsKey(labelSafe, CurrentControlSectionName))
                                 {
-                                    string dupMsg = $"Símbolo duplicado: {parsedLine.Label}";
+                                    string dupMsg = $"Símbolo duplicado: {labelSafe}";
                                     intermediateLine.Error = string.IsNullOrWhiteSpace(intermediateLine.Error)
                                         ? dupMsg
                                         : intermediateLine.Error + "; " + dupMsg;
@@ -754,15 +841,15 @@ namespace laboratorioPractica3
                                 }
                                 else
                                 {
-                                    AddSymbolToCurrentSection(parsedLine.Label, CONTLOC, SymbolType.Relative);
+                                    AddSymbolToCurrentSection(labelSafe, CONTLOC, SymbolType.Relative);
                                 }
                             }
 
                             // Intentar evaluar la expresión del operando
-                            if (!string.IsNullOrEmpty(parsedLine.Operand))
+                            if (!string.IsNullOrEmpty(operandSafe))
                             {
                                 // Quitar prefijos de modo deDireccionamiento si existen
-                                string operandForEvaluation = NormalizeOperandForExpressionEvaluation(parsedLine.Operand);
+                                string operandForEvaluation = NormalizeOperandForExpressionEvaluation(operandSafe);
 
                                 var (evalVal, evalType, evalErr, evalMeta) = TABSIM_EXT.EvaluateExpressionForObject(operandForEvaluation, CONTLOC, allowUndefinedSymbols: true, controlSectionName: CurrentControlSectionName);
                                 if (evalErr != null)
@@ -784,7 +871,7 @@ namespace laboratorioPractica3
                                     intermediateLine.RequiresModification = true;
                                 }
 
-                                if (parsedLine.Operation.StartsWith("+", StringComparison.OrdinalIgnoreCase))
+                                if (operationSafe.StartsWith("+", StringComparison.OrdinalIgnoreCase))
                                 {
                                     intermediateLine.HasInternalRelativeModification = evalType == SymbolType.Relative || evalMeta.HasUnpairedRelative;
                                     intermediateLine.RelativeModuleSign = evalMeta.RelativeModuleSign;
@@ -801,7 +888,7 @@ namespace laboratorioPractica3
                             else if (opCodeInfo.Format == 3 || opCodeInfo.Format == 4)
                             {
                                 // Determinar si es formato 3 o 4 basándose en el prefijo '+'
-                                instructionIncrement = parsedLine.Operation.StartsWith("+", StringComparison.OrdinalIgnoreCase) ? 4 : 3;
+                                instructionIncrement = operationSafe.StartsWith("+", StringComparison.OrdinalIgnoreCase) ? 4 : 3;
                             }
 
                             intermediateLine.Increment = instructionIncrement;
@@ -1498,13 +1585,45 @@ namespace laboratorioPractica3
             // Guardar el CONTLOC actual en la línea intermedio
             IntermediateLines.Add(intermediateLine2);
 
-            // Directiva END
+            // ═══════════════════════════════════════════════════════════════════════
+            // DIRECTIVA END: Cierre del Programa COMPLETO
+            // ═══════════════════════════════════════════════════════════════════════
+            // REGLA ARQUITECTURAL SIC/XE CRÍTICA:
+            // ✓ END solo puede estar en la sección PRINCIPAL (donde está START)
+            // ✓ END NO puede estar en secciones CSECT - es error arquitectural
+            // ✓ Cuando se encuentra END, el programa completo termina
+            // ✓ Todas las secciones (PRINCIPAL y CSECT) se finalizan implícitamente
+            // ✓ No hay múltiples END - solo uno en todo el programa
+            //
+            // El operando de END es SIEMPRE un símbolo de PRINCIPAL
+            //    PRINCIPAL START 1000       ← Abre sección principal
+            //       EXTDEF SYM1
+            //       ...código...
+            //       END ENDA                ← Cierra PROGRAMA (busca ENDA EN PRINCIPAL)
+            //
+            //    MOD1 CSECT                 ← Sección auxiliar (sin END)
+            //       EXTREF SYM1
+            //       ...código...
+            //       (NO hay END aquí)       ← Error: END SOLO en PRINCIPAL
+            // ═══════════════════════════════════════════════════════════════════════
             if (operationContext?.directive()?.END() != null)
             {
                 SaveCurrentControlSectionState();
 
-                // END se reporta con el CP final de la sección principal (bloque por omisión)
+                // Validación arquitectural: END solo es válido en la sección PRINCIPAL
                 string mainSection = string.IsNullOrWhiteSpace(PROGRAM_NAME) ? "Por Omision" : PROGRAM_NAME;
+                
+                if (!string.Equals(CurrentControlSectionName, mainSection, StringComparison.OrdinalIgnoreCase))
+                {
+                    // ERROR: END en sección incorrecta (CSECT)
+                    string endInWrongSection = $"END solo es válido en la sección principal '{mainSection}', no en '{CurrentControlSectionName}'";
+                    intermediateLine2.Error = endInWrongSection;
+                    Errors.Add(new SICXEError(antlrLine, 0, endInWrongSection, SICXEErrorType.Semantico));
+                    IntermediateLines.Add(intermediateLine2);
+                    return;
+                }
+
+                // END está en sección PRINCIPAL - obtener CP final de PRINCIPAL
                 if (CSECT_CP_BY_NAME.TryGetValue(mainSection, out int endCpMain))
                 {
                     intermediateLine2.Address = endCpMain;
@@ -1512,33 +1631,34 @@ namespace laboratorioPractica3
                     intermediateLine2.BlockNumber = 0;
                 }
 
-                // END cierra el Paso 1:
-                // - finaliza bloques USE
-                // - reubica símbolos y líneas a direcciones absolutas
-                // - fija tamaño total del programa
+                // END finaliza TODO el Paso 1:
+                // - Finaliza bloques USE de TODAS las secciones
+                // - Reubica símbolos en todas las secciones a direcciones absolutas
+                // - Fija tamaño total del programa (suma de todas las secciones CSECT)
                 FinalizeBlocksAndRelocate();
 
-                // Extraer la dirección de inicio de ejecución del operando de END
+                // Resolver punto de entrada del programa (EXECUTION_ENTRY_POINT)
+                // El operando de END DEBE ser un símbolo de la sección PRINCIPAL
                 if (!string.IsNullOrEmpty(operand))
                 {
-                    // Buscar el símbolo en TABSIM para obtener su dirección absoluta
-                    if (TABSIM_EXT.TryGetValue(operand, out var entrySymbol, CurrentControlSectionName))
+                    // END operando = etiqueta del punto de entrada (búsqueda EN PRINCIPAL)
+                    if (TABSIM_EXT.TryGetValue(operand, out var entrySymbol, mainSection))
                     {
                         EXECUTION_ENTRY_POINT = entrySymbol.Value;
                     }
                     else
                     {
-                        // Etiqueta de END no definida: marcar FFFFFF y reportar error en Paso 2
+                        // Etiqueta no definida EN PRINCIPAL: marcar como inválida
                         EXECUTION_ENTRY_POINT = 0xFFFFFF;
                     }
                 }
                 else
                 {
-                    // Si END no tiene operando, usar primera instrucción ejecutable absoluta.
-                    // Si no existe ninguna, usar START como respaldo.
+                    // END sin operando: usar primera instrucción ejecutable o START
                     EXECUTION_ENTRY_POINT = FIRST_EXECUTABLE_ADDRESS ?? START_ADDRESS;
                 }
 
+                // Validar EXTDEF/EXTREF de TODAS las secciones y símbolos sin definir
                 ValidateExternalDefinitions();
                 CheckUndefinedSymbols();
                 return;

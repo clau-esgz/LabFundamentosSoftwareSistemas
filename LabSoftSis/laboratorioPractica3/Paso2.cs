@@ -60,77 +60,117 @@ namespace laboratorioPractica3
             _moduleStates.Clear();
             InitializeModuleBuilders();
 
-            // Motor principal del Paso 2:
-            // recorre el intermedio, genera código por formato y conserva trazabilidad
-            // de errores semánticos por línea.
             foreach (var linea in _lineasIntermedias)
             {
-                string codigoObjeto = "";
-                string errorPaso2 = "";
-
-                // Linea de comentario o sin operacion: sin codigo objeto.
-                if (linea.Address < 0 || string.IsNullOrWhiteSpace(linea.Operation))
-                {
-                    ObjectCodeLines.Add(new ObjectCodeLine(linea, "", ""));
-                    RegisterObjectEvent(linea, string.Empty);
-                    continue;
-                }
-
-                string operacion = linea.Operation.TrimStart('+').ToUpperInvariant();
-
-                // Directivas: procesar con ProcessDirective y actualizar BASE si aplica.
-                if (Paso1.DIRECTIVES.Contains(operacion))
-                {
-                    (codigoObjeto, errorPaso2) = ProcessDirective(linea, operacion);
-
-                    // Actualizar el valor actual de BASE.
-                    if (operacion == "BASE" && !string.IsNullOrEmpty(linea.Operand))
-                    {
-                        if (_tablaSimbolos.TryGetValue(linea.Operand, out var symInfo, linea.ControlSectionName))
-                            _baseActual = symInfo.Value;
-                        else if (TryParseNumeric(linea.Operand, out int numVal))
-                            _baseActual = numVal;
-                    }
-                    else if (operacion == "NOBASE") 
-                    {
-                        _baseActual = null;
-                    }
-
-                    if (!string.IsNullOrEmpty(errorPaso2))
-                        Errors.Add(new SICXEError(linea.SourceLine, 0, errorPaso2, SICXEErrorType.Semantico));
-
-                    ObjectCodeLines.Add(new ObjectCodeLine(linea, codigoObjeto, errorPaso2));
-                    RegisterObjectEvent(linea, codigoObjeto);
-                    continue;
-                }
-
-                // Validar que la instruccion exista en OPTAB.
-                if (!Paso1.OPTAB.TryGetValue(operacion, out var infoOp))
-                {
-                    errorPaso2 = "Error: Instrucción desconocida";
-                    Errors.Add(new SICXEError(linea.SourceLine, 0, errorPaso2, SICXEErrorType.Semantico));
-                    ObjectCodeLines.Add(new ObjectCodeLine(linea, "", errorPaso2));
-                    RegisterObjectEvent(linea, string.Empty);
-                    continue;
-                }
-                // Generar codigo objeto segun formato.
-                (codigoObjeto, errorPaso2) = linea.Format switch
-                {
-                    1 => GenerateFormat1(infoOp),
-                    2 => GenerateFormat2(linea, infoOp),
-                    3 => GenerateFormat3(linea, infoOp),
-                    4 => GenerateFormat4(linea, infoOp),
-                    _ => ("", "")
-                };
-
-                if (!string.IsNullOrEmpty(errorPaso2))
-                    Errors.Add(new SICXEError(linea.SourceLine, 0, errorPaso2, SICXEErrorType.Semantico));
-
-                ObjectCodeLines.Add(new ObjectCodeLine(linea, codigoObjeto, errorPaso2));
-                RegisterObjectEvent(linea, codigoObjeto);
+                ProcesarLineaIntermedia(linea);
             }
 
             FinalizeModuleBuilders();
+        }
+
+        /// <summary>
+        /// Procesa una línea intermedia del Paso 1: genera código objeto o procesa directivas.
+        /// Ruta central que determina si es una instrucción, directiva, o línea ignorable.
+        /// </summary>
+        private void ProcesarLineaIntermedia(IntermediateLine linea)
+        {
+            if (EsLineaIgnorable(linea))
+            {
+                RegistrarSalidaLinea(linea, string.Empty, string.Empty);
+                return;
+            }
+
+            string operacion = ObtenerOperacionNormalizada(linea);
+
+            if (Paso1.DIRECTIVES.Contains(operacion))
+            {
+                ProcesarDirectiva(linea, operacion);
+                return;
+            }
+
+            if (!Paso1.OPTAB.TryGetValue(operacion, out var infoOp))
+            {
+                RegistrarErrorYSalida(linea, string.Empty, "Error: Instrucción desconocida");
+                return;
+            }
+
+            var (codigoObjeto, errorPaso2) = GenerarCodigoObjeto(linea, infoOp);
+            RegistrarErrorYSalida(linea, codigoObjeto, errorPaso2);
+        }
+
+        /// <summary>
+        /// Determina si una linea debe ignorarse (comentarios, sin operacion, sin direccion valida).
+        /// </summary>
+        private static bool EsLineaIgnorable(IntermediateLine linea)
+        {
+            return linea.Address < 0 || string.IsNullOrWhiteSpace(linea.Operation);
+        }
+
+        /// <summary>
+        /// Obtiene operacion normalizada: elimina prefijo + (formato 4) y convierte a mayusculas.
+        /// </summary>
+        private static string ObtenerOperacionNormalizada(IntermediateLine linea)
+            => (linea.Operation ?? string.Empty).TrimStart('+').ToUpperInvariant();
+
+        /// <summary>
+        /// Procesa directivas (BYTE, WORD, END, BASE, NOBASE, ORG, etc.).
+        /// BASE/NOBASE actualizan el registro BASE para direccionamiento relativo a base.
+        /// </summary>
+        private void ProcesarDirectiva(IntermediateLine linea, string operacion)
+        {
+            var (codigoObjeto, errorPaso2) = ProcessDirective(linea, operacion);
+
+            if (operacion == "BASE" && !string.IsNullOrEmpty(linea.Operand))
+            {
+                if (_tablaSimbolos.TryGetValue(linea.Operand, out var symInfo, linea.ControlSectionName))
+                    _baseActual = symInfo.Value;
+                else if (TryParseNumeric(linea.Operand, out int numVal))
+                    _baseActual = numVal;
+            }
+            else if (operacion == "NOBASE")
+            {
+                _baseActual = null;
+            }
+
+            RegistrarErrorYSalida(linea, codigoObjeto, errorPaso2);
+        }
+
+        /// <summary>
+        /// Genera codigo objeto para una instruccion segun su formato (1, 2, 3 o 4 bytes).
+        /// Enruta a generadores especializados por formato de instruccion.
+        /// </summary>
+        private (string ObjCode, string Error) GenerarCodigoObjeto(IntermediateLine linea, OpCodeInfo infoOp)
+        {
+            return linea.Format switch
+            {
+                1 => GenerateFormat1(infoOp),
+                2 => GenerateFormat2(linea, infoOp),
+                3 => GenerateFormat3(linea, infoOp),
+                4 => GenerateFormat4(linea, infoOp),
+                _ => ("", "")
+            };
+        }
+
+        /// <summary>
+        /// Registra un error semantico y la salida de la linea en los contenedores de resultados.
+        /// Central para capturar errores de Paso 2 (codigo objeto invalido, simbolos no resueltos, etc.).
+        /// </summary>
+        private void RegistrarErrorYSalida(IntermediateLine linea, string codigoObjeto, string errorPaso2)
+        {
+            if (!string.IsNullOrEmpty(errorPaso2))
+                Errors.Add(new SICXEError(linea.SourceLine, 0, errorPaso2, SICXEErrorType.Semantico));
+
+            RegistrarSalidaLinea(linea, codigoObjeto, errorPaso2);
+        }
+
+        /// <summary>
+        /// Registra la salida de una linea en el contenedor de lineas de codigo objeto.
+        /// Tambien invoca notificacion al modulo constructor para acumular modulos.
+        /// </summary>
+        private void RegistrarSalidaLinea(IntermediateLine linea, string codigoObjeto, string errorPaso2)
+        {
+            ObjectCodeLines.Add(new ObjectCodeLine(linea, codigoObjeto, errorPaso2));
+            RegisterObjectEvent(linea, codigoObjeto);
         }
 
         private void InitializeModuleBuilders()
@@ -207,61 +247,96 @@ namespace laboratorioPractica3
             if (!_moduleStates.TryGetValue(sectionName, out var state))
                 return;
 
-            string op = (line.Operation ?? string.Empty).Trim().TrimStart('+').ToUpperInvariant();
-            bool isCutDirective = op is "RESB" or "RESW" or "USE" or "CSECT" or "ORG" or "END";
-            if (isCutDirective)
+            string op = ObtenerOperacionNormalizada(line);
+            if (EsDirectivaDeCorte(op))
                 state.FlushText();
 
             if (!string.IsNullOrWhiteSpace(objectCode))
             {
-                string cleanedObjectCode = objectCode.Replace("*", "");
-                int address = GetEffectiveAddress(line);
-                state.AppendText(address, cleanedObjectCode);
-
-                bool isWord = op == "WORD";
-                bool isFormat4 = line.Format == 4;
-                bool isWordOrFormat4 = isWord || isFormat4;
-                int modAddress = isWord ? address : address + 1;
-                int halfBytesLength = isWord ? 0x06 : 0x05;
-
-                if (isWordOrFormat4)
-                {
-                    string operandForEvaluation = NormalizeOperandForExpressionEvaluation(line.Operand);
-                    if (!string.IsNullOrWhiteSpace(operandForEvaluation))
-                    {
-                        var (evalVal, evalType, evalErr, evalMeta) = _tablaSimbolos.EvaluateExpressionForObject(
-                            operandForEvaluation,
-                            address,
-                            allowUndefinedSymbols: true,
-                            controlSectionName: line.ControlSectionName);
-
-                        if (evalErr == null)
-                        {
-                            foreach (var req in evalMeta.ModificationRequests)
-                            {
-                                if (req is null)
-                                    continue;
-
-                                if (string.IsNullOrWhiteSpace(req.Symbol))
-                                    continue;
-
-                                if (req.Sign != '+' && req.Sign != '-')
-                                    continue;
-
-                                state.AddModification(modAddress, halfBytesLength, req.Sign, req.Symbol);
-                            }
-
-                            if (evalType == SymbolType.Relative)
-                            {
-                                char moduleSign = evalMeta.RelativeModuleSign ?? '+';
-                                state.AddModification(modAddress, halfBytesLength, moduleSign, state.Module.Name);
-                            }
-                        }
-                    }
-                }
+                ProcesarTextoYModificaciones(line, objectCode, state, op);
 
                 if (!state.FirstExecutableAddress.HasValue && line.Format > 0)
-                    state.FirstExecutableAddress = address;
+                    state.FirstExecutableAddress = GetEffectiveAddress(line);
+            }
+        }
+
+        /// <summary>
+        /// Determina si una operacion es directiva de corte que vacia el buffer de texto.
+        /// Directivas de corte: RESB, RESW, USE, CSECT, ORG, END.
+        /// </summary>
+        private static bool EsDirectivaDeCorte(string op)
+            => op is "RESB" or "RESW" or "USE" or "CSECT" or "ORG" or "END";
+
+        /// <summary>
+        /// Procesa el codigo objeto y modificaciones de una linea.
+        /// Accumula el codigo en el buffer de texto y registra si hay modificaciones necesarias.
+        /// </summary>
+        private void ProcesarTextoYModificaciones(IntermediateLine line, string objectCode, ModuleBuilderState state, string op)
+        {
+            string cleanedObjectCode = objectCode.Replace("*", "");
+            int address = GetEffectiveAddress(line);
+            state.AppendText(address, cleanedObjectCode);
+
+            if (!EsLineaConModificacion(line, op))
+                return;
+
+            ProcesarModificacionesDeLinea(line, state, address);
+        }
+
+        /// <summary>
+        /// Determina si una linea requiere registro de modificacion (relocation record).
+        /// WORD y formato 4 (direccionamiento extendido) generan M records.
+        /// </summary>
+        private static bool EsLineaConModificacion(IntermediateLine line, string op)
+            => op == "WORD" || line.Format == 4;
+
+        /// <summary>
+        /// Procesa modificaciones (relocation records) para una linea.
+        /// Evalua expresiones y crea M records para el modulo objeto.
+        /// Maneja tanto WORD como formato 4 (direccionamiento extendido).
+        /// </summary>
+        private void ProcesarModificacionesDeLinea(IntermediateLine line, ModuleBuilderState state, int address)
+        {
+            bool isWord = string.Equals(line.Operation, "WORD", StringComparison.OrdinalIgnoreCase);
+            int modAddress = isWord ? address : address + 1;
+            int halfBytesLength = isWord ? 0x06 : 0x05;
+
+            string operandForEvaluation = NormalizeOperandForExpressionEvaluation(line.Operand);
+            if (string.IsNullOrWhiteSpace(operandForEvaluation))
+                return;
+
+            var (_, evalType, evalErr, evalMeta) = _tablaSimbolos.EvaluateExpressionForObject(
+                operandForEvaluation,
+                address,
+                allowUndefinedSymbols: true,
+                controlSectionName: line.ControlSectionName);
+
+            if (evalErr != null)
+                return;
+
+            AgregarModificacionesExplícitas(state, modAddress, halfBytesLength, evalMeta);
+
+            if (evalType == SymbolType.Relative)
+            {
+                char moduleSign = evalMeta.RelativeModuleSign ?? '+';
+                state.AddModification(modAddress, halfBytesLength, moduleSign, state.Module.Name);
+            }
+        }
+
+        private static void AgregarModificacionesExplícitas(ModuleBuilderState state, int modAddress, int halfBytesLength, ExpressionEvaluationMetadata evalMeta)
+        {
+            foreach (var req in evalMeta.ModificationRequests)
+            {
+                if (req is null)
+                    continue;
+
+                if (string.IsNullOrWhiteSpace(req.Symbol))
+                    continue;
+
+                if (req.Sign != '+' && req.Sign != '-')
+                    continue;
+
+                state.AddModification(modAddress, halfBytesLength, req.Sign, req.Symbol);
             }
         }
 

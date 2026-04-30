@@ -67,173 +67,199 @@ namespace laboratorioPractica3
             if (_modulosPreconstruidos != null && _modulosPreconstruidos.Count > 0)
                 return _modulosPreconstruidos.ToList();
 
-            static int Addr(IntermediateLine l) => l.AbsoluteAddress >= 0 ? l.AbsoluteAddress : l.Address;
-
             var modulos = new List<ObjectModule>();
-            var lineasPorSeccion = _lineasCodigoObjeto
-                .GroupBy(l => (l.SectionName ?? "Por Omision", l.SectionNumber))
-                .OrderBy(g => g.Key.Item2)
-                .ThenBy(g => g.Min(x => x.IntermLine.LineNumber))
-                .ToList();
-
-            foreach (var grupo in lineasPorSeccion)
-            {
-                string sectionName = string.IsNullOrWhiteSpace(grupo.Key.Item1) ? "Por Omision" : grupo.Key.Item1;
-                var lineasSeccion = grupo.OrderBy(l => l.IntermLine.LineNumber).ToList();
-
-                int sectionStart = lineasSeccion
-                    .Where(l => Addr(l.IntermLine) >= 0)
-                    .Select(l => Addr(l.IntermLine))
-                    .DefaultIfEmpty(_direccionInicio)
-                    .Min();
-
-                int sectionEnd = lineasSeccion
-                    .Where(l => Addr(l.IntermLine) >= 0)
-                    .Select(l => Addr(l.IntermLine) + Math.Max(0, l.IntermLine.Increment))
-                    .DefaultIfEmpty(sectionStart)
-                    .Max();
-
-                int sectionLength = Math.Max(0, sectionEnd - sectionStart);
-                var modulo = new ObjectModule
-                {
-                    Name = sectionName,
-                    StartAddress = sectionStart,
-                    Length = sectionLength
-                };
-
-                var emittedExtDefSymbols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                var emittedExtRefSymbols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var linea in lineasSeccion)
-                {
-                    string op = linea.IntermLine.Operation?.Trim().ToUpperInvariant() ?? string.Empty;
-                    if (op == "EXTDEF")
-                    {
-                        var symbolsInLine = ParseSymbolList(linea.IntermLine.Operand)
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .ToList();
-                        if (symbolsInLine.Count > 0)
-                        {
-                            foreach (var symbol in symbolsInLine)
-                            {
-                                if (!emittedExtDefSymbols.Add(symbol))
-                                    continue;
-
-                                var defLine = lineasSeccion.FirstOrDefault(l =>
-                                    string.Equals(l.IntermLine.Label, symbol, StringComparison.OrdinalIgnoreCase));
-                                int relAddr = defLine == null ? 0 : Math.Max(0, Addr(defLine.IntermLine) - sectionStart);
-                                modulo.D.Add(new DefineRecord(symbol, relAddr));
-                            }
-                        }
-                    }
-                    else if (op == "EXTREF")
-                    {
-                        var symbolsInLine = ParseSymbolList(linea.IntermLine.Operand)
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .Where(s => emittedExtRefSymbols.Add(s))
-                            .ToList();
-
-                        if (symbolsInLine.Count > 0)
-                        {
-                            foreach (var symbol in symbolsInLine)
-                                modulo.R.Add(new ReferRecord(symbol));
-                        }
-                    }
-                }
-
-                int inicioTexto = -1;
-                string codigoTexto = string.Empty;
-                int conteoBytesTexto = 0;
-
-                void VaciarTexto()
-                {
-                    if (conteoBytesTexto <= 0)
-                        return;
-                    modulo.T.Add(new TextRecord
-                    {
-                        StartAddress = inicioTexto,
-                        HexBytes = codigoTexto
-                    });
-                    inicioTexto = -1;
-                    codigoTexto = string.Empty;
-                    conteoBytesTexto = 0;
-                }
-
-                var registrosModificacion = new List<RegistroModificacion>();
-
-                foreach (var linea in lineasSeccion)
-                {
-                    if (string.IsNullOrWhiteSpace(linea.ObjectCode))
-                    {
-                        string operacion = linea.IntermLine.Operation?.Trim().ToUpperInvariant() ?? string.Empty;
-                        if (operacion is "RESB" or "RESW" or "ORG" or "END" or "USE" or "CSECT")
-                            VaciarTexto();
-                        continue;
-                    }
-
-                    string codigoCrudo = linea.ObjectCode;
-                    string codigoLimpio = codigoCrudo.Replace("*", "");
-                    int bytesLinea = codigoLimpio.Length / 2;
-
-                    int lineAddress = Addr(linea.IntermLine);
-                    bool esContiguo = (inicioTexto != -1) && ((inicioTexto + conteoBytesTexto) == lineAddress);
-                    bool excedeLimite = (conteoBytesTexto + bytesLinea) > 30;
-                    if (inicioTexto != -1 && (!esContiguo || excedeLimite))
-                        VaciarTexto();
-
-                    if (inicioTexto == -1)
-                        inicioTexto = lineAddress;
-
-                    codigoTexto += codigoLimpio;
-                    conteoBytesTexto += bytesLinea;
-
-                    int direccionMod = string.Equals(linea.IntermLine.Operation, "WORD", StringComparison.OrdinalIgnoreCase)
-                        ? lineAddress
-                        : lineAddress + 1;
-                    int longitudHalfBytes = string.Equals(linea.IntermLine.Operation, "WORD", StringComparison.OrdinalIgnoreCase) ? 0x06 : 0x05;
-
-                    var modificaciones = new List<ModificationRequest>();
-                    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-                    void AddMod(ModificationRequest mod)
-                    {
-                        string key = $"{mod.Sign}|{mod.Symbol}";
-                        if (seen.Add(key))
-                            modificaciones.Add(mod);
-                    }
-
-                    foreach (var mod in linea.ModificationRequests)
-                        AddMod(mod);
-
-                    foreach (var mod in InferModificationRequests(linea))
-                        AddMod(mod);
-
-                    if (modificaciones.Count == 0)
-                        continue;
-
-                    foreach (var mod in modificaciones)
-                    {
-                        registrosModificacion.Add(new RegistroModificacion(direccionMod, longitudHalfBytes, mod.Sign, mod.Symbol));
-                    }
-                }
-
-                VaciarTexto();
-
-                foreach (var registro in registrosModificacion)
-                {
-                    modulo.M.Add(new ModificationRecord(
-                        registro.Direccion,
-                        registro.LongitudMediosBytes,
-                        registro.Sign,
-                        registro.Symbol));
-                }
-
-                // El registro E siempre pertenece al módulo; la serialización decide si imprime dirección.
-                modulo.E = new EndRecord(_direccionEjecucion);
-                modulos.Add(modulo);
-            }
+            foreach (var grupo in AgruparLineasPorSeccion())
+                modulos.Add(ConstruirModulo(grupo));
 
             return modulos;
         }
+
+        private List<IGrouping<(string SectionName, int SectionNumber), ObjectCodeLine>> AgruparLineasPorSeccion()
+        {
+            return _lineasCodigoObjeto
+                .GroupBy(l => (l.SectionName ?? "Por Omision", l.SectionNumber))
+                .OrderBy(g => g.Key.SectionNumber)
+                .ThenBy(g => g.Min(x => x.IntermLine.LineNumber))
+                .ToList();
+        }
+
+        private ObjectModule ConstruirModulo(IGrouping<(string SectionName, int SectionNumber), ObjectCodeLine> grupo)
+        {
+            string sectionName = string.IsNullOrWhiteSpace(grupo.Key.SectionName) ? "Por Omision" : grupo.Key.SectionName;
+            var lineasSeccion = grupo.OrderBy(l => l.IntermLine.LineNumber).ToList();
+
+            ObtenerRangoSeccion(lineasSeccion, out int sectionStart, out int sectionEnd);
+
+            var modulo = new ObjectModule
+            {
+                Name = sectionName,
+                StartAddress = sectionStart,
+                Length = Math.Max(0, sectionEnd - sectionStart)
+            };
+
+            AgregarRegistrosDefinicionYReferencia(modulo, lineasSeccion, sectionStart);
+            AgregarRegistrosTextoYModificacion(modulo, lineasSeccion);
+
+            // El registro E siempre pertenece al módulo; la serialización decide si imprime dirección.
+            modulo.E = new EndRecord(_direccionEjecucion);
+            return modulo;
+        }
+
+        private static void ObtenerRangoSeccion(IReadOnlyList<ObjectCodeLine> lineasSeccion, out int sectionStart, out int sectionEnd)
+        {
+            static int Addr(IntermediateLine l) => l.AbsoluteAddress >= 0 ? l.AbsoluteAddress : l.Address;
+
+            sectionStart = lineasSeccion
+                .Where(l => Addr(l.IntermLine) >= 0)
+                .Select(l => Addr(l.IntermLine))
+                .DefaultIfEmpty(0)
+                .Min();
+
+            sectionEnd = lineasSeccion
+                .Where(l => Addr(l.IntermLine) >= 0)
+                .Select(l => Addr(l.IntermLine) + Math.Max(0, l.IntermLine.Increment))
+                .DefaultIfEmpty(sectionStart)
+                .Max();
+        }
+
+        private void AgregarRegistrosDefinicionYReferencia(ObjectModule modulo, IReadOnlyList<ObjectCodeLine> lineasSeccion, int sectionStart)
+        {
+            var emittedExtDefSymbols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var emittedExtRefSymbols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var linea in lineasSeccion)
+            {
+                string op = linea.IntermLine.Operation?.Trim().ToUpperInvariant() ?? string.Empty;
+                if (op == "EXTDEF")
+                {
+                    var symbolsInLine = ParseSymbolList(linea.IntermLine.Operand)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                    if (symbolsInLine.Count > 0)
+                    {
+                        foreach (var symbol in symbolsInLine)
+                        {
+                            if (!emittedExtDefSymbols.Add(symbol))
+                                continue;
+
+                            var defLine = lineasSeccion.FirstOrDefault(l =>
+                                string.Equals(l.IntermLine.Label, symbol, StringComparison.OrdinalIgnoreCase));
+                            int relAddr = defLine == null ? 0 : Math.Max(0, ObtenerDireccionEfectiva(defLine.IntermLine) - sectionStart);
+                            modulo.D.Add(new DefineRecord(symbol, relAddr));
+                        }
+                    }
+                }
+                else if (op == "EXTREF")
+                {
+                    var symbolsInLine = ParseSymbolList(linea.IntermLine.Operand)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Where(s => emittedExtRefSymbols.Add(s))
+                        .ToList();
+
+                    if (symbolsInLine.Count > 0)
+                    {
+                        foreach (var symbol in symbolsInLine)
+                            modulo.R.Add(new ReferRecord(symbol));
+                    }
+                }
+            }
+        }
+
+        private void AgregarRegistrosTextoYModificacion(ObjectModule modulo, IReadOnlyList<ObjectCodeLine> lineasSeccion)
+        {
+            int inicioTexto = -1;
+            string codigoTexto = string.Empty;
+            int conteoBytesTexto = 0;
+            var registrosModificacion = new List<RegistroModificacion>();
+
+            void VaciarTexto()
+            {
+                if (conteoBytesTexto <= 0)
+                    return;
+                modulo.T.Add(new TextRecord
+                {
+                    StartAddress = inicioTexto,
+                    HexBytes = codigoTexto
+                });
+                inicioTexto = -1;
+                codigoTexto = string.Empty;
+                conteoBytesTexto = 0;
+            }
+
+            foreach (var linea in lineasSeccion)
+            {
+                if (string.IsNullOrWhiteSpace(linea.ObjectCode))
+                {
+                    string operacion = linea.IntermLine.Operation?.Trim().ToUpperInvariant() ?? string.Empty;
+                    if (operacion is "RESB" or "RESW" or "ORG" or "END" or "USE" or "CSECT")
+                        VaciarTexto();
+                    continue;
+                }
+
+                string codigoLimpio = linea.ObjectCode.Replace("*", "");
+                int bytesLinea = codigoLimpio.Length / 2;
+                int lineAddress = ObtenerDireccionEfectiva(linea.IntermLine);
+                bool esContiguo = (inicioTexto != -1) && ((inicioTexto + conteoBytesTexto) == lineAddress);
+                bool excedeLimite = (conteoBytesTexto + bytesLinea) > 30;
+                if (inicioTexto != -1 && (!esContiguo || excedeLimite))
+                    VaciarTexto();
+
+                if (inicioTexto == -1)
+                    inicioTexto = lineAddress;
+
+                codigoTexto += codigoLimpio;
+                conteoBytesTexto += bytesLinea;
+
+                int direccionMod = string.Equals(linea.IntermLine.Operation, "WORD", StringComparison.OrdinalIgnoreCase)
+                    ? lineAddress
+                    : lineAddress + 1;
+                int longitudHalfBytes = string.Equals(linea.IntermLine.Operation, "WORD", StringComparison.OrdinalIgnoreCase) ? 0x06 : 0x05;
+
+                var modificaciones = RecolectarModificaciones(linea);
+                if (modificaciones.Count == 0)
+                    continue;
+
+                foreach (var mod in modificaciones)
+                {
+                    registrosModificacion.Add(new RegistroModificacion(direccionMod, longitudHalfBytes, mod.Sign, mod.Symbol));
+                }
+            }
+
+            VaciarTexto();
+
+            foreach (var registro in registrosModificacion)
+            {
+                modulo.M.Add(new ModificationRecord(
+                    registro.Direccion,
+                    registro.LongitudMediosBytes,
+                    registro.Sign,
+                    registro.Symbol));
+            }
+        }
+
+        private List<ModificationRequest> RecolectarModificaciones(ObjectCodeLine linea)
+        {
+            var modificaciones = new List<ModificationRequest>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            void AddMod(ModificationRequest mod)
+            {
+                string key = $"{mod.Sign}|{mod.Symbol}";
+                if (seen.Add(key))
+                    modificaciones.Add(mod);
+            }
+
+            foreach (var mod in linea.ModificationRequests)
+                AddMod(mod);
+
+            foreach (var mod in InferModificationRequests(linea))
+                AddMod(mod);
+
+            return modificaciones;
+        }
+
+        private static int ObtenerDireccionEfectiva(IntermediateLine linea)
+            => linea.AbsoluteAddress >= 0 ? linea.AbsoluteAddress : linea.Address;
 
         private static List<string> ParseSymbolList(string? operand)
         {

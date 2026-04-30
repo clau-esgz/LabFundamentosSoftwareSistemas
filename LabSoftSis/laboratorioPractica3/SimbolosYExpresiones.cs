@@ -224,20 +224,8 @@ namespace laboratorioPractica3
             string normalizedExpression = NormalizeExternalsToZero(expression, metadata, controlSectionName);
             var (value, relCount, error) = EvaluateExpressionWithRelativeCount(normalizedExpression, currentAddress, allowUndefinedSymbols, controlSectionName);
 
-            if (error == null && Math.Abs(relCount) == 1)
-            {
-                metadata.HasUnpairedRelative = true;
-                metadata.RelativeModuleSign = relCount > 0 ? '+' : '-';
-            }
-            else
-            {
-                metadata.HasUnpairedRelative = false;
-                metadata.RelativeModuleSign = null;
-            }
-
-            var type = Math.Abs(relCount) == 1 && error == null
-                ? SymbolType.Relative
-                : SymbolType.Absolute;
+            ActualizarMetadataRelativa(metadata, relCount, error);
+            var type = ClasificarTipoExpresion(relCount, error);
 
             return (value, type, error, metadata);
         }
@@ -384,10 +372,48 @@ namespace laboratorioPractica3
             if (error != null)
                 return (-1, SymbolType.Absolute, error);
 
-            return (value, Math.Abs(relCount) == 1 ? SymbolType.Relative : SymbolType.Absolute, null);
+            return (value, ClasificarTipoExpresion(relCount, error), null);
         }
 
-        // Procesa los tokens de la expresión mediante parser recursivo descendente
+        private static void ActualizarMetadataRelativa(ExpressionEvaluationMetadata metadata, int relCount, string? error)
+        {
+            if (error == null && Math.Abs(relCount) == 1)
+            {
+                metadata.HasUnpairedRelative = true;
+                metadata.RelativeModuleSign = relCount > 0 ? '+' : '-';
+            }
+            else
+            {
+                metadata.HasUnpairedRelative = false;
+                metadata.RelativeModuleSign = null;
+            }
+        }
+
+        /// <summary>
+        /// Clasifica el tipo de resultado de una expresion basado en el recuento de terminos relativos.
+        /// Una expresion es relativa si tiene exactamente 1 termino relativo (positivo o negativo).
+        /// Una expresion es absoluta si tiene 0 terminos relativos o multiples sin cancelar.
+        /// </summary>
+        /// <param name="relCount">Recuento neto de terminos relativos (0, +1, o -1 es valido)</param>
+        /// <param name="error">Mensaje de error de evaluacion (null si evaluacion fue exitosa)</param>
+        /// <returns>SymbolType.Relative si resultado es relativo; SymbolType.Absolute en caso contrario</returns>
+        private static SymbolType ClasificarTipoExpresion(int relCount, string? error)
+            => error == null && Math.Abs(relCount) == 1 ? SymbolType.Relative : SymbolType.Absolute;
+
+        /// <summary>
+        /// Parser recursivo descendente que evalua expresiones con operadores +, -, *, /.
+        /// Cuenta terminos relativos (simbolos) para determinar si el resultado es relativo o absoluto.
+        /// 
+        /// Reglas de valuacion:
+        /// - relCount = 0: resultado es absoluto (numeros y simbolos cancelados)
+        /// - relCount = +1 o -1: resultado es relativo a una seccion
+        /// - |relCount| > 1: error (multiples terminos relativos no cancelandose)
+        /// </summary>
+        /// <param name="expression">Expresion a evaluar (ej: "LISTA + 10 * 2")</param>
+        /// <param name="currentAddress">Direccion actual para resoluciones relativas (pseudosimbol .)</param>
+        /// <param name="allowUndefinedSymbols">Si false, simbolos no definidos causaran error</param>
+        /// <param name="controlSectionName">Seccion de control actual para busqueda de simbolos</param>
+        /// <returns>Tupla (valor evaluado, recuento relativo, mensaje de error si lo hay)</returns>
         private (int value, int relCount, string? error) EvaluateExpressionWithRelativeCount(string expression, int currentAddress, bool allowUndefinedSymbols, string? controlSectionName)
         {
             try
@@ -420,7 +446,12 @@ namespace laboratorioPractica3
             }
         }
 
-        // Divide la expresión en tokens: números, símbolos, operadores
+        /// <summary>
+        /// Divide una expresion en tokens: numeros hexadecimales, simbolos, operadores, parentesis.
+        /// Tokenizacion simple sin validacion de sintaxis (delegada al parser descendente).
+        /// </summary>
+        /// <param name="expression">Expresion a dividir (ej: "LISTA+10*2")</param>
+        /// <returns>Lista de tokens atomicos (operadores separados, simbolos juntos)</returns>
         private List<string> Tokenize(string expression)
         {
             var tokens = new List<string>();
@@ -451,10 +482,11 @@ namespace laboratorioPractica3
             return tokens;
         }
 
-        // Procesa sumas y restas: precedencia más baja
-        // Usa método de conteo de relativos:
-        //   - Sumar relCount: A + B suma sus contadores relativos
-        //   - Restar relCount: A - B resta sus contadores (puede cancelar términos relativos)
+        /// <summary>
+        /// Nivel 1 del parser: Sumas y restas (precedencia mas baja).
+        /// Procesa operandos con +/-, acumulando valores y contadores relativos.
+        /// Suma suma contadores; resta los resta (permitiendo cancelacion de terminos relativos).
+        /// </summary>
         private (int val, int relCount, string? err) ParseAddSubInternal(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols, string? controlSectionName)
         {
             var (leftVal, leftRelCount, err) = ParseMulDivInternal(tokens, ref pos, pc, allowUndefinedSymbols, controlSectionName);
@@ -485,8 +517,10 @@ namespace laboratorioPractica3
             return (leftVal, leftRelCount, null);
         }
 
-        // Procesa multiplicaciones y divisiones: precedencia más alta que +/-
-        // Restricción SIC/XE: losoperandos DEBEN ser absolutos (relCount = 0)
+        /// <summary>
+        /// Nivel 2 del parser: Multiplicaciones y divisiones (precedencia mas alta que +/-).
+        /// Validacion SIC/XE: operandos de * y / DEBEN ser absolutos (relCount = 0).
+        /// </summary>
         private (int val, int relCount, string? err) ParseMulDivInternal(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols, string? controlSectionName)
         {
             var (leftVal, leftRelCount, err) = ParseFactorInternal(tokens, ref pos, pc, allowUndefinedSymbols, controlSectionName);
@@ -502,7 +536,7 @@ namespace laboratorioPractica3
 
                 // Validar que ambos operandos sean absolutos
                 if (leftRelCount != 0 || rightRelCount != 0)
-                    return (-1, 0, "Los términos en multiplicaciones y divisiones deben ser absolutos");
+                    return (-1, 0, "Los terminos en multiplicaciones y divisiones deben ser absolutos");
 
                 if (op == "*")
                 {
@@ -520,11 +554,14 @@ namespace laboratorioPractica3
             return (leftVal, leftRelCount, null);
         }
 
-        // Procesa factores: números, símbolos, *, paréntesis y operadores unarios +/-
+        /// <summary>
+        /// Nivel 3 del parser: Factores - numeros, simbolos, parentesis, operadores unarios.
+        /// Maneja: numeros (decimal, hex), simbolos, *, -/+ unarios, subexpresiones entre ().
+        /// </summary>
         private (int val, int relCount, string? err) ParseFactorInternal(List<string> tokens, ref int pos, int pc, bool allowUndefinedSymbols, string? controlSectionName)
         {
             if (pos >= tokens.Count)
-                return (-1, 0, "Expresión mal formada");
+                return (-1, 0, "Expresion mal formada");
 
             string token = tokens[pos];
 
@@ -550,7 +587,7 @@ namespace laboratorioPractica3
 
             pos++;
 
-            // Paréntesis: evaluar subexpresión recursivamente
+            // Parentesis: evaluar subexpresion recursivamente
             if (token == "(")
             {
                 var (exprValue, exprRelCount, exprErr) = ParseAddSubInternal(tokens, ref pos, pc, allowUndefinedSymbols, controlSectionName);
@@ -563,23 +600,23 @@ namespace laboratorioPractica3
                 return (exprValue, exprRelCount, null);
             }
 
-            // Contador de ubicación: * = dirección actual
+            // Contador de ubicacion: * = direccion actual
             if (token == "*")
                 return (pc, 1, null);
 
-            // Símbolo conocido
+            // Simbolo conocido
             if (TryResolveSymbol(token, controlSectionName, out var symbolInfo))
                 return (symbolInfo.Value, symbolInfo.Type == SymbolType.Relative ? 1 : 0, null);
 
-            // Número (decimal, hexadecimal con H, 0x, X'...')
+            // Numero (decimal, hexadecimal con H, 0x, X'...')
             if (TryParseTokenAsNumber(token, out int parsed))
                 return (parsed, 0, null);
 
-            // Símbolo no definido
+            // Simbolo no definido
             if (allowUndefinedSymbols)
                 return (0, 0, null);
 
-            return (-1, 0, $"Símbolo no definido o valor inválido: {token}");
+            return (-1, 0, $"Simbolo no definido o valor invalido: {token}");
         }
 
         // Intenta parsear un token como número en diferentes formatos

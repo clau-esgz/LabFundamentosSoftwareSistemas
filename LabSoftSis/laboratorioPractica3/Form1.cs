@@ -19,6 +19,7 @@ namespace laboratorioPractica3
     {
         private string? _currentFilePath;
         private bool _isDirty;
+        private bool _suspendDirtyTracking;
         private bool _consoleReady;
         private bool _isHighlighting;
         private System.Windows.Forms.Timer? _highlightTimer;
@@ -46,16 +47,48 @@ namespace laboratorioPractica3
 
         private void Form1_Load(object sender, EventArgs e)
         {
+            ConfigurarEditorFuente();
+            ConfigurarPanelErrores();
+            ConfigurarTablasResultados();
+            ConfigurarResaltadoDiferido();
+            NuevoArchivo();
+        }
+
+        private void ConfigurarEditorFuente()
+        {
             codigoTextBox1.AcceptsTab = true;
             codigoTextBox1.WordWrap = false;
             codigoTextBox1.Font = new Font("Consolas", 10F);
 
+            codigoTextBox1.TextChanged += (_, __) =>
+            {
+                if (_suspendDirtyTracking)
+                    return;
+
+                _isDirty = true;
+                ActualizarTitulo();
+                ProgramarResaltado();
+            };
+        }
+
+        private void ConfigurarPanelErrores()
+        {
             RegistrostextBox2.ReadOnly = true;
             RegistrostextBox2.Font = new Font("Consolas", 9F);
 
             ErrortextBox3.ReadOnly = true;
             ErrortextBox3.Font = new Font("Consolas", 9F);
+        }
 
+        private void ConfigurarTablasResultados()
+        {
+            ConfigurarGridIntermedio();
+            ConfigurarGridSimbolos();
+            ConfigurarGridBloques();
+        }
+
+        private void ConfigurarGridIntermedio()
+        {
             ArchivoInterdataGridView1.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells;
             ArchivoInterdataGridView1.AllowUserToAddRows = false;
             ArchivoInterdataGridView1.AllowUserToDeleteRows = false;
@@ -64,33 +97,33 @@ namespace laboratorioPractica3
             ArchivoInterdataGridView1.RowHeadersWidthSizeMode = DataGridViewRowHeadersWidthSizeMode.DisableResizing;
             ArchivoInterdataGridView1.RowHeadersWidth = 40;
             ArchivoInterdataGridView1.RowPrePaint += ArchivoInterdataGridView1_RowPrePaint;
+        }
 
+        private void ConfigurarGridSimbolos()
+        {
             TablaSimdataGridView2.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells;
             TablaSimdataGridView2.AllowUserToAddRows = false;
             TablaSimdataGridView2.AllowUserToDeleteRows = false;
             TablaSimdataGridView2.ReadOnly = true;
             TablaSimdataGridView2.RowPrePaint += TablaSimdataGridView2_RowPrePaint;
+        }
 
+        private void ConfigurarGridBloques()
+        {
             tablaBlqsGridView1.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells;
             tablaBlqsGridView1.AllowUserToAddRows = false;
             tablaBlqsGridView1.AllowUserToDeleteRows = false;
             tablaBlqsGridView1.ReadOnly = true;
+        }
 
-            codigoTextBox1.TextChanged += (_, __) =>
-            {
-                _isDirty = true;
-                ActualizarTitulo();
-                ProgramarResaltado();
-            };
-
+        private void ConfigurarResaltadoDiferido()
+        {
             _highlightTimer = new System.Windows.Forms.Timer { Interval = 180 };
             _highlightTimer.Tick += (_, __) =>
             {
                 _highlightTimer!.Stop();
                 AplicarResaltadoSintaxis();
             };
-
-            NuevoArchivo();
         }
 
         private void analizarlexicoYSintacticoToolStripMenuItem_Click(object sender, EventArgs e)
@@ -194,17 +227,7 @@ namespace laboratorioPractica3
             if (!ConfirmarGuardarCambiosAntesDeContinuar())
                 return;
 
-            _currentFilePath = null;
-            _isDirty = false;
-
-            codigoTextBox1.Clear();
-            ErrortextBox3.Clear();
-            RegistrostextBox2.Clear();
-            ArchivoInterdataGridView1.DataSource = null;
-            TablaSimdataGridView2.DataSource = null;
-            tablaBlqsGridView1.DataSource = null;
-            ActualizarTitulo();
-            AplicarResaltadoSintaxis();
+            CargarFuenteEnEditor(string.Empty, null);
         }
 
         private void AbrirArchivo()
@@ -222,18 +245,7 @@ namespace laboratorioPractica3
             if (ofd.ShowDialog(this) != DialogResult.OK)
                 return;
 
-            codigoTextBox1.Text = File.ReadAllText(ofd.FileName);
-            _currentFilePath = ofd.FileName;
-            _isDirty = false;
-            
-            ErrortextBox3.Clear();
-            RegistrostextBox2.Clear();
-            ArchivoInterdataGridView1.DataSource = null;
-            TablaSimdataGridView2.DataSource = null;
-            tablaBlqsGridView1.DataSource = null;
-            
-            ActualizarTitulo();
-            AplicarResaltadoSintaxis();
+            CargarFuenteEnEditor(File.ReadAllText(ofd.FileName), ofd.FileName);
         }
 
         private bool GuardarArchivo()
@@ -242,8 +254,7 @@ namespace laboratorioPractica3
                 return GuardarArchivoComo();
 
             File.WriteAllText(_currentFilePath!, codigoTextBox1.Text);
-            _isDirty = false;
-            ActualizarTitulo();
+            MarcarDocumentoComoGuardado();
             return true;
         }
 
@@ -262,9 +273,37 @@ namespace laboratorioPractica3
             _currentFilePath = sfd.FileName;
             File.WriteAllText(_currentFilePath, codigoTextBox1.Text);
 
+            MarcarDocumentoComoGuardado();
+            return true;
+        }
+
+        private void CargarFuenteEnEditor(string contenido, string? filePath)
+        {
+            _currentFilePath = filePath;
+
+            _suspendDirtyTracking = true;
+            codigoTextBox1.Text = contenido;
+            _suspendDirtyTracking = false;
+
+            _isDirty = false;
+            LimpiarPanelesResultado();
+            ActualizarTitulo();
+            AplicarResaltadoSintaxis();
+        }
+
+        private void LimpiarPanelesResultado()
+        {
+            ErrortextBox3.Clear();
+            RegistrostextBox2.Clear();
+            ArchivoInterdataGridView1.DataSource = null;
+            TablaSimdataGridView2.DataSource = null;
+            tablaBlqsGridView1.DataSource = null;
+        }
+
+        private void MarcarDocumentoComoGuardado()
+        {
             _isDirty = false;
             ActualizarTitulo();
-            return true;
         }
 
         private void CerrarAplicacion()
@@ -396,97 +435,150 @@ namespace laboratorioPractica3
         private PipelineResult EjecutarPipeline(bool runPaso2)
         {
             var parse = PrepararParse();
+            var paso1 = EjecutarPaso1(parse);
+            var paso2 = runPaso2 ? EjecutarPaso2(paso1) : null;
+            var objectLines = paso2?.ObjectCodeLines;
+            var registros = paso2 != null ? GenerarRegistrosObjeto(paso1, paso2, objectLines) : null;
 
+            return new PipelineResult(parse, paso1, paso2, objectLines, registros);
+        }
+
+        private Paso1 EjecutarPaso1(ParseResult parse)
+        {
             var paso1 = new Paso1();
             paso1.AddExternalErrors(parse.ErroresLexicoSintacticos);
             paso1.SetSourceLines(parse.SourceLines);
 
             var walker = new ParseTreeWalker();
             walker.Walk(paso1, parse.Tree);
-
-            Paso2? paso2 = null;
-            List<ObjectCodeLine>? objectLines = null;
-            List<string>? registros = null;
-
-            if (runPaso2)
-            {
-                paso2 = new Paso2(
-                    paso1.Lines,
-                    paso1.SymbolTableExtended,
-                    paso1.ProgramStartAddress,
-                    paso1.ProgramSize,
-                    paso1.ProgramName,
-                    paso1.BaseValue,
-                    paso1.ExecutionEntryPoint);
-
-                paso2.ObjectCodeGeneration();
-                objectLines = paso2.ObjectCodeLines;
-
-                var programaObjeto = new ProgramaObjeto(
-                    objectLines,
-                    paso2.GeneratedModules,
-                    paso1.ProgramName,
-                    paso1.ProgramStartAddress,
-                    paso1.ProgramSize,
-                    paso1.ExecutionEntryPoint);
-
-                registros = programaObjeto.GenerarRegistros();
-            }
-
-            return new PipelineResult(parse, paso1, paso2, objectLines, registros);
+            return paso1;
         }
 
+        private Paso2 EjecutarPaso2(Paso1 paso1)
+        {
+            var paso2 = new Paso2(
+                paso1.Lines,
+                paso1.SymbolTableExtended,
+                paso1.ProgramStartAddress,
+                paso1.ProgramSize,
+                paso1.ProgramName,
+                paso1.BaseValue,
+                paso1.ExecutionEntryPoint);
+
+            paso2.ObjectCodeGeneration();
+            return paso2;
+        }
+
+        /// <summary>
+        /// Genera registros de modulo objeto (formato H/D/R/T/M/E) a partir de Paso 1 y Paso 2.
+        /// Los registros son la salida final del ensamblador, listos para el enlazador (linker).
+        /// </summary>
+        /// <param name="paso1">Resultado del Paso 1: tabla de simbolos, direcciones, programa, etc.</param>
+        /// <param name="paso2">Resultado del Paso 2: codigo objeto, modulos generados</param>
+        /// <param name="objectLines">Lineas de codigo objeto (null si solo Paso 1 fue ejecutado)</param>
+        /// <returns>Lista de lineas de registros de modulo objeto (H, D, R, T, M, E records)</returns>
+        private List<string> GenerarRegistrosObjeto(Paso1 paso1, Paso2 paso2, IReadOnlyList<ObjectCodeLine>? objectLines)
+        {
+            if (objectLines == null)
+                return new List<string>();
+
+            var programaObjeto = new ProgramaObjeto(
+                objectLines,
+                paso2.GeneratedModules,
+                paso1.ProgramName,
+                paso1.ProgramStartAddress,
+                paso1.ProgramSize,
+                paso1.ExecutionEntryPoint);
+
+            return programaObjeto.GenerarRegistros();
+        }
+
+        /// <summary>
+        /// Refresca todos los componentes visuales con resultados del pipeline de ensamblaje.
+        /// Actualiza grillas de intermedio, simbolos, bloques, y paneles de error.
+        /// </summary>
+        /// <param name="resultado">Resultado completo del pipeline (Parse, Paso1, Paso2)</param>
+        /// <param name="incluirCodigoObjeto">Si true, incluye codigo objeto en intermedio (requiere Paso 2)</param>
+        /// <param name="mode">Modo de ejecucion (Paso1, Paso2, o Ensamblado completo)</param>
         private void RefrescarVista(PipelineResult resultado, bool incluirCodigoObjeto, ExecutionMode mode)
+        {
+            ActualizarGridIntermedio(resultado, incluirCodigoObjeto);
+            ActualizarGridSimbolos(resultado.Paso1.SymbolTableExtended);
+
+            var erroresAnalizador = resultado.Parse.ErroresLexicoSintacticos.OrderBy(e => e.Line).ThenBy(e => e.Column).ToList();
+            var erroresPaso1 = ObtenerErroresPaso1SinDuplicar(resultado).OrderBy(e => e.Line).ThenBy(e => e.Column).ToList();
+            var erroresPaso2 = (resultado.Paso2?.Errors ?? new List<SICXEError>()).OrderBy(e => e.Line).ThenBy(e => e.Column).ToList();
+
+            ActualizarErroresVista(resultado, mode, erroresAnalizador, erroresPaso1, erroresPaso2);
+            AplicarResaltadoSintaxis(ObtenerLineasConError(erroresAnalizador, erroresPaso1, erroresPaso2));
+            ActualizarVistaObjetoYBloques(resultado, incluirCodigoObjeto);
+        }
+
+        /// <summary>
+        /// Actualiza la grilla de archivo intermedio con lineas y su codigo objeto asociado.
+        /// Aplica numeracion automática de renglones y oculta columnas internas.
+        /// </summary>
+        private void ActualizarGridIntermedio(PipelineResult resultado, bool incluirCodigoObjeto)
         {
             ArchivoInterdataGridView1.DataSource = CrearTablaIntermedio(resultado.Paso1.Lines, incluirCodigoObjeto ? resultado.ObjectLines : null);
             AplicarNumeracionDeRenglones(ArchivoInterdataGridView1);
+
             if (ArchivoInterdataGridView1.Columns.Contains("TipoFormato"))
                 ArchivoInterdataGridView1.Columns["TipoFormato"].Visible = false;
-            
-            TablaSimdataGridView2.DataSource = CrearTablaSimbolos(resultado.Paso1.SymbolTableExtended);
+        }
+
+        /// <summary>
+        /// Actualiza la grilla de tabla de simbolos con datos de TABSIM.
+        /// Oculta columnas de metadata que no deben mostrarse al usuario.
+        /// </summary>
+        private void ActualizarGridSimbolos(SimbolosYExpresiones simbolos)
+        {
+            TablaSimdataGridView2.DataSource = CrearTablaSimbolos(simbolos);
+
             if (TablaSimdataGridView2.Columns.Contains("EsCabecera"))
                 TablaSimdataGridView2.Columns["EsCabecera"].Visible = false;
+        }
 
-            var erroresAnalizador = resultado.Parse.ErroresLexicoSintacticos
-                .OrderBy(e => e.Line)
-                .ThenBy(e => e.Column)
-                .ToList();
-            var erroresPaso1 = ObtenerErroresPaso1SinDuplicar(resultado)
-                .OrderBy(e => e.Line)
-                .ThenBy(e => e.Column)
-                .ToList();
-            var erroresPaso2 = (resultado.Paso2?.Errors ?? new List<SICXEError>())
-                .OrderBy(e => e.Line)
-                .ThenBy(e => e.Column)
-                .ToList();
-
+        private void ActualizarErroresVista(
+            PipelineResult resultado,
+            ExecutionMode mode,
+            IReadOnlyList<SICXEError> erroresAnalizador,
+            IReadOnlyList<SICXEError> erroresPaso1,
+            IReadOnlyList<SICXEError> erroresPaso2)
+        {
             if (mode == ExecutionMode.Ensamblado)
             {
                 MostrarErroresUnificados(UnificarErrores(resultado));
-            }
-            else
-            {
-                MostrarErroresPorEtapa(erroresAnalizador, erroresPaso1, mode == ExecutionMode.Paso2 ? erroresPaso2 : null);
+                return;
             }
 
-            var lineasError = erroresAnalizador
+            MostrarErroresPorEtapa(erroresAnalizador, erroresPaso1, mode == ExecutionMode.Paso2 ? erroresPaso2 : null);
+        }
+
+        private static IEnumerable<int> ObtenerLineasConError(
+            IReadOnlyList<SICXEError> erroresAnalizador,
+            IReadOnlyList<SICXEError> erroresPaso1,
+            IReadOnlyList<SICXEError> erroresPaso2)
+        {
+            return erroresAnalizador
                 .Concat(erroresPaso1)
                 .Concat(erroresPaso2)
                 .Select(e => e.Line)
                 .Distinct();
-            AplicarResaltadoSintaxis(lineasError);
+        }
 
-            if (incluirCodigoObjeto)
+        private void ActualizarVistaObjetoYBloques(PipelineResult resultado, bool incluirCodigoObjeto)
+        {
+            if (!incluirCodigoObjeto)
             {
-                var bloques = ConstruirResumenBloques(resultado.Paso1);
-                RegistrostextBox2.Text = ConstruirTextoRegistros(resultado.Registros ?? new List<string>());
-                tablaBlqsGridView1.DataSource = CrearTablaBloques(bloques);
-            }
-            else
-            {
-                RegistrostextBox2.Text = "";
+                RegistrostextBox2.Text = string.Empty;
                 tablaBlqsGridView1.DataSource = null;
+                return;
             }
+
+            var bloques = ConstruirResumenBloques(resultado.Paso1);
+            RegistrostextBox2.Text = ConstruirTextoRegistros(resultado.Registros ?? new List<string>());
+            tablaBlqsGridView1.DataSource = CrearTablaBloques(bloques);
         }
 
         private ParseResult PrepararParse()
@@ -521,10 +613,20 @@ namespace laboratorioPractica3
             return new ParseResult(tree, sourceLines, errores);
         }
 
+        /// <summary>
+        /// Crea DataTable para mostrar archivo intermedio (salida del Paso 1 y entrada del Paso 2).
+        /// Incluye direcciones, etiquetas, operaciones, operandos, codigo objeto, y errores detectados.
+        /// Columnas: CP (direccion), ETQ (etiqueta), CODOP (operacion), OPR (operando), FMT (formato), COD_OBJ (objeto), ERR (errores).
+        /// </summary>
+        /// <param name="lines">Lineas intermedias del Paso 1</param>
+        /// <param name="objectLines">Lineas de codigo objeto del Paso 2 (null si solo Paso 1 fue ejecutado)</param>
+        /// <returns>DataTable poblado con datos del archivo intermedio para visualizacion en DataGridView</returns>
         private DataTable CrearTablaIntermedio(IReadOnlyList<IntermediateLine> lines, IReadOnlyList<ObjectCodeLine>? objectLines)
         {
             var tabla = new DataTable();
             tabla.Columns.Add(" ", typeof(int));
+            tabla.Columns.Add("Seccion", typeof(string));
+            tabla.Columns.Add("NoSeccion", typeof(int));
             tabla.Columns.Add("CP", typeof(string));
             tabla.Columns.Add("Bloque", typeof(string));
             tabla.Columns.Add("NoBloque", typeof(int));
@@ -543,7 +645,10 @@ namespace laboratorioPractica3
             tabla.Columns.Add("ERR", typeof(string));
             tabla.Columns.Add("COMENTARIO", typeof(string));
 
-            var objByLine = objectLines?.ToDictionary(o => o.IntermLine.LineNumber, o => o.ObjectCode) ?? new Dictionary<int, string>();
+            var objByLine = objectLines?
+                .Where(o => o.IntermLine != null)
+                .GroupBy(o => o.IntermLine.LineNumber)
+                .ToDictionary(g => g.Key, g => g.Last().ObjectCode) ?? new Dictionary<int, string>();
 
             foreach (var l in lines)
             {
@@ -579,6 +684,12 @@ namespace laboratorioPractica3
             return tabla;
         }
 
+        /// <summary>
+        /// Crea DataTable para mostrar tabla de simbolos (TABSIM): todos los simbolos, valores y tipos.
+        /// Columnas: Simbolo, Valor (en hex), Tipo (Relativo/Absoluto), Seccion de control.
+        /// </summary>
+        /// <param name="simbolos">SimbolosYExpresiones con tabla de simbolos completa</param>
+        /// <returns>DataTable con lista ordenada alfabeticamente de simbolos definidos</returns>
         private DataTable CrearTablaSimbolos(SimbolosYExpresiones simbolos)
         {
             var tabla = new DataTable();
@@ -872,13 +983,23 @@ namespace laboratorioPractica3
             try
             {
                 _isHighlighting = true;
+                ResaltarSintaxis(lineasError);
+            }
+            finally
+            {
+                _isHighlighting = false;
+            }
+        }
 
-                int originalStart = codigoTextBox1.SelectionStart;
-                int originalLength = codigoTextBox1.SelectionLength;
+        private void ResaltarSintaxis(IEnumerable<int>? lineasError)
+        {
+            int originalStart = codigoTextBox1.SelectionStart;
+            int originalLength = codigoTextBox1.SelectionLength;
 
-                codigoTextBox1.SuspendLayout();
-                codigoTextBox1.SelectAll();
-                codigoTextBox1.SelectionColor = Color.Black;
+            codigoTextBox1.SuspendLayout();
+            try
+            {
+                PrepararEditorParaResaltado();
 
                 var instrucciones = Paso1.OPTAB.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
                 var directivas = Paso1.DIRECTIVES.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -898,47 +1019,75 @@ namespace laboratorioPractica3
 
                     if (errorSet.Contains(lineNumber))
                     {
-                        codigoTextBox1.Select(lineStart, lineText.Length);
-                        codigoTextBox1.SelectionColor = Color.Red;
+                        PintarLineaConError(lineStart, lineText.Length);
                         continue;
                     }
 
-                    var labelMatch = Regex.Match(lineText, @"^\s*([A-Za-z][A-Za-z0-9_]*)");
-                    if (labelMatch.Success)
-                    {
-                        int ls = lineStart + labelMatch.Groups[1].Index;
-                        int ll = labelMatch.Groups[1].Length;
-                        codigoTextBox1.Select(ls, ll);
-                        codigoTextBox1.SelectionColor = Color.Black;
-                    }
-
-                    foreach (Match m in Regex.Matches(lineText, @"\b[A-Za-z][A-Za-z0-9]*\b"))
-                    {
-                        int tokenStart = lineStart + m.Index;
-                        int tokenLength = m.Length;
-                        string token = m.Value;
-
-                        if (instrucciones.Contains(token))
-                        {
-                            codigoTextBox1.Select(tokenStart, tokenLength);
-                            codigoTextBox1.SelectionColor = Color.Blue;
-                        }
-                        else if (directivas.Contains(token))
-                        {
-                            codigoTextBox1.Select(tokenStart, tokenLength);
-                            codigoTextBox1.SelectionColor = Color.ForestGreen;
-                        }
-                    }
+                    PintarEtiqueta(lineText, lineStart);
+                    PintarPalabrasClave(lineText, lineStart, instrucciones, directivas);
                 }
 
-                codigoTextBox1.Select(originalStart, originalLength);
-                codigoTextBox1.SelectionColor = Color.Black;
-                codigoTextBox1.ResumeLayout();
+                RestaurarSeleccion(originalStart, originalLength);
             }
             finally
             {
-                _isHighlighting = false;
+                codigoTextBox1.ResumeLayout();
             }
+        }
+
+        private void PrepararEditorParaResaltado()
+        {
+            codigoTextBox1.SelectAll();
+            codigoTextBox1.SelectionColor = Color.Black;
+        }
+
+        private void PintarLineaConError(int lineStart, int lineLength)
+        {
+            codigoTextBox1.Select(lineStart, lineLength);
+            codigoTextBox1.SelectionColor = Color.Red;
+        }
+
+        private void PintarEtiqueta(string lineText, int lineStart)
+        {
+            var labelMatch = Regex.Match(lineText, @"^\s*([A-Za-z][A-Za-z0-9_]*)");
+            if (!labelMatch.Success)
+                return;
+
+            int ls = lineStart + labelMatch.Groups[1].Index;
+            int ll = labelMatch.Groups[1].Length;
+            codigoTextBox1.Select(ls, ll);
+            codigoTextBox1.SelectionColor = Color.Black;
+        }
+
+        private void PintarPalabrasClave(
+            string lineText,
+            int lineStart,
+            ISet<string> instrucciones,
+            ISet<string> directivas)
+        {
+            foreach (Match m in Regex.Matches(lineText, @"\b[A-Za-z][A-Za-z0-9]*\b"))
+            {
+                int tokenStart = lineStart + m.Index;
+                int tokenLength = m.Length;
+                string token = m.Value;
+
+                if (instrucciones.Contains(token))
+                    PintarToken(tokenStart, tokenLength, Color.Blue);
+                else if (directivas.Contains(token))
+                    PintarToken(tokenStart, tokenLength, Color.ForestGreen);
+            }
+        }
+
+        private void PintarToken(int tokenStart, int tokenLength, Color color)
+        {
+            codigoTextBox1.Select(tokenStart, tokenLength);
+            codigoTextBox1.SelectionColor = color;
+        }
+
+        private void RestaurarSeleccion(int originalStart, int originalLength)
+        {
+            codigoTextBox1.Select(originalStart, originalLength);
+            codigoTextBox1.SelectionColor = Color.Black;
         }
 
         private void MostrarSalidaAnalizadorEnConsola(IReadOnlyList<SICXEError> errores, string archivoErrores)
@@ -967,7 +1116,6 @@ namespace laboratorioPractica3
         private void MostrarSalidaPipelineEnConsola(string titulo, PipelineResult resultado, ExecutionMode mode)
         {
             AsegurarConsola();
-
             var erroresAnalizador = resultado.Parse.ErroresLexicoSintacticos
                 .OrderBy(e => e.Line)
                 .ThenBy(e => e.Column)
@@ -981,6 +1129,29 @@ namespace laboratorioPractica3
                 .ThenBy(e => e.Column)
                 .ToList();
 
+            EscribirEncabezadoPipeline(titulo, resultado);
+
+            if (mode == ExecutionMode.Ensamblado)
+            {
+                EscribirErroresConsola("[Errores Unificados]", UnificarErrores(resultado));
+            }
+            else
+            {
+                EscribirErroresConsola("[Errores Analizador]", erroresAnalizador);
+                EscribirErroresConsola("[Errores Paso 1]", erroresPaso1);
+
+                if (mode == ExecutionMode.Paso2)
+                    EscribirErroresConsola("[Errores Paso 2]", erroresPaso2);
+            }
+
+            EscribirTablaSimbolosConsola(resultado.Paso1.SymbolTableExtended);
+            EscribirTablaIntermediaConsola(resultado.Paso1.Lines);
+            EscribirTablaBloquesConsola(ConstruirResumenBloques(resultado.Paso1));
+            EscribirRegistrosObjetoConsola(resultado.Registros);
+        }
+
+        private void EscribirEncabezadoPipeline(string titulo, PipelineResult resultado)
+        {
             Console.WriteLine();
             Console.WriteLine(SeparadorConsola('='));
             Console.WriteLine(titulo);
@@ -989,68 +1160,65 @@ namespace laboratorioPractica3
             Console.WriteLine($"Intermedio (renglones): {resultado.Paso1.Lines.Count}");
             Console.WriteLine($"TABSIM (símbolos): {resultado.Paso1.SymbolTableExtended.Count}");
             Console.WriteLine();
+        }
 
-            if (mode == ExecutionMode.Ensamblado)
+        private static void EscribirErroresConsola(string titulo, IReadOnlyList<SICXEError> errores)
+        {
+            Console.WriteLine();
+            Console.WriteLine(titulo);
+            if (errores.Count == 0)
             {
-                Console.WriteLine();
-                Console.WriteLine("[Errores Unificados]");
-                var unificados = UnificarErrores(resultado);
-                if (unificados.Count == 0) Console.WriteLine("Sin errores.");
-                foreach (var e in unificados) Console.WriteLine(e.ToString());
-            }
-            else
-            {
-                Console.WriteLine("[Errores Analizador]");
-                if (erroresAnalizador.Count == 0) Console.WriteLine("Sin errores.");
-                foreach (var e in erroresAnalizador) Console.WriteLine(e.ToString());
-                Console.WriteLine();
-
-                Console.WriteLine("[Errores Paso 1]");
-                if (erroresPaso1.Count == 0) Console.WriteLine("Sin errores.");
-                foreach (var e in erroresPaso1) Console.WriteLine(e.ToString());
-
-                if (mode == ExecutionMode.Paso2)
-                {
-                    Console.WriteLine();
-                    Console.WriteLine("[Errores Paso 2]");
-                    if (erroresPaso2.Count == 0) Console.WriteLine("Sin errores.");
-                    foreach (var e in erroresPaso2) Console.WriteLine(e.ToString());
-                }
+                Console.WriteLine("Sin errores.");
+                return;
             }
 
+            foreach (var e in errores)
+                Console.WriteLine(e.ToString());
+        }
+
+        private void EscribirTablaSimbolosConsola(SimbolosYExpresiones simbolos)
+        {
             Console.WriteLine();
             Console.WriteLine("[Tabla de Simbolos]");
             Console.WriteLine("Simbolo             Valor  Tipo  Bloque");
-            foreach (var kv in resultado.Paso1.SymbolTableExtended.GetAllSymbols().OrderBy(k => k.Value.Value))
+            foreach (var kv in simbolos.GetAllSymbols().OrderBy(k => k.Value.Value))
             {
                 var sym = kv.Value;
                 string tipo = sym.Type == SymbolType.Relative ? "R" : "A";
                 Console.WriteLine($"{sym.Name,-18} {sym.Value:X4}  {tipo,-4}  {sym.BlockName}");
             }
+        }
 
+        private void EscribirTablaIntermediaConsola(IReadOnlyList<IntermediateLine> lineas)
+        {
             Console.WriteLine();
             Console.WriteLine("[Archivo Intermedio]");
             Console.WriteLine("NL   CP    Bloque             ETQ        CODOP      OPR");
-            foreach (var l in resultado.Paso1.Lines)
+            foreach (var l in lineas)
             {
                 string cp = l.Address >= 0 ? l.Address.ToString("X4") : "----";
                 Console.WriteLine($"{l.LineNumber,-4} {cp,-5} {l.BlockName,-18} {l.Label,-10} {l.Operation,-10} {l.Operand}");
             }
+        }
 
-            var bloques = ConstruirResumenBloques(resultado.Paso1);
+        private void EscribirTablaBloquesConsola(IReadOnlyList<BloqueResumen> bloques)
+        {
             Console.WriteLine();
             Console.WriteLine("[Tabla de Bloques]");
             Console.WriteLine("Seccion  No  Bloque              Longitud DirIniRel");
             foreach (var b in bloques)
                 Console.WriteLine($"{b.Seccion,-8} {b.Numero,2}  {b.Nombre,-18} {b.Longitud:X4}    {b.DirIniRel:X4}");
+        }
 
-            if (resultado.Registros != null)
-            {
-                Console.WriteLine();
-                Console.WriteLine("[Registros Objeto]");
-                foreach (var r in resultado.Registros)
-                    Console.WriteLine(r);
-            }
+        private void EscribirRegistrosObjetoConsola(IReadOnlyList<string>? registros)
+        {
+            if (registros == null || registros.Count == 0)
+                return;
+
+            Console.WriteLine();
+            Console.WriteLine("[Registros Objeto]");
+            foreach (var r in registros)
+                Console.WriteLine(r);
         }
 
         private string ConstruirContenidoErrores(IReadOnlyList<SICXEError> errores, string encabezado)
@@ -1184,6 +1352,12 @@ namespace laboratorioPractica3
                 .ToList();
         }
 
+        /// <summary>
+        /// Crea DataTable para mostrar tabla de bloques (TABBLK): bloques USE con direcciones y longitudes.
+        /// Columnas: Nombre del bloque, Numero, Direccion inicial, Longitud, Tipo (STANDARD/UNNAMED).
+        /// </summary>
+        /// <param name="bloques">Lista de resumenes de bloques del Paso 1</param>
+        /// <returns>DataTable con informacion de todos los bloques USE utilizados en el programa</returns>
         private DataTable CrearTablaBloques(IReadOnlyList<BloqueResumen> bloques)
         {
             var tabla = new DataTable();
@@ -1193,7 +1367,7 @@ namespace laboratorioPractica3
             tabla.Columns.Add("Longitud", typeof(string));
             tabla.Columns.Add("DirIniRel", typeof(string));
 
-            string lastSection = null;
+            string? lastSection = null;
             bool first = true;
             foreach (var b in bloques)
             {

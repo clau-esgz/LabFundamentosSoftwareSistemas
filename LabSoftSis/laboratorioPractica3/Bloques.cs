@@ -49,15 +49,7 @@ namespace laboratorioPractica3
 
         public int FinalizeBlocks(int programStartAddress)
         {
-            int runningStart = programStartAddress;
-            foreach (var block in _orderedBlocks.OrderBy(b => b.Number))
-            {
-                block.Length = block.LocationCounter;
-                block.StartAddress = runningStart;
-                runningStart += block.Length;
-            }
-
-            return _orderedBlocks.Sum(b => b.Length);
+            return FinalizarYAsignarDirecciones(programStartAddress);
         }
 
         public int GetBlockStartAddress(string? blockName)
@@ -98,6 +90,24 @@ namespace laboratorioPractica3
             _blocks[name] = block;
             _orderedBlocks.Add(block);
             return block;
+        }
+
+        private int FinalizarYAsignarDirecciones(int programStartAddress)
+        {
+            int runningStart = programStartAddress;
+            foreach (var block in _orderedBlocks.OrderBy(b => b.Number))
+            {
+                AsignarRangoBloque(block, runningStart);
+                runningStart += block.Length;
+            }
+
+            return _orderedBlocks.Sum(b => b.Length);
+        }
+
+        private static void AsignarRangoBloque(BloqueInfo block, int startAddress)
+        {
+            block.Length = block.LocationCounter;
+            block.StartAddress = startAddress;
         }
 
         private static string NormalizeBlockName(string? blockName)

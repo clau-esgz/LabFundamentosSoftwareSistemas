@@ -57,42 +57,56 @@ namespace laboratorioPractica3
         public List<string> ToRecords(bool emitEndAddress)
         {
             var output = new List<string>();
-            output.Add($"H{Name.PadRight(6).Substring(0, 6)}{StartAddress:X6}{Length:X6}");
-
-            if (D.Count > 0)
-            {
-                var chunk = new StringBuilder("D");
-                foreach (var d in D)
-                {
-                    chunk.Append(d.Symbol.PadRight(6).Substring(0, 6));
-                    chunk.Append(d.RelativeAddress.ToString("X6"));
-                }
-                output.Add(chunk.ToString());
-            }
-
-            if (R.Count > 0)
-            {
-                var chunk = new StringBuilder("R");
-                foreach (var r in R)
-                    chunk.Append(r.Symbol.PadRight(6).Substring(0, 6));
-                output.Add(chunk.ToString());
-            }
-
-            output.AddRange(T.Select(t => t.ToRecord()));
-            output.AddRange(M.Select(m => m.ToRecord()));
-
-            if (E != null)
-            {
-                output.Add(emitEndAddress
-                    ? $"E{E.Value.ExecutionAddress:X6}"
-                    : "E      ");
-            }
-            else
-            {
-                output.Add(emitEndAddress ? "E000000" : "E      ");
-            }
+            output.Add(BuildHeaderRecord());
+            AddDefinitionRecords(output);
+            AddReferenceRecords(output);
+            AddTextRecords(output);
+            AddModificationRecords(output);
+            output.Add(BuildEndRecord(emitEndAddress));
 
             return output;
+        }
+
+        private string BuildHeaderRecord()
+            => $"H{Name.PadRight(6).Substring(0, 6)}{StartAddress:X6}{Length:X6}";
+
+        private void AddDefinitionRecords(List<string> output)
+        {
+            if (D.Count == 0)
+                return;
+
+            var chunk = new StringBuilder("D");
+            foreach (var d in D)
+            {
+                chunk.Append(d.Symbol.PadRight(6).Substring(0, 6));
+                chunk.Append(d.RelativeAddress.ToString("X6"));
+            }
+            output.Add(chunk.ToString());
+        }
+
+        private void AddReferenceRecords(List<string> output)
+        {
+            if (R.Count == 0)
+                return;
+
+            var chunk = new StringBuilder("R");
+            foreach (var r in R)
+                chunk.Append(r.Symbol.PadRight(6).Substring(0, 6));
+            output.Add(chunk.ToString());
+        }
+
+        private void AddTextRecords(List<string> output)
+            => output.AddRange(T.Select(t => t.ToRecord()));
+
+        private void AddModificationRecords(List<string> output)
+            => output.AddRange(M.Select(m => m.ToRecord()));
+
+        private string BuildEndRecord(bool emitEndAddress)
+        {
+            if (E != null)
+                return emitEndAddress ? $"E{E.Value.ExecutionAddress:X6}" : "E      ";
+
+            return emitEndAddress ? "E000000" : "E      ";
         }
     }
 

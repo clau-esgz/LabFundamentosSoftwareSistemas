@@ -223,69 +223,79 @@ class Program
     /// </summary>
     static void AnalyzePaso1(string inputFile)
     {
-        // Método orquestador del ensamblado completo en dos pasadas.
-        // Flujo: parseo ANTLR -> Paso 1 (TABSIM/intermedio) -> Paso 2 (código objeto)
-        // -> generación de registros H/T/M/E -> exportación de reportes.
         Console.WriteLine("===============================================================");
         Console.WriteLine("            EJECUTANDO PASO 1 DEL ENSAMBLADOR SIC/XE");
         Console.WriteLine("===============================================================");
         Console.WriteLine();
 
+        var contexto = PrepararEjecucionPaso1(inputFile);
+        var paso1 = EjecutarPaso1(contexto.Tree, contexto.SourceLines, contexto.ExternalErrors);
+        var semanticAnalyzer = EjecutarAnalisisSemantico(contexto.Tree, contexto.LexerErrors, contexto.ParserErrors);
+
+        var paso2 = EjecutarPaso2DesdePaso1(paso1);
+        var erroresUnificados = UnificarErroresPaso1YPaso2(paso1, paso2);
+        var objectCodes = ObtenerCodigosObjeto(paso2);
+
+        MostrarReportePaso1(paso1, paso2, erroresUnificados, objectCodes, inputFile);
+        ExportarSalidasPaso1YPaso2(contexto.ProjectDir, inputFile, paso1, paso2, erroresUnificados);
+        ExportarProgramaObjeto(contexto.ProjectDir, inputFile, paso1, paso2);
+
+        _ = semanticAnalyzer;
+    }
+
+    private static (string Input, string[] SourceLines, IParseTree Tree, List<SICXEError> ExternalErrors, List<SICXEError> LexerErrors, List<SICXEError> ParserErrors, string ProjectDir) PrepararEjecucionPaso1(string inputFile)
+    {
         string input = File.ReadAllText(inputFile);
-        
-        // Guardar las lineas originales para procesar errores.
-        // File.ReadAllLines mantiene correctamente cada linea del archivo fuente.
         string[] sourceLines = File.ReadAllLines(inputFile);
-        
+
         if (!input.EndsWith("\n"))
             input += "\n";
 
         var inputStream = new AntlrInputStream(input);
         var lexer = new SICXELexer(inputStream);
-        
-        // Configurar listeners para capturar errores lexicos
         var lexerErrorListener = new SICXEErrorListener();
         lexer.RemoveErrorListeners();
         lexer.AddErrorListener(lexerErrorListener);
-        
+
         var tokenStream = new CommonTokenStream(lexer);
         var parser = new SICXEParser(tokenStream);
-        
-        // Configurar listeners para capturar errores sintacticos
         var parserErrorListener = new SICXEErrorListener();
         parser.RemoveErrorListeners();
         parser.AddErrorListener(parserErrorListener);
 
         var tree = parser.program();
-        
-        // Combinar errores lexicos y sintacticos
-        var allExternalErrors = lexerErrorListener.Errors.Concat(parserErrorListener.Errors).ToList();
+        return (
+            input,
+            sourceLines,
+            tree,
+            lexerErrorListener.Errors.Concat(parserErrorListener.Errors).ToList(),
+            lexerErrorListener.Errors.ToList(),
+            parserErrorListener.Errors.ToList(),
+            GetProjectDirectory());
+    }
 
-        // Ejecutar Paso 1 (construccion de TABSIM y calculo de CONTLOC)
+    private static Paso1 EjecutarPaso1(IParseTree tree, string[] sourceLines, IEnumerable<SICXEError> externalErrors)
+    {
         var paso1 = new Paso1();
-        
-        // Pasar errores externos y lineas del codigo fuente al Paso 1
-        paso1.AddExternalErrors(allExternalErrors);
+        paso1.AddExternalErrors(externalErrors);
         paso1.SetSourceLines(sourceLines);
-        
+
         var walker = new ParseTreeWalker();
         walker.Walk(paso1, tree);
-        
-        // Tambien ejecutar analisis semantico para validar operandos
-        var semanticAnalyzer = new SICXESemanticAnalyzer();
-        semanticAnalyzer.AddExternalErrors(lexerErrorListener.Errors);
-        semanticAnalyzer.AddExternalErrors(parserErrorListener.Errors);
-        walker.Walk(semanticAnalyzer, tree);
-        
-        // Combinar errores solo de Paso 1 (se omiten los del analizador semantico por ahora)
-        var allErrors = paso1.ErrorList
-            .GroupBy(e => new { e.Line, e.Message })  // Evitar duplicados
-            .Select(g => g.First())
-            .OrderBy(e => e.Line)
-            .ThenBy(e => e.Column)
-            .ToList();
+        return paso1;
+    }
 
-        // ═══════════════ EJECUTAR PASO 2 ═══════════════
+    private static SICXESemanticAnalyzer EjecutarAnalisisSemantico(IParseTree tree, IEnumerable<SICXEError> lexerErrors, IEnumerable<SICXEError> parserErrors)
+    {
+        var semanticAnalyzer = new SICXESemanticAnalyzer();
+        semanticAnalyzer.AddExternalErrors(lexerErrors);
+        semanticAnalyzer.AddExternalErrors(parserErrors);
+        new ParseTreeWalker().Walk(semanticAnalyzer, tree);
+        return semanticAnalyzer;
+    }
+
+    private static Paso2 EjecutarPaso2DesdePaso1(Paso1 paso1)
+    {
         var paso2 = new Paso2(
             paso1.Lines,
             paso1.SymbolTableExtended,
@@ -295,51 +305,55 @@ class Program
             paso1.BaseValue,
             paso1.ExecutionEntryPoint);
 
-        // Paso 2: resuelvedireccionamiento y genera código objeto por línea.
         paso2.ObjectCodeGeneration();
+        return paso2;
+    }
 
-        // ═══════════════ MOSTRAR REPORTE COMBINADO ═══════════════
-        // Se muestra UNA sola vez el archivo intermedio con TABSIM, COD_OBJ y errores fusionados
-        var objectCodes = paso2.ObjectCodeLines
+    private static Dictionary<int, string> ObtenerCodigosObjeto(Paso2 paso2)
+    {
+        return paso2.ObjectCodeLines
             .Where(l => !string.IsNullOrEmpty(l.ObjectCode))
-            .ToDictionary(l => l.IntermLine.LineNumber, l => l.ObjectCode);
+            .GroupBy(l => l.IntermLine.LineNumber)
+            .ToDictionary(g => g.Key, g => g.Last().ObjectCode);
+    }
 
-        // Unificar errores: Paso 1 + Paso 2 (se omiten los del analizador semantico)
-        var erroresUnificados = paso1.ErrorList
+    private static List<SICXEError> UnificarErroresPaso1YPaso2(Paso1 paso1, Paso2 paso2)
+    {
+        return paso1.ErrorList
             .Concat(paso2.Errors)
             .GroupBy(e => new { e.Line, e.Message })
             .Select(g => g.First())
             .OrderBy(e => e.Line)
             .ThenBy(e => e.Column)
             .ToList();
+    }
 
+    private static void MostrarReportePaso1(Paso1 paso1, Paso2 paso2, List<SICXEError> erroresUnificados, Dictionary<int, string> objectCodes, string inputFile)
+    {
         Console.WriteLine(paso1.GenerateReport(objectCodes, erroresUnificados));
+    }
 
-        // Nota: el reporte detallado del Paso 2 se omite para evitar duplicar el archivo intermedio
-
-        string projectDir = GetProjectDirectory();
+    private static void ExportarSalidasPaso1YPaso2(string projectDir, string inputFile, Paso1 paso1, Paso2 paso2, List<SICXEError> erroresUnificados)
+    {
         string reportesDir = Path.Combine(projectDir, "reportes_paso1");
-        
-        if (!Directory.Exists(reportesDir))
-            Directory.CreateDirectory(reportesDir);
+        Directory.CreateDirectory(reportesDir);
 
         string baseName = Path.GetFileNameWithoutExtension(inputFile);
         string baseOutputPath = Path.Combine(reportesDir, baseName);
-
-        // Exportar con todos los errores combinados
         ExportPaso1WithValidation(paso1, erroresUnificados, baseOutputPath);
 
-        // Exportar CSV del Paso 2
         string reportesPaso2Dir = Path.Combine(projectDir, "reportes_paso2");
-        if (!Directory.Exists(reportesPaso2Dir))
-            Directory.CreateDirectory(reportesPaso2Dir);
-
+        Directory.CreateDirectory(reportesPaso2Dir);
         string timestamp2 = DateTime.Now.ToString("yyyyMMdd_HHmmss");
         string csvPaso2Path = Path.Combine(reportesPaso2Dir, $"{baseName}_PASO2_{timestamp2}.csv");
         paso2.ExportToCSV(csvPaso2Path);
         Console.WriteLine($"  - CSV Paso 2: {Path.GetFileName(csvPaso2Path)}");
+        Console.WriteLine($"\nDirectorio de salida Paso 1: {reportesDir}");
+        Console.WriteLine($"Directorio de salida Paso 2: {reportesPaso2Dir}");
+    }
 
-        // --------------- EJECUTAR PROGRAMA OBJETO ---------------
+    private static void ExportarProgramaObjeto(string projectDir, string inputFile, Paso1 paso1, Paso2 paso2)
+    {
         var progObjeto = new ProgramaObjeto(
             paso2.ObjectCodeLines,
             paso2.GeneratedModules,
@@ -348,45 +362,33 @@ class Program
             paso1.ProgramSize,
             paso1.ExecutionEntryPoint);
 
-        // Programa objeto final: registros H/T/M/E según reglas SIC/XE.
-
         Console.WriteLine("\n-------------------------------------------------------------------");
         Console.WriteLine("                    PROGRAMA OBJETO GENERADO");
         Console.WriteLine("-------------------------------------------------------------------");
+
         var objRecords = progObjeto.GenerarRegistros();
+        ImprimirRegistrosObjeto(objRecords);
+
+        string reportesObjDir = Path.Combine(projectDir, "reportes_objeto");
+        Directory.CreateDirectory(reportesObjDir);
+        string timestamp2 = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        string baseName = Path.GetFileNameWithoutExtension(inputFile);
+        string csvObjPath = Path.Combine(reportesObjDir, $"{baseName}_OBJETO_{timestamp2}.csv");
+        progObjeto.ExportarACSV(csvObjPath);
+        Console.WriteLine($"  - Excel/CSV Programa Objeto guardado en: {Path.GetFileName(csvObjPath)}");
+        Console.WriteLine($"\nDirectorio de salida Programa Objeto: {reportesObjDir}");
+    }
+
+    private static void ImprimirRegistrosObjeto(IReadOnlyList<string> objRecords)
+    {
         const int maxConsoleObjectRecords = 100;
         int recordsToPrint = Math.Min(maxConsoleObjectRecords, objRecords.Count);
 
         for (int i = 0; i < recordsToPrint; i++)
-        {
             Console.WriteLine(objRecords[i]);
-        }
 
         if (objRecords.Count > maxConsoleObjectRecords)
-        {
             Console.WriteLine($"... ({objRecords.Count - maxConsoleObjectRecords} registros adicionales omitidos en consola)");
-        }
-
-        string reportesObjDir = Path.Combine(projectDir, "reportes_objeto");
-        if (!Directory.Exists(reportesObjDir))
-            Directory.CreateDirectory(reportesObjDir);
-
-        string csvObjPath = Path.Combine(reportesObjDir, $"{baseName}_OBJETO_{timestamp2}.csv");
-        progObjeto.ExportarACSV(csvObjPath);
-        Console.WriteLine($"  - Excel/CSV Programa Objeto guardado en: {Path.GetFileName(csvObjPath)}");
-
-        Console.WriteLine($"\nDirectorio de salida Paso 1: {reportesDir}");
-        Console.WriteLine($"Directorio de salida Paso 2: {reportesPaso2Dir}");
-        Console.WriteLine($"Directorio de salida Programa Objeto: {reportesObjDir}");
-        
-        if (erroresUnificados.Count == 0)
-        {
-            Console.WriteLine("\nPaso 1 completado exitosamente sin errores!");
-        }
-        else
-        {
-            Console.WriteLine($"\nPaso 1 completado con {erroresUnificados.Count} error(es) detectado(s)");
-        }
     }
     
     /// <summary>
