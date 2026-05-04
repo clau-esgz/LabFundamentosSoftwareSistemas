@@ -97,7 +97,6 @@
             groupBox1.TabIndex = 3;
             groupBox1.TabStop = false;
             groupBox1.Text = "Programa Fuente";
-            groupBox1.Enter += groupBox1_Enter;
             // 
             // ArchivoInterdataGridView1
             // 
@@ -119,7 +118,6 @@
             groupBox2.TabIndex = 5;
             groupBox2.TabStop = false;
             groupBox2.Text = "Archivo Intermedio";
-            groupBox2.Enter += groupBox2_Enter;
             // 
             // groupBox3
             // 
@@ -131,7 +129,6 @@
             groupBox3.TabIndex = 6;
             groupBox3.TabStop = false;
             groupBox3.Text = "Tabla de simbolos";
-            groupBox3.Enter += groupBox3_Enter;
             // 
             // TablaSimdataGridView2
             // 
@@ -174,7 +171,6 @@
             groupBox5.TabIndex = 9;
             groupBox5.TabStop = false;
             groupBox5.Text = "Problemas en el Código";
-            groupBox5.Enter += groupBox5_Enter;
             // 
             // ErrortextBox3
             // 
@@ -185,7 +181,6 @@
             ErrortextBox3.ScrollBars = ScrollBars.Both;
             ErrortextBox3.Size = new Size(691, 196);
             ErrortextBox3.TabIndex = 0;
-            ErrortextBox3.TextChanged += textBox3_TextChanged;
             // 
             // menuStrip1
             // 

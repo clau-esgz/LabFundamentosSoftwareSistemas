@@ -444,6 +444,30 @@ namespace laboratorioPractica3
         private static int GetEffectiveAddress(IntermediateLine linea)
             => linea.AbsoluteAddress >= 0 ? linea.AbsoluteAddress : linea.Address;
 
+        /// <summary>
+        /// Crea un código de error para formato 3 (6 dígitos hex).
+        /// Centraliza la construcción repetida de errores: [fbError 6][xbpeError 4][0xFFF 12].
+        /// </summary>
+        private static string BuildFormat3ErrorCode(int opcode, int n, int i, int x)
+        {
+            int fbError = (opcode & 0xFC) | (n << 1) | i;
+            int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
+            int objError = (fbError << 16) | (xbpeError << 12) | 0xFFF;
+            return objError.ToString("X6");
+        }
+
+        /// <summary>
+        /// Crea un código de error para formato 4 (8 dígitos hex).
+        /// Centraliza la construcción repetida de errores: [fbError 6][xbpeError 4][0xFFFFF 20].
+        /// </summary>
+        private static string BuildFormat4ErrorCode(int opcode, int n, int i, int x)
+        {
+            int fbError = (opcode & 0xFC) | (n << 1) | i;
+            int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
+            int objError = (fbError << 24) | (xbpeError << 20) | 0xFFFFF;
+            return objError.ToString("X8");
+        }
+
         // FORMATO 1: [opcode] (1 byte)
         /// <summary>
         /// Genera codigo objeto para formato 1.
@@ -603,10 +627,7 @@ namespace laboratorioPractica3
             if (isIndirect && esOperandoNumerico)
             {
                 string err = "Error: Modo de direccionamiento no existe";
-                int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
-                int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
-                int objError = (fbError << 16) | (xbpeError << 12) | 0xFFF;
-                return (objError.ToString("X6"), err);
+                return (BuildFormat3ErrorCode(infoOp.Opcode, n, i, x), err);
             }
 
             // Resolver direccion objetivo.
@@ -619,11 +640,7 @@ namespace laboratorioPractica3
             if (evalErr != null)
             {
                 string err = "Error: Simbolo no encontrado en TABSIM";
-                // 5) Si no existe etiqueta, se marca el error y se usa disp=-1 (0xFFF)
-                int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
-                int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
-                int objError = (fbError << 16) | (xbpeError << 12) | 0xFFF; // disp=-1 (complemento a 2)
-                return (objError.ToString("X6"), err);
+                return (BuildFormat3ErrorCode(infoOp.Opcode, n, i, x), err);
             }
             
             targetAddress = evalVal;
@@ -671,20 +688,14 @@ namespace laboratorioPractica3
                 {
                     // ERROR 4: desplazamiento no cabe en BASE-relativo -> instruccion no relativa al CP ni a la B.
                     string err = "Error: No relativo al CP/B";
-                    int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
-                    int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
-                    int objError = (fbError << 16) | (xbpeError << 12) | 0xFFF; // disp=-1 (complemento a 2)
-                    return (objError.ToString("X6"), err);
+                    return (BuildFormat3ErrorCode(infoOp.Opcode, n, i, x), err);
                 }
             }
             else
             {
                 // ERROR 4: BASE no definida (NOBASE activo) -> instruccion no relativa al CP ni a la B.
                 string err = "Error: No relativo al CP/B";
-                int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
-                int xbpeError = (x << 3) | (1 << 2) | (1 << 1); // b=1, p=1, e=0
-                int objError = (fbError << 16) | (xbpeError << 12) | 0xFFF; // disp=-1 (complemento a 2)
-                return (objError.ToString("X6"), err);
+                return (BuildFormat3ErrorCode(infoOp.Opcode, n, i, x), err);
             }
 
             // Construir codigo objeto.
@@ -758,10 +769,7 @@ namespace laboratorioPractica3
             if (evalErr != null)
             {
                 string err = "Error: Simbolo no encontrado en TABSIM u operando invalido";
-                int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
-                int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
-                int objError = (fbError << 24) | (xbpeError << 20) | 0xFFFFF;
-                return (objError.ToString("X8"), err);
+                return (BuildFormat4ErrorCode(infoOp.Opcode, n, i, x), err);
             }
 
             // Formato 4 con valor absoluto (constante o expresión absoluta):
@@ -773,19 +781,13 @@ namespace laboratorioPractica3
                 if (x == 1)
                 {
                     string err = "Error: Constante fuera de rango";
-                    int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
-                    int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
-                    int objError = (fbError << 24) | (xbpeError << 20) | 0xFFFFF;
-                    return (objError.ToString("X8"), err);
+                    return (BuildFormat4ErrorCode(infoOp.Opcode, n, i, x), err);
                 }
 
                 if (evalVal < 0 || evalVal > 0xFFFFF)
                 {
                     string err = "Error: Operando fuera de rango";
-                    int fbError = (infoOp.Opcode & 0xFC) | (n << 1) | i;
-                    int xbpeError = (x << 3) | (1 << 2) | (1 << 1) | 1; // b=1, p=1, e=1
-                    int objError = (fbError << 24) | (xbpeError << 20) | 0xFFFFF;
-                    return (objError.ToString("X8"), err);
+                    return (BuildFormat4ErrorCode(infoOp.Opcode, n, i, x), err);
                 }
 
                 int firstByte = (infoOp.Opcode & 0xFC) | (n << 1) | i;

@@ -35,16 +35,6 @@ namespace laboratorioPractica3
             InitializeComponent();
         }
 
-        private void nuevoToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void nUEVOToolStripMenuItem_Click_1(object sender, EventArgs e)
-        {
-
-        }
-
         private void Form1_Load(object sender, EventArgs e)
         {
             ConfigurarEditorFuente();
@@ -82,38 +72,32 @@ namespace laboratorioPractica3
 
         private void ConfigurarTablasResultados()
         {
-            ConfigurarGridIntermedio();
-            ConfigurarGridSimbolos();
-            ConfigurarGridBloques();
+            ConfigurarGridBase(ArchivoInterdataGridView1, incluirCabecerasRenglon: true, anclarEventos: true, rowPrePaintHandler: ArchivoInterdataGridView1_RowPrePaint, anchoCabecera: 40);
+            ConfigurarGridBase(TablaSimdataGridView2, anclarEventos: true, rowPrePaintHandler: TablaSimdataGridView2_RowPrePaint);
+            ConfigurarGridBase(tablaBlqsGridView1);
         }
 
-        private void ConfigurarGridIntermedio()
+        private void ConfigurarGridBase(
+            DataGridView grid,
+            bool incluirCabecerasRenglon = false,
+            bool anclarEventos = false,
+            DataGridViewRowPrePaintEventHandler? rowPrePaintHandler = null,
+            int anchoCabecera = 51)
         {
-            ArchivoInterdataGridView1.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells;
-            ArchivoInterdataGridView1.AllowUserToAddRows = false;
-            ArchivoInterdataGridView1.AllowUserToDeleteRows = false;
-            ArchivoInterdataGridView1.ReadOnly = true;
-            ArchivoInterdataGridView1.RowHeadersVisible = true;
-            ArchivoInterdataGridView1.RowHeadersWidthSizeMode = DataGridViewRowHeadersWidthSizeMode.DisableResizing;
-            ArchivoInterdataGridView1.RowHeadersWidth = 40;
-            ArchivoInterdataGridView1.RowPrePaint += ArchivoInterdataGridView1_RowPrePaint;
-        }
+            grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells;
+            grid.AllowUserToAddRows = false;
+            grid.AllowUserToDeleteRows = false;
+            grid.ReadOnly = true;
 
-        private void ConfigurarGridSimbolos()
-        {
-            TablaSimdataGridView2.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells;
-            TablaSimdataGridView2.AllowUserToAddRows = false;
-            TablaSimdataGridView2.AllowUserToDeleteRows = false;
-            TablaSimdataGridView2.ReadOnly = true;
-            TablaSimdataGridView2.RowPrePaint += TablaSimdataGridView2_RowPrePaint;
-        }
+            if (incluirCabecerasRenglon)
+            {
+                grid.RowHeadersVisible = true;
+                grid.RowHeadersWidthSizeMode = DataGridViewRowHeadersWidthSizeMode.DisableResizing;
+                grid.RowHeadersWidth = anchoCabecera;
+            }
 
-        private void ConfigurarGridBloques()
-        {
-            tablaBlqsGridView1.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells;
-            tablaBlqsGridView1.AllowUserToAddRows = false;
-            tablaBlqsGridView1.AllowUserToDeleteRows = false;
-            tablaBlqsGridView1.ReadOnly = true;
+            if (anclarEventos && rowPrePaintHandler != null)
+                grid.RowPrePaint += rowPrePaintHandler;
         }
 
         private void ConfigurarResaltadoDiferido()
@@ -124,46 +108,6 @@ namespace laboratorioPractica3
                 _highlightTimer!.Stop();
                 AplicarResaltadoSintaxis();
             };
-        }
-
-        private void analizarlexicoYSintacticoToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void txtToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void guardarToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void groupBox1_Enter(object sender, EventArgs e)
-        {
-
-        }
-
-        private void groupBox2_Enter(object sender, EventArgs e)
-        {
-
-        }
-
-        private void groupBox3_Enter(object sender, EventArgs e)
-        {
-
-        }
-
-        private void groupBox5_Enter(object sender, EventArgs e)
-        {
-
-        }
-
-        private void textBox3_TextChanged(object sender, EventArgs e)
-        {
-
         }
 
         private void Nuevo_Click(object sender, EventArgs e)

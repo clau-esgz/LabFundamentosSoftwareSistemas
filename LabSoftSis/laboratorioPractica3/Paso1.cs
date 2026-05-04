@@ -614,343 +614,12 @@ namespace laboratorioPractica3
 
             var statement = context.statement();
 
-            // Si no hay statement Y no hay comentario, verificar si hay error en la línea
-            if (statement == null && context.comment() == null)
-            {
-                 // Si hay error sintáctico, intentar extraer manualmente para procesar WORD/BYTE/ORG
-                if (hasSyntaxError && SourceLines.Length >= antlrLine && !ProcessedErrorLines.Contains(antlrLine))
-                {
-                    ProcessedErrorLines.Add(antlrLine);  // Marcar como procesada para evitar duplicados
-                    string originalLine = SourceLines[antlrLine - 1];
-                    var parsedLine = ParseLineManually(originalLine);
-
-                    // Detectar si es WORD, BYTE u ORG con expresión, o instrucción con expresión
-                    bool isWordOrByteWithExpression = EsWordOBByteConExpresion(parsedLine.Operation ?? string.Empty, parsedLine.Operand ?? string.Empty);
-                    bool isOrgWithExpression = EsOrgConExpresion(parsedLine.Operation ?? string.Empty, parsedLine.Operand ?? string.Empty);
-                    bool isInstructionWithExpression = OPTAB.ContainsKey((parsedLine.Operation ?? string.Empty).TrimStart('+')) && ContieneExpresion(parsedLine.Operand);
-                    bool isEquWithExpression = EsEquConExpresion(parsedLine.Operation ?? string.Empty, parsedLine.Label ?? string.Empty, parsedLine.Operand ?? string.Empty);
-
-                    // Si es EQU con expresión en fallback por error sintáctico, procesarlo para TABSIM
-                    if (isEquWithExpression)
-                    {
-                        string labelSafe = parsedLine.Label ?? string.Empty;
-                        string operationSafe = parsedLine.Operation ?? string.Empty;
-                        string operandSafe = parsedLine.Operand ?? string.Empty;
-                        string commentSafe = parsedLine.Comment ?? string.Empty;
-                        var intermediateLine = CrearLineaIntermediaBase(antlrLine, labelSafe, operationSafe, operandSafe, commentSafe);
-
-                        if (TABSIM_EXT.ContainsKey(labelSafe, CurrentControlSectionName))
-                        {
-                            string dupMsg = $"Símbolo duplicado: {labelSafe}";
-                            intermediateLine.Error = dupMsg;
-                            Errors.Add(new SICXEError(antlrLine, 0, dupMsg, SICXEErrorType.Semantico));
-                        }
-                        else
-                        {
-                            if (HasRelativeSymbolsFromDifferentBlocks(operandSafe))
-                            {
-                                const string blockExprError = "Error: Expresión (diferentes bloques)";
-                                AddSymbolToCurrentSection(labelSafe, -1, SymbolType.Absolute);
-                                intermediateLine.Error = blockExprError;
-                                intermediateLine.SemanticValue = "FFFFh";
-                                Errors.Add(new SICXEError(antlrLine, 0, blockExprError, SICXEErrorType.Semantico));
-
-                                intermediateLine.Increment = 0;
-                                SetCurrentBlockOnIntermediateLine(intermediateLine);
-                                IntermediateLines.Add(intermediateLine);
-                                return;
-                            }
-
-                            if (TABSIM_EXT.ContainsExternalSymbol(operandSafe, CurrentControlSectionName))
-                            {
-                                const string equExternalError = "EQU no permite símbolos externos";
-                                AddSymbolToCurrentSection(labelSafe, -1, SymbolType.Absolute);
-                                intermediateLine.Error = equExternalError;
-                                intermediateLine.SemanticValue = "FFFFh";
-                                Errors.Add(new SICXEError(antlrLine, 0, equExternalError, SICXEErrorType.Semantico));
-                                intermediateLine.Increment = 0;
-                                SetCurrentBlockOnIntermediateLine(intermediateLine);
-                                IntermediateLines.Add(intermediateLine);
-                                return;
-                            }
-
-                            var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operandSafe, CONTLOC, allowUndefinedSymbols: false, controlSectionName: CurrentControlSectionName);
-                            if (evalErr != null)
-                            {
-                                string expressionMsg = evalErr.Contains("más de un término relativo positivo", StringComparison.OrdinalIgnoreCase)
-                                    ? "Error: Expresión (diferentes bloques)"
-                                    : evalErr;
-                                AddSymbolToCurrentSection(labelSafe, -1, SymbolType.Absolute);
-                                intermediateLine.Error = expressionMsg;
-                                intermediateLine.SemanticValue = "FFFFh";
-                                Errors.Add(new SICXEError(antlrLine, 0, expressionMsg, SICXEErrorType.Semantico));
-                            }
-                            else
-                            {
-                                AddSymbolToCurrentSection(labelSafe, evalVal, evalType);
-                                intermediateLine.SemanticValue = $"{evalVal:X4}h";
-                            }
-                        }
-
-                        intermediateLine.Increment = 0;
-                        SetCurrentBlockOnIntermediateLine(intermediateLine);
-                        IntermediateLines.Add(intermediateLine);
-                        return;
-                    }
-
-                    // Si es ORG con expresión, procesarlo
-                    if (isOrgWithExpression)
-                    {
-                        string labelSafe = parsedLine.Label ?? string.Empty;
-                        string operationSafe = parsedLine.Operation ?? string.Empty;
-                        string operandSafe = parsedLine.Operand ?? string.Empty;
-                        string commentSafe = parsedLine.Comment ?? string.Empty;
-                        var intermediateLine = CrearLineaIntermediaBase(antlrLine, labelSafe, operationSafe, operandSafe, commentSafe);
-
-                        if (!string.IsNullOrEmpty(labelSafe))
-                        {
-                            if (TABSIM_EXT.ContainsKey(labelSafe, CurrentControlSectionName))
-                            {
-                                string dupMsg = $"Símbolo duplicado: {labelSafe}";
-                                intermediateLine.Error = string.IsNullOrWhiteSpace(intermediateLine.Error)
-                                    ? dupMsg
-                                    : intermediateLine.Error + "; " + dupMsg;
-                                Errors.Add(new SICXEError(antlrLine, 0, dupMsg, SICXEErrorType.Semantico));
-                            }
-                            else
-                            {
-                                AddSymbolToCurrentSection(labelSafe, CONTLOC, SymbolType.Relative);
-                            }
-                        }
-
-                        // Intentar evaluar la expresión ORG
-                        if (!string.IsNullOrEmpty(operandSafe))
-                        {
-                            var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operandSafe, CONTLOC, allowUndefinedSymbols: true, controlSectionName: CurrentControlSectionName);
-                            if (evalErr != null)
-                            {
-                                intermediateLine.Error = evalErr;
-                                Errors.Add(new SICXEError(antlrLine, 0, evalErr, SICXEErrorType.Semantico));
-                            }
-                            else
-                            {
-                                // Cambiar CONTLOC al nuevo valor
-                                CONTLOC = evalVal;
-                                intermediateLine.SemanticValue = $"{evalVal:X4}h";
-                            }
-                        }
-
-                        intermediateLine.Increment = 0;  // ORG no incrementa
-                        SetCurrentBlockOnIntermediateLine(intermediateLine);
-                        IntermediateLines.Add(intermediateLine);
-                        return;
-                    }
-
-                    // Si es WORD/BYTE con expresión, procesarlo
-                    if (isWordOrByteWithExpression)
-                    {
-                        // Crear intermediateLine similar a lo normal
-                        string labelSafe = parsedLine.Label ?? string.Empty;
-                        string operationSafe = parsedLine.Operation ?? string.Empty;
-                        string operandSafe = parsedLine.Operand ?? string.Empty;
-                        string commentSafe = parsedLine.Comment ?? string.Empty;
-                        string baseOp = operationSafe.TrimStart('+');
-                        var intermediateLine = CrearLineaIntermediaBase(antlrLine, labelSafe, operationSafe, operandSafe, commentSafe);
-
-                        if (!string.IsNullOrEmpty(labelSafe))
-                        {
-                            if (TABSIM_EXT.ContainsKey(labelSafe, CurrentControlSectionName))
-                            {
-                                string dupMsg = $"Símbolo duplicado: {labelSafe}";
-                                intermediateLine.Error = string.IsNullOrWhiteSpace(intermediateLine.Error)
-                                    ? dupMsg
-                                    : intermediateLine.Error + "; " + dupMsg;
-                                Errors.Add(new SICXEError(antlrLine, 0, dupMsg, SICXEErrorType.Semantico));
-                            }
-                            else
-                            {
-                                AddSymbolToCurrentSection(labelSafe, CONTLOC, SymbolType.Relative);
-                            }
-                        }
-
-                        // Intentar evaluar la expresión
-                        if (!string.IsNullOrEmpty(operandSafe))
-                        {
-                            var (evalVal, evalType, evalErr, evalMeta) = TABSIM_EXT.EvaluateExpressionForObject(operandSafe, CONTLOC, allowUndefinedSymbols: true, controlSectionName: CurrentControlSectionName);
-                            if (evalErr == null && operationSafe.Equals("WORD", StringComparison.OrdinalIgnoreCase))
-                            {
-                                intermediateLine.SemanticValue = $"{evalVal:X4}h";
-                            }
-                            else if (evalErr != null)
-                            {
-                                intermediateLine.Error = evalErr;
-                                Errors.Add(new SICXEError(antlrLine, 0, evalErr, SICXEErrorType.Semantico));
-                            }
-
-                            if (evalMeta.ExternalSymbols.Count > 0)
-                            {
-                                intermediateLine.ExternalReferenceSymbols = evalMeta.ExternalSymbols;
-                                // Insertar símbolos externos en TABSIM si aún no existen
-                                foreach (var sym in evalMeta.ExternalSymbols)
-                                {
-                                    if (!TABSIM_EXT.ContainsKey(sym, CurrentControlSectionName))
-                                        AddSymbolToCurrentSection(sym, -1, SymbolType.Absolute, isExternal: true);
-                                }
-                            }
-
-                            if (baseOp.Equals("WORD", StringComparison.OrdinalIgnoreCase))
-                            {
-                                intermediateLine.ModificationRequests = evalMeta.ModificationRequests;
-                                intermediateLine.HasInternalRelativeModification = evalType == SymbolType.Relative || evalMeta.HasUnpairedRelative;
-                                intermediateLine.RelativeModuleSign = evalMeta.RelativeModuleSign;
-                                intermediateLine.RequiresModification = intermediateLine.ModificationRequests.Count > 0 || intermediateLine.HasInternalRelativeModification;
-                            }
-                        }
-
-                        // Calcular incremento
-                        int wordByteIncrement = 0;
-                        if (baseOp.Equals("BYTE", StringComparison.OrdinalIgnoreCase))
-                            wordByteIncrement = CalculateByteSize(operandSafe);
-                        else if (baseOp.Equals("WORD", StringComparison.OrdinalIgnoreCase))
-                            wordByteIncrement = 3;
-
-                        intermediateLine.Increment = wordByteIncrement;
-                        SetCurrentBlockOnIntermediateLine(intermediateLine);
-                        IntermediateLines.Add(intermediateLine);
-
-                        // Incrementar CONTLOC
-                        CONTLOC += wordByteIncrement;
-                        return;
-                    }
-
-                    // Si es instrucción con expresión, procesarlo
-                    if (isInstructionWithExpression)
-                    {
-                        string labelSafe = parsedLine.Label ?? string.Empty;
-                        string operationSafe = parsedLine.Operation ?? string.Empty;
-                        string operandSafe = parsedLine.Operand ?? string.Empty;
-                        string commentSafe = parsedLine.Comment ?? string.Empty;
-                        string baseOp = operationSafe.TrimStart('+');
-                        if (OPTAB.TryGetValue(baseOp, out var opCodeInfo))
-                        {
-                            var intermediateLine = CrearLineaIntermediaBase(antlrLine, labelSafe, operationSafe, operandSafe, commentSafe);
-                            intermediateLine.Format = operationSafe.StartsWith("+", StringComparison.OrdinalIgnoreCase) ? 4 : opCodeInfo.Format;
-                            intermediateLine.AddressingMode = DetermineAddressingMode(operandSafe);
-
-                            if (!string.IsNullOrEmpty(labelSafe))
-                            {
-                                if (TABSIM_EXT.ContainsKey(labelSafe, CurrentControlSectionName))
-                                {
-                                    string dupMsg = $"Símbolo duplicado: {labelSafe}";
-                                    intermediateLine.Error = string.IsNullOrWhiteSpace(intermediateLine.Error)
-                                        ? dupMsg
-                                        : intermediateLine.Error + "; " + dupMsg;
-                                    Errors.Add(new SICXEError(antlrLine, 0, dupMsg, SICXEErrorType.Semantico));
-                                }
-                                else
-                                {
-                                    AddSymbolToCurrentSection(labelSafe, CONTLOC, SymbolType.Relative);
-                                }
-                            }
-
-                            // Intentar evaluar la expresión del operando
-                            if (!string.IsNullOrEmpty(operandSafe))
-                            {
-                                // Quitar prefijos de modo deDireccionamiento si existen
-                                string operandForEvaluation = NormalizeOperandForExpressionEvaluation(operandSafe);
-
-                                var (evalVal, evalType, evalErr, evalMeta) = TABSIM_EXT.EvaluateExpressionForObject(operandForEvaluation, CONTLOC, allowUndefinedSymbols: true, controlSectionName: CurrentControlSectionName);
-                                if (evalErr != null)
-                                {
-                                    intermediateLine.Error = evalErr;
-                                    Errors.Add(new SICXEError(antlrLine, 0, evalErr, SICXEErrorType.Semantico));
-                                }
-                                else
-                                {
-                                    intermediateLine.SemanticValue = $"{evalVal:X4}h";
-                                }
-
-                                if (evalMeta.ExternalSymbols.Count > 0)
-                                {
-                                    intermediateLine.ExternalReferenceSymbols = evalMeta.ExternalSymbols;
-                                    foreach (var sym in evalMeta.ExternalSymbols)
-                                    {
-                                        if (!TABSIM_EXT.ContainsKey(sym, CurrentControlSectionName))
-                                            AddSymbolToCurrentSection(sym, -1, SymbolType.Absolute, isExternal: true);
-                                    }
-                                }
-
-                                if (evalMeta.ModificationRequests.Count > 0)
-                                {
-                                    intermediateLine.ModificationRequests = evalMeta.ModificationRequests;
-                                    intermediateLine.RequiresModification = true;
-                                }
-
-                                if (operationSafe.StartsWith("+", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    intermediateLine.HasInternalRelativeModification = evalType == SymbolType.Relative || evalMeta.HasUnpairedRelative;
-                                    intermediateLine.RelativeModuleSign = evalMeta.RelativeModuleSign;
-                                    intermediateLine.RequiresModification = intermediateLine.RequiresModification || intermediateLine.HasInternalRelativeModification;
-                                }
-                            }
-
-                            // Calcular incremento basado en el formato
-                            int instructionIncrement = 0;
-                            if (opCodeInfo.Format == 1)
-                                instructionIncrement = 1;
-                            else if (opCodeInfo.Format == 2)
-                                instructionIncrement = 2;
-                            else if (opCodeInfo.Format == 3 || opCodeInfo.Format == 4)
-                            {
-                                // Determinar si es formato 3 o 4 basándose en el prefijo '+'
-                                instructionIncrement = operationSafe.StartsWith("+", StringComparison.OrdinalIgnoreCase) ? 4 : 3;
-                            }
-
-                            intermediateLine.Increment = instructionIncrement;
-                            SetCurrentBlockOnIntermediateLine(intermediateLine);
-                            IntermediateLines.Add(intermediateLine);
-
-                            // Guardar la primera instrucción ejecutable encontrada.
-                            if (!FIRST_EXECUTABLE_ADDRESS.HasValue && instructionIncrement > 0)
-                            {
-                                FIRST_EXECUTABLE_ADDRESS = intermediateLine.Address;
-                            }
-
-                            // Incrementar CONTLOC
-                            CONTLOC += instructionIncrement;
-                            return;
-                        }
-                    }
-
-                    var errorLine = ParseErrorLine(originalLine, lineErrors);
-                    errorLine.SourceLine = antlrLine;
-                    IntermediateLines.Add(errorLine);
-                    foreach (var err in lineErrors)
-                        Errors.Add(err);
-                }
+            // Si no existe statement y tampoco hay comentario, procesar por fallback o devolver
+            if (TryProcessMissingStatement(context, antlrLine, hasSyntaxError))
                 return;
-            }
             
-            if (statement == null)
-            {
-                var commentText = context.comment()?.GetText() ?? "";
-                if (string.IsNullOrWhiteSpace(commentText))
-                    return;
-                    
-                var intermediateLine = new IntermediateLine
-                {
-                    LineNumber = IntermediateLines.Count + 1,
-                    SourceLine = antlrLine,
-                    Address = -1,
-                    ControlSectionName = CurrentControlSectionName,
-                    ControlSectionNumber = CurrentControlSectionNumber,
-                    Comment = commentText,
-                    BlockName = BLOCKS.CurrentBlockName,
-                    BlockNumber = BLOCKS.CurrentBlockNumber
-                };
-                IntermediateLines.Add(intermediateLine);
+            if (TryProcessCommentOnly(context, antlrLine))
                 return;
-            }
 
             // Extraer componentes usando el contexto de la gramática
             var label = statement.label()?.GetText();
@@ -1752,6 +1421,370 @@ namespace laboratorioPractica3
 
             // Incrementar CONTLOC (solo si NO hay error sintáctico - ya manejado arriba)
             CONTLOC += increment;
+        }
+
+        // Helper: procesa líneas sin 'statement' parseado por ANTLR (posibles fallbacks) -> retorna true si la línea fue manejada y no continuar
+        private bool TryProcessMissingStatement(SICXEParser.LineContext context, int antlrLine, bool hasSyntaxError)
+        {
+            // Solo procesar cuando NO exista statement ni comment; en caso contrario salir rápido.
+            if (!(context.statement() == null && context.comment() == null))
+                return false;
+
+            if (context.statement() == null && context.comment() == null)
+            {
+                // Si hay error sintáctico, intentar extraer manualmente para procesar WORD/BYTE/ORG
+                if (hasSyntaxError && SourceLines.Length >= antlrLine && !ProcessedErrorLines.Contains(antlrLine))
+                {
+                    ProcessedErrorLines.Add(antlrLine);  // Marcar como procesada para evitar duplicados
+                    string originalLine = SourceLines[antlrLine - 1];
+                    var parsedLine = ParseLineManually(originalLine);
+
+                    // Determinar si la operación es WORD/BYTE para uso posterior
+                    string parsedOpText = parsedLine.Operation ?? string.Empty;
+                    string parsedBaseOp = parsedOpText.TrimStart('+');
+                    bool isWordDirective = parsedBaseOp.Equals("WORD", StringComparison.OrdinalIgnoreCase);
+                    bool isByteDirective = parsedBaseOp.Equals("BYTE", StringComparison.OrdinalIgnoreCase);
+
+                    // Detectar si es WORD, BYTE u ORG con expresión, o instrucción con expresión
+                    bool isWordOrByteWithExpression = EsWordOBByteConExpresion(parsedLine.Operation ?? string.Empty, parsedLine.Operand ?? string.Empty);
+                    bool isOrgWithExpression = EsOrgConExpresion(parsedLine.Operation ?? string.Empty, parsedLine.Operand ?? string.Empty);
+                    bool isInstructionWithExpression = OPTAB.ContainsKey((parsedLine.Operation ?? string.Empty).TrimStart('+')) && ContieneExpresion(parsedLine.Operand);
+                    bool isEquWithExpression = EsEquConExpresion(parsedLine.Operation ?? string.Empty, parsedLine.Label ?? string.Empty, parsedLine.Operand ?? string.Empty);
+
+                    // Si es EQU con expresión en fallback por error sintáctico, procesarlo para TABSIM
+                    if (isEquWithExpression)
+                    {
+                        string labelSafe = parsedLine.Label ?? string.Empty;
+                        string operationSafe = parsedLine.Operation ?? string.Empty;
+                        string operandSafe = parsedLine.Operand ?? string.Empty;
+                        string commentSafe = parsedLine.Comment ?? string.Empty;
+                        var intermediateLine = CrearLineaIntermediaBase(antlrLine, labelSafe, operationSafe, operandSafe, commentSafe);
+
+                        if (TABSIM_EXT.ContainsKey(labelSafe, CurrentControlSectionName))
+                        {
+                            string dupMsg = $"Símbolo duplicado: {labelSafe}";
+                            intermediateLine.Error = dupMsg;
+                            Errors.Add(new SICXEError(antlrLine, 0, dupMsg, SICXEErrorType.Semantico));
+                        }
+                        else
+                        {
+                            if (HasRelativeSymbolsFromDifferentBlocks(operandSafe))
+                            {
+                                const string blockExprError = "Error: Expresión (diferentes bloques)";
+                                AddSymbolToCurrentSection(labelSafe, -1, SymbolType.Absolute);
+                                intermediateLine.Error = blockExprError;
+                                intermediateLine.SemanticValue = "FFFFh";
+                                Errors.Add(new SICXEError(antlrLine, 0, blockExprError, SICXEErrorType.Semantico));
+
+                                intermediateLine.Increment = 0;
+                                SetCurrentBlockOnIntermediateLine(intermediateLine);
+                                IntermediateLines.Add(intermediateLine);
+                                return true;
+                            }
+
+                            if (TABSIM_EXT.ContainsExternalSymbol(operandSafe, CurrentControlSectionName))
+                            {
+                                const string equExternalError = "EQU no permite símbolos externos";
+                                AddSymbolToCurrentSection(labelSafe, -1, SymbolType.Absolute);
+                                intermediateLine.Error = equExternalError;
+                                intermediateLine.SemanticValue = "FFFFh";
+                                Errors.Add(new SICXEError(antlrLine, 0, equExternalError, SICXEErrorType.Semantico));
+                                intermediateLine.Increment = 0;
+                                SetCurrentBlockOnIntermediateLine(intermediateLine);
+                                IntermediateLines.Add(intermediateLine);
+                                return true;
+                            }
+
+                            var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operandSafe, CONTLOC, allowUndefinedSymbols: false, controlSectionName: CurrentControlSectionName);
+                            if (evalErr != null)
+                            {
+                                string expressionMsg = evalErr.Contains("más de un término relativo positivo", StringComparison.OrdinalIgnoreCase)
+                                    ? "Error: Expresión (diferentes bloques)"
+                                    : evalErr;
+                                AddSymbolToCurrentSection(labelSafe, -1, SymbolType.Absolute);
+                                intermediateLine.Error = expressionMsg;
+                                intermediateLine.SemanticValue = "FFFFh";
+                                Errors.Add(new SICXEError(antlrLine, 0, expressionMsg, SICXEErrorType.Semantico));
+                            }
+                            else
+                            {
+                                AddSymbolToCurrentSection(labelSafe, evalVal, evalType);
+                                intermediateLine.SemanticValue = $"{evalVal:X4}h";
+                            }
+                        }
+
+                        intermediateLine.Increment = 0;
+                        SetCurrentBlockOnIntermediateLine(intermediateLine);
+                        IntermediateLines.Add(intermediateLine);
+                        return true;
+                    }
+
+                    // Si es ORG con expresión, procesarlo
+                    if (isOrgWithExpression)
+                    {
+                        string labelSafe = parsedLine.Label ?? string.Empty;
+                        string operationSafe = parsedLine.Operation ?? string.Empty;
+                        string operandSafe = parsedLine.Operand ?? string.Empty;
+                        string commentSafe = parsedLine.Comment ?? string.Empty;
+                        var intermediateLine = CrearLineaIntermediaBase(antlrLine, labelSafe, operationSafe, operandSafe, commentSafe);
+
+                        if (!string.IsNullOrEmpty(labelSafe))
+                        {
+                            if (TABSIM_EXT.ContainsKey(labelSafe, CurrentControlSectionName))
+                            {
+                                string dupMsg = $"Símbolo duplicado: {labelSafe}";
+                                intermediateLine.Error = string.IsNullOrWhiteSpace(intermediateLine.Error)
+                                    ? dupMsg
+                                    : intermediateLine.Error + "; " + dupMsg;
+                                Errors.Add(new SICXEError(antlrLine, 0, dupMsg, SICXEErrorType.Semantico));
+                            }
+                            else
+                            {
+                                AddSymbolToCurrentSection(labelSafe, CONTLOC, SymbolType.Relative);
+                            }
+                        }
+
+                        // Intentar evaluar la expresión ORG
+                        if (!string.IsNullOrEmpty(operandSafe))
+                        {
+                            var (evalVal, evalType, evalErr) = TABSIM_EXT.EvaluateExpression(operandSafe, CONTLOC, allowUndefinedSymbols: true, controlSectionName: CurrentControlSectionName);
+                            if (evalErr != null)
+                            {
+                                intermediateLine.Error = evalErr;
+                                Errors.Add(new SICXEError(antlrLine, 0, evalErr, SICXEErrorType.Semantico));
+                            }
+                            else
+                            {
+                                // Cambiar CONTLOC al nuevo valor
+                                CONTLOC = evalVal;
+                                intermediateLine.SemanticValue = $"{evalVal:X4}h";
+                            }
+                        }
+
+                        intermediateLine.Increment = 0;  // ORG no incrementa
+                        SetCurrentBlockOnIntermediateLine(intermediateLine);
+                        IntermediateLines.Add(intermediateLine);
+                        return true;
+                    }
+
+                    // Si es WORD/BYTE con expresión, procesarlo
+                    if (isWordOrByteWithExpression)
+                    {
+                        // Crear intermediateLine similar a lo normal
+                        string labelSafe = parsedLine.Label ?? string.Empty;
+                        string operationSafe = parsedLine.Operation ?? string.Empty;
+                        string operandSafe = parsedLine.Operand ?? string.Empty;
+                        string commentSafe = parsedLine.Comment ?? string.Empty;
+                        string baseOp = operationSafe.TrimStart('+');
+                        var intermediateLine = CrearLineaIntermediaBase(antlrLine, labelSafe, operationSafe, operandSafe, commentSafe);
+
+                        if (!string.IsNullOrEmpty(labelSafe))
+                        {
+                            if (TABSIM_EXT.ContainsKey(labelSafe, CurrentControlSectionName))
+                            {
+                                string dupMsg = $"Símbolo duplicado: {labelSafe}";
+                                intermediateLine.Error = string.IsNullOrWhiteSpace(intermediateLine.Error)
+                                    ? dupMsg
+                                    : intermediateLine.Error + "; " + dupMsg;
+                                Errors.Add(new SICXEError(antlrLine, 0, dupMsg, SICXEErrorType.Semantico));
+                            }
+                            else
+                            {
+                                AddSymbolToCurrentSection(labelSafe, CONTLOC, SymbolType.Relative);
+                            }
+                        }
+
+                        // Intentar evaluar la expresión
+                        if (!string.IsNullOrEmpty(operandSafe))
+                        {
+                            var (evalVal, evalType, evalErr, evalMeta) = TABSIM_EXT.EvaluateExpressionForObject(operandSafe, CONTLOC, allowUndefinedSymbols: true, controlSectionName: CurrentControlSectionName);
+                            if (evalErr == null && operationSafe.Equals("WORD", StringComparison.OrdinalIgnoreCase))
+                            {
+                                intermediateLine.SemanticValue = $"{evalVal:X4}h";
+                            }
+                            else if (evalErr != null)
+                            {
+                                intermediateLine.Error = evalErr;
+                                Errors.Add(new SICXEError(antlrLine, 0, evalErr, SICXEErrorType.Semantico));
+                            }
+
+                            if (evalMeta.ExternalSymbols.Count > 0)
+                            {
+                                intermediateLine.ExternalReferenceSymbols = evalMeta.ExternalSymbols;
+                                // Insertar símbolos externos en TABSIM si aún no existen
+                                foreach (var sym in evalMeta.ExternalSymbols)
+                                {
+                                    if (!TABSIM_EXT.ContainsKey(sym, CurrentControlSectionName))
+                                        AddSymbolToCurrentSection(sym, -1, SymbolType.Absolute, isExternal: true);
+                                }
+                            }
+
+                            if (evalMeta.HasUnpairedRelative)
+                                intermediateLine.RequiresModification = true;
+
+                            if (isWordDirective)
+                            {
+                                intermediateLine.ModificationRequests = evalMeta.ModificationRequests;
+                                intermediateLine.RelativeModuleSign = evalMeta.RelativeModuleSign;
+                            }
+
+                            if (isWordDirective)
+                                intermediateLine.HasInternalRelativeModification = evalType == SymbolType.Relative || evalMeta.HasUnpairedRelative;
+                        }
+
+                        // Calcular incremento
+                        int wordByteIncrement = 0;
+                        if (baseOp.Equals("BYTE", StringComparison.OrdinalIgnoreCase))
+                            wordByteIncrement = CalculateByteSize(operandSafe);
+                        else if (baseOp.Equals("WORD", StringComparison.OrdinalIgnoreCase))
+                            wordByteIncrement = 3;
+
+                        intermediateLine.Increment = wordByteIncrement;
+                        SetCurrentBlockOnIntermediateLine(intermediateLine);
+                        IntermediateLines.Add(intermediateLine);
+
+                        // Incrementar CONTLOC
+                        CONTLOC += wordByteIncrement;
+                        return true;
+                    }
+
+                    // Si es instrucción con expresión, procesarlo
+                    if (isInstructionWithExpression)
+                    {
+                        string labelSafe = parsedLine.Label ?? string.Empty;
+                        string operationSafe = parsedLine.Operation ?? string.Empty;
+                        string operandSafe = parsedLine.Operand ?? string.Empty;
+                        string commentSafe = parsedLine.Comment ?? string.Empty;
+                        string baseOp = operationSafe.TrimStart('+');
+                        if (OPTAB.TryGetValue(baseOp, out var opCodeInfo))
+                        {
+                            var intermediateLine = CrearLineaIntermediaBase(antlrLine, labelSafe, operationSafe, operandSafe, commentSafe);
+                            intermediateLine.Format = operationSafe.StartsWith("+", StringComparison.OrdinalIgnoreCase) ? 4 : opCodeInfo.Format;
+                            intermediateLine.AddressingMode = DetermineAddressingMode(operandSafe);
+
+                            if (!string.IsNullOrEmpty(labelSafe))
+                            {
+                                if (TABSIM_EXT.ContainsKey(labelSafe, CurrentControlSectionName))
+                                {
+                                    string dupMsg = $"Símbolo duplicado: {labelSafe}";
+                                    intermediateLine.Error = string.IsNullOrWhiteSpace(intermediateLine.Error)
+                                        ? dupMsg
+                                        : intermediateLine.Error + "; " + dupMsg;
+                                    Errors.Add(new SICXEError(antlrLine, 0, dupMsg, SICXEErrorType.Semantico));
+                                }
+                                else
+                                {
+                                    AddSymbolToCurrentSection(labelSafe, CONTLOC, SymbolType.Relative);
+                                }
+                            }
+
+                            // Intentar evaluar la expresión del operando
+                            if (!string.IsNullOrEmpty(operandSafe))
+                            {
+                                // Quitar prefijos de modo deDireccionamiento si existen
+                                string operandForEvaluation = NormalizeOperandForExpressionEvaluation(operandSafe);
+
+                                var (evalVal, evalType, evalErr, evalMeta) = TABSIM_EXT.EvaluateExpressionForObject(operandForEvaluation, CONTLOC, allowUndefinedSymbols: true, controlSectionName: CurrentControlSectionName);
+                                if (evalErr != null)
+                                {
+                                    intermediateLine.Error = evalErr;
+                                    Errors.Add(new SICXEError(antlrLine, 0, evalErr, SICXEErrorType.Semantico));
+                                }
+                                else
+                                {
+                                    intermediateLine.SemanticValue = $"{evalVal:X4}h";
+                                }
+
+                                if (evalMeta.ExternalSymbols.Count > 0)
+                                {
+                                    intermediateLine.ExternalReferenceSymbols = evalMeta.ExternalSymbols;
+                                    foreach (var sym in evalMeta.ExternalSymbols)
+                                    {
+                                        if (!TABSIM_EXT.ContainsKey(sym, CurrentControlSectionName))
+                                            AddSymbolToCurrentSection(sym, -1, SymbolType.Absolute, isExternal: true);
+                                    }
+                                }
+
+                                if (evalMeta.ModificationRequests.Count > 0)
+                                {
+                                    intermediateLine.ModificationRequests = evalMeta.ModificationRequests;
+                                    intermediateLine.RequiresModification = true;
+                                }
+
+                                if (operationSafe.StartsWith("+", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    intermediateLine.HasInternalRelativeModification = evalType == SymbolType.Relative || evalMeta.HasUnpairedRelative;
+                                    intermediateLine.RelativeModuleSign = evalMeta.RelativeModuleSign;
+                                    intermediateLine.RequiresModification = intermediateLine.RequiresModification || intermediateLine.HasInternalRelativeModification;
+                                }
+                            }
+
+                            // Calcular incremento basado en el formato
+                            int instructionIncrement = 0;
+                            if (opCodeInfo.Format == 1)
+                                instructionIncrement = 1;
+                            else if (opCodeInfo.Format == 2)
+                                instructionIncrement = 2;
+                            else if (opCodeInfo.Format == 3 || opCodeInfo.Format == 4)
+                            {
+                                // Determinar si es formato 3 o 4 basándose en el prefijo '+'
+                                instructionIncrement = operationSafe.StartsWith("+", StringComparison.OrdinalIgnoreCase) ? 4 : 3;
+                            }
+
+                            intermediateLine.Increment = instructionIncrement;
+                            SetCurrentBlockOnIntermediateLine(intermediateLine);
+                            IntermediateLines.Add(intermediateLine);
+
+                            // Guardar la primera instrucción ejecutable encontrada.
+                            if (!FIRST_EXECUTABLE_ADDRESS.HasValue && instructionIncrement > 0)
+                            {
+                                FIRST_EXECUTABLE_ADDRESS = intermediateLine.Address;
+                            }
+
+                            // Incrementar CONTLOC
+                            CONTLOC += instructionIncrement;
+                            return true;
+                        }
+                    }
+
+                    var lineErrors = GetErrorsForLine(antlrLine);
+                    var errorLine = ParseErrorLine(originalLine: SourceLines[antlrLine - 1], errors: lineErrors);
+                    errorLine.SourceLine = antlrLine;
+                    IntermediateLines.Add(errorLine);
+                    foreach (var err in lineErrors)
+                        Errors.Add(err);
+                }
+
+                // Al llegar aquí, la línea fue procesada (o al menos se registró un error); indicar handled=true
+                return true;
+            }
+            return false;
+        }
+
+        // Helper: procesa líneas que solo contienen comentario (statement == null) -> retorna true si manejado
+        private bool TryProcessCommentOnly(SICXEParser.LineContext context, int antlrLine)
+        {
+            if (context.statement() == null)
+            {
+                var commentText = context.comment()?.GetText() ?? "";
+                if (string.IsNullOrWhiteSpace(commentText))
+                    return true; // nothing to do, handled
+
+                var intermediateLine = new IntermediateLine
+                {
+                    LineNumber = IntermediateLines.Count + 1,
+                    SourceLine = antlrLine,
+                    Address = -1,
+                    ControlSectionName = CurrentControlSectionName,
+                    ControlSectionNumber = CurrentControlSectionNumber,
+                    Comment = commentText,
+                    BlockName = BLOCKS.CurrentBlockName,
+                    BlockNumber = BLOCKS.CurrentBlockNumber
+                };
+                IntermediateLines.Add(intermediateLine);
+                return true;
+            }
+            return false;
         }
 
         /// <summary>
