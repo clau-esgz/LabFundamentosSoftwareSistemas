@@ -1138,8 +1138,9 @@ namespace laboratorioPractica3
             foreach (var kv in simbolos.GetAllSymbols().OrderBy(k => k.Value.Value))
             {
                 var sym = kv.Value;
-                string tipo = sym.Type == SymbolType.Relative ? "R" : "A";
-                Console.WriteLine($"{sym.Name,-18} {sym.Value:X4}  {tipo,-4}  {sym.BlockName}");
+                string displayValue = sym.IsExternal ? "----" : sym.Value.ToString("X4");
+                string tipo = sym.IsExternal ? "---" : (sym.Type == SymbolType.Relative ? "R" : "A");
+                Console.WriteLine($"{sym.Name,-18} {displayValue,-6} {tipo,-4}  {sym.BlockName}");
             }
         }
 

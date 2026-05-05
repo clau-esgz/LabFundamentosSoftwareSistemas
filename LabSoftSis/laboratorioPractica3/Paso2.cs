@@ -27,8 +27,6 @@ namespace laboratorioPractica3
         public List<ObjectCodeLine> ObjectCodeLines { get; } = new();      // Lineas con codigo objeto generado
         public List<ObjectModule> GeneratedModules { get; } = new();       // Módulos H/D/R/T/M/E por CSECT
 
-        private readonly Dictionary<string, ModuleBuilderState> _moduleStates = new(StringComparer.OrdinalIgnoreCase);
-
         /// <summary>
         /// Constructor: recibe datos compartidos del Paso 1
         /// </summary>
@@ -57,8 +55,7 @@ namespace laboratorioPractica3
         public void ObjectCodeGeneration()
         {
             GeneratedModules.Clear();
-            _moduleStates.Clear();
-            InitializeModuleBuilders();
+            ObjectCodeLines.Clear();
 
             foreach (var linea in _lineasIntermedias)
             {
@@ -169,10 +166,22 @@ namespace laboratorioPractica3
         /// </summary>
         private void RegistrarSalidaLinea(IntermediateLine linea, string codigoObjeto, string errorPaso2)
         {
-            // Centralizar marcas (*SE, *R) en un único punto antes de almacenar el código objeto
+            // Centralizar marcas (*SE, *R) en un único punto antes de almacenar el código objeto (versión DISPLAY)
+            // Para WORD, esta ruta además reevalúa la expresión final y propaga metadata de modificación
+            // (símbolos externos, *R y signo relativo del módulo) para que ObjectModuleBuilder pueda generar M.
             string marked = AddObjectCodeMarks(codigoObjeto, linea);
             ObjectCodeLines.Add(new ObjectCodeLine(linea, marked, errorPaso2));
-            RegisterObjectEvent(linea, marked);
+            // Nota: El módulo construcción ya no ocurre aquí; se deferred a FinalizeModuleBuilders()
+            // que usa ObjectModuleBuilder para consolidar la lógica con ProgramaObjeto
+        }
+
+        private string BuildDisplayMarksForLine(string objectCode, IntermediateLine line)
+        {
+            if (string.IsNullOrEmpty(objectCode))
+                return objectCode;
+            string cleaned = objectCode.TrimEnd('*');
+            var externals = line.ExternalReferenceSymbols ?? new List<string>();
+            return laboratorioPractica3.Utils.ObjectCodeUtils.BuildDisplayMarks(cleaned, externals, line.HasInternalRelativeModification);
         }
 
         /// <summary>
@@ -189,8 +198,14 @@ namespace laboratorioPractica3
             string cleaned = objectCode.TrimEnd('*');
             var marks = new List<string>();
 
-            // Para WORD, re-evaluar expresión con la tabla de símbolos final para detectar externals y relativos no emparejados
-            if (string.Equals(line.Operation, "WORD", StringComparison.OrdinalIgnoreCase))
+            // Para WORD y FORMATO 4, re-evaluar expresión con la tabla de símbolos final para detectar
+            // externals, relativos no emparejados y el signo de relocalización cuando la resolución
+            // tardía de símbolos/forward refs cambia la metadata necesaria para generar M.
+            bool requiresLateMetadataRefresh =
+                string.Equals(line.Operation, "WORD", StringComparison.OrdinalIgnoreCase) ||
+                line.Format == 4;
+
+            if (requiresLateMetadataRefresh)
             {
                 int addr = line.AbsoluteAddress >= 0 ? line.AbsoluteAddress : line.Address;
                 var (val, type, err, meta) = _tablaSimbolos.EvaluateExpressionForObject(line.Operand, addr, allowUndefinedSymbols: true, controlSectionName: line.ControlSectionName);
@@ -205,249 +220,58 @@ namespace laboratorioPractica3
                 {
                     line.HasInternalRelativeModification = true;
                 }
-                // Incorporar modification requests
+                // Incorporar modification requests y sign del módulo relativo
                 if (meta.ModificationRequests.Count > 0)
                 {
                     line.ModificationRequests = meta.ModificationRequests;
                     line.RequiresModification = true;
                 }
+                // Asignar el signo de modificación relativa del módulo si está presente
+                if (meta.RelativeModuleSign.HasValue)
+                {
+                    line.RelativeModuleSign = meta.RelativeModuleSign.Value;
+                }
             }
 
-            // Agregar *SE por cada simbolo externo involucrado (una vez por simbolo)
+            // Agregar marcas '*' por cada simbolo externo o relativo interno no emparejado
+            // (las letras 'SE' o 'R' no deben quedar dentro del campo de bytes del registro T)
             if (line.ExternalReferenceSymbols != null && line.ExternalReferenceSymbols.Count > 0)
             {
                 foreach (var s in line.ExternalReferenceSymbols.Distinct(StringComparer.OrdinalIgnoreCase))
                 {
-                    marks.Add("*SE");
+                    marks.Add("*");
                 }
             }
 
-            // Agregar *R solo si hay relativo interno no emparejado
+            // Agregar '*' solo si hay relativo interno no emparejado
             if (line.HasInternalRelativeModification)
             {
-                marks.Add("*R");
+                marks.Add("*");
             }
 
             if (marks.Count == 0)
                 return cleaned;
 
-            return cleaned + string.Join(string.Empty, marks);
+            return laboratorioPractica3.Utils.ObjectCodeUtils.BuildDisplayMarks(
+                cleaned,
+                line.ExternalReferenceSymbols ?? new List<string>(),
+                line.HasInternalRelativeModification);
         }
 
-        private void InitializeModuleBuilders()
-        {
-            static int Addr(IntermediateLine l) => l.AbsoluteAddress >= 0 ? l.AbsoluteAddress : l.Address;
 
-            var groups = _lineasIntermedias
-                .Where(l => !string.IsNullOrWhiteSpace(l.ControlSectionName))
-                .GroupBy(l => (Name: l.ControlSectionName, Number: l.ControlSectionNumber))
-                .OrderBy(g => g.Key.Number)
-                .ThenBy(g => g.Min(x => x.LineNumber))
-                .ToList();
 
-            foreach (var group in groups)
-            {
-                string sectionName = string.IsNullOrWhiteSpace(group.Key.Name) ? "Por Omision" : group.Key.Name;
-                var lines = group.OrderBy(l => l.LineNumber).ToList();
-
-                int sectionStart = lines
-                    .Where(l => Addr(l) >= 0)
-                    .Select(Addr)
-                    .DefaultIfEmpty(0)
-                    .Min();
-
-                int sectionEnd = lines
-                    .Where(l => Addr(l) >= 0)
-                    .Select(l => Addr(l) + Math.Max(0, l.Increment))
-                    .DefaultIfEmpty(sectionStart)
-                    .Max();
-
-                var module = new ObjectModule
-                {
-                    Name = sectionName,
-                    StartAddress = sectionStart,
-                    Length = Math.Max(0, sectionEnd - sectionStart)
-                };
-
-                var state = new ModuleBuilderState(module, sectionName, group.Key.Number);
-                _moduleStates[sectionName] = state;
-
-                var extDefSymbols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                var extRefSymbols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-                foreach (var line in lines)
-                {
-                    string op = (line.Operation ?? string.Empty).Trim().TrimStart('+').ToUpperInvariant();
-                    if (op == "EXTDEF")
-                    {
-                        foreach (var symbol in ParseSymbolList(line.Operand))
-                            extDefSymbols.Add(symbol);
-                    }
-                    else if (op == "EXTREF")
-                    {
-                        foreach (var symbol in ParseSymbolList(line.Operand))
-                            extRefSymbols.Add(symbol);
-                    }
-                }
-
-                foreach (var symbol in extDefSymbols)
-                {
-                    var defLine = lines.FirstOrDefault(l => string.Equals(l.Label, symbol, StringComparison.OrdinalIgnoreCase));
-                    int relAddr = defLine == null ? 0 : Math.Max(0, Addr(defLine) - sectionStart);
-                    module.D.Add(new DefineRecord(symbol, relAddr));
-                }
-
-                foreach (var symbol in extRefSymbols)
-                    module.R.Add(new ReferRecord(symbol));
-            }
-        }
-
-        private void RegisterObjectEvent(IntermediateLine line, string objectCode)
-        {
-            string sectionName = string.IsNullOrWhiteSpace(line.ControlSectionName) ? "Por Omision" : line.ControlSectionName;
-            if (!_moduleStates.TryGetValue(sectionName, out var state))
-                return;
-
-            string op = ObtenerOperacionNormalizada(line);
-            if (EsDirectivaDeCorte(op))
-                state.FlushText();
-
-            if (!string.IsNullOrWhiteSpace(objectCode))
-            {
-                ProcesarTextoYModificaciones(line, objectCode, state, op);
-
-                if (!state.FirstExecutableAddress.HasValue && line.Format > 0)
-                    state.FirstExecutableAddress = GetEffectiveAddress(line);
-            }
-        }
-
-        /// <summary>
-        /// Determina si una operacion es directiva de corte que vacia el buffer de texto.
-        /// Directivas de corte: RESB, RESW, USE, CSECT, ORG, END.
-        /// </summary>
-        private static bool EsDirectivaDeCorte(string op)
-            => op is "RESB" or "RESW" or "USE" or "CSECT" or "ORG" or "END";
-
-        /// <summary>
-        /// Procesa el codigo objeto y modificaciones de una linea.
-        /// Accumula el codigo en el buffer de texto y registra si hay modificaciones necesarias.
-        /// </summary>
-        private void ProcesarTextoYModificaciones(IntermediateLine line, string objectCode, ModuleBuilderState state, string op)
-        {
-            string cleanedObjectCode = objectCode.Replace("*", "");
-            int address = GetEffectiveAddress(line);
-            state.AppendText(address, cleanedObjectCode);
-
-            if (!EsLineaConModificacion(line, op))
-                return;
-
-            ProcesarModificacionesDeLinea(line, state, address);
-        }
-
-        /// <summary>
-        /// Determina si una linea requiere registro de modificacion (relocation record).
-        /// WORD y formato 4 (direccionamiento extendido) generan M records.
-        /// </summary>
-        private static bool EsLineaConModificacion(IntermediateLine line, string op)
-            => op == "WORD" || line.Format == 4;
-
-        /// <summary>
-        /// Procesa modificaciones (relocation records) para una linea.
-        /// Evalua expresiones y crea M records para el modulo objeto.
-        /// Maneja tanto WORD como formato 4 (direccionamiento extendido).
-        /// </summary>
-        private void ProcesarModificacionesDeLinea(IntermediateLine line, ModuleBuilderState state, int address)
-        {
-            bool isWord = string.Equals(line.Operation, "WORD", StringComparison.OrdinalIgnoreCase);
-            int modAddress = isWord ? address : address + 1;
-            int halfBytesLength = isWord ? 0x06 : 0x05;
-
-            string operandForEvaluation = NormalizeOperandForExpressionEvaluation(line.Operand);
-            if (string.IsNullOrWhiteSpace(operandForEvaluation))
-                return;
-
-            var (_, evalType, evalErr, evalMeta) = _tablaSimbolos.EvaluateExpressionForObject(
-                operandForEvaluation,
-                address,
-                allowUndefinedSymbols: true,
-                controlSectionName: line.ControlSectionName);
-
-            if (evalErr != null)
-                return;
-
-            AgregarModificacionesExplícitas(state, modAddress, halfBytesLength, evalMeta);
-
-            if (evalType == SymbolType.Relative)
-            {
-                char moduleSign = evalMeta.RelativeModuleSign ?? '+';
-                state.AddModification(modAddress, halfBytesLength, moduleSign, state.Module.Name);
-            }
-        }
-
-        private static void AgregarModificacionesExplícitas(ModuleBuilderState state, int modAddress, int halfBytesLength, ExpressionEvaluationMetadata evalMeta)
-        {
-            foreach (var req in evalMeta.ModificationRequests)
-            {
-                if (req is null)
-                    continue;
-
-                if (string.IsNullOrWhiteSpace(req.Symbol))
-                    continue;
-
-                if (req.Sign != '+' && req.Sign != '-')
-                    continue;
-
-                state.AddModification(modAddress, halfBytesLength, req.Sign, req.Symbol);
-            }
-        }
-
-        private static string NormalizeOperandForExpressionEvaluation(string operand)
-        {
-            if (string.IsNullOrWhiteSpace(operand))
-                return operand;
-
-            string value = operand.Trim();
-            if (value.StartsWith("#", StringComparison.Ordinal) || value.StartsWith("@", StringComparison.Ordinal))
-                value = value.Substring(1).Trim();
-
-            string compact = value.Replace(" ", string.Empty);
-            if (compact.EndsWith(",X", StringComparison.OrdinalIgnoreCase))
-            {
-                int commaIndex = compact.LastIndexOf(',');
-                if (commaIndex > 0)
-                    compact = compact.Substring(0, commaIndex);
-            }
-
-            return compact;
-        }
-
+        
         private void FinalizeModuleBuilders()
         {
-            var ordered = _moduleStates.Values
-                .OrderBy(s => s.SectionNumber)
-                .ThenBy(s => s.Module.Name, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            foreach (var state in ordered)
-            {
-                state.FlushText();
-
-                int eAddress = string.Equals(state.Module.Name, _nombrePrograma, StringComparison.OrdinalIgnoreCase)
-                    ? _direccionEjecucion
-                    : (state.FirstExecutableAddress ?? 0);
-
-                state.Module.E = new EndRecord(eAddress);
-                GeneratedModules.Add(state.Module);
-            }
+            // Usar ObjectModuleBuilder centralizado en lugar de lógica duplicada en ModuleBuilderState
+            var builder = new ObjectModuleBuilder(ObjectCodeLines, null!, _nombrePrograma, _direccionEjecucion);
+            GeneratedModules.Clear();
+            GeneratedModules.AddRange(builder.BuildModules());
         }
 
         private static int GetEffectiveAddress(IntermediateLine linea)
             => linea.AbsoluteAddress >= 0 ? linea.AbsoluteAddress : linea.Address;
 
-        /// <summary>
-        /// Crea un código de error para formato 3 (6 dígitos hex).
-        /// Centraliza la construcción repetida de errores: [fbError 6][xbpeError 4][0xFFF 12].
-        /// </summary>
         private static string BuildFormat3ErrorCode(int opcode, int n, int i, int x)
         {
             int fbError = (opcode & 0xFC) | (n << 1) | i;
@@ -958,72 +782,8 @@ namespace laboratorioPractica3
                 .ToList();
         }
 
-        private sealed class ModuleBuilderState
-        {
-            private readonly HashSet<string> _modificationKeys = new(StringComparer.OrdinalIgnoreCase);
-            private int _textStart = -1;
-            private readonly StringBuilder _textBytes = new();
-            private int _textByteCount;
 
-            public ModuleBuilderState(ObjectModule module, string sectionName, int sectionNumber)
-            {
-                Module = module;
-                SectionName = sectionName;
-                SectionNumber = sectionNumber;
-            }
 
-            public ObjectModule Module { get; }
-            public string SectionName { get; }
-            public int SectionNumber { get; }
-            public int? FirstExecutableAddress { get; set; }
-
-            public void AppendText(int address, string hexBytes)
-            {
-                int bytes = string.IsNullOrWhiteSpace(hexBytes) ? 0 : hexBytes.Length / 2;
-                if (bytes <= 0)
-                    return;
-
-                bool isContiguous = _textStart >= 0 && (_textStart + _textByteCount) == address;
-                bool exceedsLimit = (_textByteCount + bytes) > 30;
-
-                if (_textStart >= 0 && (!isContiguous || exceedsLimit))
-                    FlushText();
-
-                if (_textStart < 0)
-                    _textStart = address;
-
-                _textBytes.Append(hexBytes);
-                _textByteCount += bytes;
-            }
-
-            public void FlushText()
-            {
-                if (_textByteCount <= 0)
-                    return;
-
-                Module.T.Add(new TextRecord
-                {
-                    StartAddress = _textStart,
-                    HexBytes = _textBytes.ToString()
-                });
-
-                _textStart = -1;
-                _textBytes.Clear();
-                _textByteCount = 0;
-            }
-
-            public void AddModification(int address, int halfBytesLength, char sign, string symbol)
-            {
-                string normalizedSymbol = string.IsNullOrWhiteSpace(symbol) ? Module.Name : symbol.Trim();
-                string key = $"{address:X6}|{halfBytesLength:X2}|{sign}|{normalizedSymbol}";
-                if (!_modificationKeys.Add(key))
-                    return;
-
-                Module.M.Add(new ModificationRecord(address, halfBytesLength, sign, normalizedSymbol));
-            }
-        }
-
-       
         public string GenerateReport()
         {
             var sb = new StringBuilder();

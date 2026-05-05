@@ -75,13 +75,10 @@ namespace laboratorioPractica3
             if (D.Count == 0)
                 return;
 
-            var chunk = new StringBuilder("D");
             foreach (var d in D)
             {
-                chunk.Append(d.Symbol.PadRight(6).Substring(0, 6));
-                chunk.Append(d.RelativeAddress.ToString("X6"));
+                output.Add($"D{d.Symbol.Trim().PadRight(6).Substring(0, 6)}{d.RelativeAddress:X6}");
             }
-            output.Add(chunk.ToString());
         }
 
         private void AddReferenceRecords(List<string> output)
@@ -91,7 +88,7 @@ namespace laboratorioPractica3
 
             var chunk = new StringBuilder("R");
             foreach (var r in R)
-                chunk.Append(r.Symbol.PadRight(6).Substring(0, 6));
+                chunk.Append(r.Symbol.Trim().PadRight(6).Substring(0, 6));
             output.Add(chunk.ToString());
         }
 
@@ -157,7 +154,7 @@ namespace laboratorioPractica3
         public char Sign { get; }
         public string Symbol { get; }
 
-        public string ToRecord() => $"M{Address:X6}{HalfBytesLength:X2}{Sign}{Symbol.PadRight(6).Substring(0, 6)}";
+        public string ToRecord() => $"M{Address:X6}{HalfBytesLength:X2}{Sign}{Symbol.Trim().PadRight(6).Substring(0, 6)}";
     }
 
     public readonly struct EndRecord
