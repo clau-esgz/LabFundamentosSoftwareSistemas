@@ -1,6 +1,7 @@
 using Antlr4.Runtime;
 using Antlr4.Runtime.Tree;
 using laboratorioPractica3;
+using laboratorioPractica3.Loader;
 using System.Text;
 using System.Windows.Forms;
 
@@ -56,12 +57,72 @@ class Program
         {
             // Mostrar menu interactivo
             PrintHeader();
-            ShowInteractiveMenu();
+            ShowMainMenu();
         }
     }
 
     /// <summary>
-    /// Muestra un menu interactivo para seleccionar archivos
+    /// Menú principal: opciones para ensamblador o cargador-ligador
+    /// </summary>
+    static void ShowMainMenu()
+    {
+        bool exit = false;
+
+        while (!exit)
+        {
+            try
+            {
+                Console.Clear();
+            }
+            catch
+            {
+                Console.WriteLine("\n\n\n\n\n\n\n\n\n\n");
+            }
+
+            PrintHeader();
+            Console.WriteLine("\n╔════════════════════════════════════════════════════════════════╗");
+            Console.WriteLine("║                     MENÚ PRINCIPAL                             ║");
+            Console.WriteLine("╚════════════════════════════════════════════════════════════════╝\n");
+            Console.WriteLine("1. Ensamblador SIC/XE (Paso 1, Paso 2, Análisis)");
+            Console.WriteLine("2. Cargador-Ligador SIC/XE (Carga de Programas Objeto)");
+            Console.WriteLine("3. Interfaz Gráfica (WinForms)");
+            Console.WriteLine("4. Salir");
+            Console.Write("\nSelecciona opción: ");
+
+            string? choice = Console.ReadLine();
+
+            if (choice == "1")
+            {
+                ShowInteractiveMenu();
+            }
+            else if (choice == "2")
+            {
+                var loaderCli = new LoaderCLI();
+                loaderCli.RunInteractive();
+                exit = true;
+            }
+            else if (choice == "3")
+            {
+                // Ejecutar interfaz gráfica
+                ApplicationConfiguration.Initialize();
+                Application.Run(new Form1());
+                exit = true;
+            }
+            else if (choice == "4")
+            {
+                exit = true;
+                Console.WriteLine("\n¡Hasta luego!");
+            }
+            else
+            {
+                Console.WriteLine("\n✗ Opción no válida. Presiona ENTER para continuar...");
+                Console.ReadLine();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Menú de selección de archivos (ensamblador)
     /// </summary>
     static void ShowInteractiveMenu()
     {
