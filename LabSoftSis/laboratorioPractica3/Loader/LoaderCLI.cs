@@ -14,6 +14,7 @@ namespace laboratorioPractica3.Loader
         private readonly LoaderLinker _loader = new();
         private LoaderResult? _currentResult;
         private List<string> _currentRecords = new();
+        private string? _lastAutoReportPath;
 
         /// <summary>
         /// Ejecuta el REPL interactivo del cargador-ligador.
@@ -162,6 +163,19 @@ namespace laboratorioPractica3.Loader
 
             _loader.PrintTABSE(_currentResult);
             _loader.PrintLoadMap(_currentResult);
+
+            // Exportación automática de artefactos del linker (TXT + CSV)
+            if (TryAutoExportReports(filePath, _currentResult, out var txtPath, out var csvPath, out var exportError))
+            {
+                _lastAutoReportPath = txtPath;
+                Console.WriteLine("\n✓ Reportes del cargador-ligador generados:");
+                Console.WriteLine($"  - TXT: {txtPath}");
+                Console.WriteLine($"  - CSV: {csvPath}");
+            }
+            else if (!string.IsNullOrWhiteSpace(exportError))
+            {
+                Console.WriteLine($"\n⚠ No se pudieron exportar reportes automáticos: {exportError}");
+            }
         }
 
         private void DisplayTABSE()
@@ -226,28 +240,111 @@ namespace laboratorioPractica3.Loader
 
             Console.WriteLine("\n--- EXPORTAR REPORTE ---\n");
 
-            Console.Write("Ruta del archivo de salida (ej: reporte.txt): ");
-            string outputPath = Console.ReadLine()?.Trim() ?? "reporte.txt";
+            if (TryAutoExportReports("loader_manual_export", _currentResult, out var txtPath, out var csvPath, out var error))
+            {
+                _lastAutoReportPath = txtPath;
+                Console.WriteLine($"✓ TXT exportado: {txtPath}");
+                Console.WriteLine($"✓ CSV exportado: {csvPath}");
+                return;
+            }
+
+            Console.WriteLine($"✗ Error al escribir reporte: {error}");
+        }
+
+        private bool TryAutoExportReports(string sourceFilePath, LoaderResult result, out string txtPath, out string csvPath, out string error)
+        {
+            txtPath = string.Empty;
+            csvPath = string.Empty;
+            error = string.Empty;
 
             try
             {
-                using (var sw = new StreamWriter(outputPath))
-                {
-                    sw.WriteLine("╔═══════════════════════════════════════════════════════════════════╗");
-                    sw.WriteLine("║          REPORTE DEL CARGADOR-LIGADOR SIC/XE                    ║");
-                    sw.WriteLine("╚═══════════════════════════════════════════════════════════════════╝");
+                string projectDir = GetProjectDirectory();
+                string reportDir = Path.Combine(projectDir, "reportes_loader");
+                Directory.CreateDirectory(reportDir);
 
-                    sw.WriteLine(_loader.GenerateTABSEReport(_currentResult));
-                    sw.WriteLine(_loader.GenerateLoadMapReport(_currentResult));
-                    sw.WriteLine(_loader.GenerateErrorReport(_currentResult));
-                }
+                string sourceName = Path.GetFileNameWithoutExtension(sourceFilePath);
+                if (string.IsNullOrWhiteSpace(sourceName))
+                    sourceName = "loader";
 
-                Console.WriteLine($"✓ Reporte exportado a: {Path.GetFullPath(outputPath)}");
+                string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                txtPath = Path.Combine(reportDir, $"{sourceName}_LINKER_{timestamp}.txt");
+                csvPath = Path.Combine(reportDir, $"{sourceName}_LINKER_{timestamp}.csv");
+
+                WriteTxtReport(txtPath, result);
+                WriteCsvReport(csvPath, result);
+                return true;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"✗ Error al escribir archivo: {ex.Message}");
+                error = ex.Message;
+                return false;
             }
+        }
+
+        private void WriteTxtReport(string outputPath, LoaderResult result)
+        {
+            using var sw = new StreamWriter(outputPath);
+            sw.WriteLine("╔═══════════════════════════════════════════════════════════════════╗");
+            sw.WriteLine("║          REPORTE DEL CARGADOR-LIGADOR SIC/XE                    ║");
+            sw.WriteLine("╚═══════════════════════════════════════════════════════════════════╝");
+            sw.WriteLine(_loader.GenerateTABSEReport(result));
+            sw.WriteLine(_loader.GenerateLoadMapReport(result));
+            sw.WriteLine(_loader.GenerateErrorReport(result));
+        }
+
+        private void WriteCsvReport(string outputPath, LoaderResult result)
+        {
+            var lines = new List<string>
+            {
+                "SECCION,CLAVE,VALOR1,VALOR2,VALOR3"
+            };
+
+            lines.Add($"RESUMEN,DIRPROG,{result.Pass1.InitialLoadAddress:X6},," );
+            lines.Add($"RESUMEN,DIREJ,{result.ExecutionEntryPoint:X6},," );
+            lines.Add($"RESUMEN,ESTADO,{(result.IsSuccessful ? "OK" : "CON_ERRORES")},," );
+
+            foreach (var entry in result.Pass1.SymbolTable.Values.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                lines.Add($"TABSE,{EscapeCsv(entry.Name)},{entry.Address:X6},{EscapeCsv(entry.ControlSectionName)},");
+            }
+
+            foreach (var sec in result.FinalSectionLoadAddresses.OrderBy(s => s.Value))
+            {
+                lines.Add($"SECCIONES,{EscapeCsv(sec.Key)},{sec.Value:X6},,");
+            }
+
+            foreach (var err in result.AllErrors)
+            {
+                lines.Add($"ERRORES,{EscapeCsv(err.Type.ToString())},{EscapeCsv(err.Message)},,");
+            }
+
+            File.WriteAllLines(outputPath, lines);
+        }
+
+        private static string GetProjectDirectory()
+        {
+            var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+            while (dir != null)
+            {
+                if (dir.GetFiles("*.csproj").Length > 0)
+                    return dir.FullName;
+                dir = dir.Parent;
+            }
+
+            return Directory.GetCurrentDirectory();
+        }
+
+        private static string EscapeCsv(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return string.Empty;
+
+            bool needsQuotes = value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r');
+            if (!needsQuotes)
+                return value;
+
+            return $"\"{value.Replace("\"", "\"\"")}\"";
         }
     }
 }
