@@ -10,9 +10,9 @@ using System.Windows.Forms;
 
 namespace laboratorioPractica3
 {
-    public partial class Cargador4 : Form
+    public partial class CargadorL : Form
     {
-        public Cargador4()
+        public CargadorL()
         {
             InitializeComponent();
         }
