@@ -5,6 +5,17 @@ using System.Linq;
 namespace laboratorioPractica3.Loader
 {
     /// <summary>
+    /// Registro M tipado para el cargador-ligador (dirección relativa, longitud en half-bytes, signo y símbolo).
+    /// </summary>
+    public sealed class ModificationRecord
+    {
+        public int Address { get; init; }
+        public int HalfBytesLength { get; init; }
+        public char Sign { get; init; }
+        public string Symbol { get; init; } = string.Empty;
+    }
+
+    /// <summary>
     /// Entrada en la tabla de símbolos externos (TABSE).
     /// Contiene: nombre del símbolo, dirección de carga, sección de control donde está definido.
     /// </summary>
@@ -67,7 +78,7 @@ namespace laboratorioPractica3.Loader
         /// <summary>
         /// M records: dirección → (longitud en medios bytes, signo +/-, símbolo).
         /// </summary>
-        public List<(int Address, int HalfBytesLength, char Sign, string Symbol)> ModificationRecords { get; } = new();
+        public List<ModificationRecord> ModificationRecords { get; } = new();
 
         /// <summary>
         /// E record: dirección de ejecución (0 si no especificada).
@@ -99,6 +110,50 @@ namespace laboratorioPractica3.Loader
         /// Dirección inicial de carga (DIRPROG).
         /// </summary>
         public int InitialLoadAddress { get; set; }
+    }
+
+    /// <summary>
+    /// TABSE orientada a objetos para el cargador-ligador.
+    /// </summary>
+    public class ExternalSymbolTable
+    {
+        private readonly Dictionary<string, ExternalSymbolEntry> _entries = new(StringComparer.OrdinalIgnoreCase);
+
+        public IReadOnlyDictionary<string, ExternalSymbolEntry> Entries => _entries;
+
+        public bool TryAdd(string name, int absoluteAddress, string controlSectionName, out LoaderError? error)
+        {
+            error = null;
+            if (_entries.ContainsKey(name))
+            {
+                error = new LoaderError
+                {
+                    Message = $"Símbolo externo duplicado: {name}",
+                    Type = LoaderError.ErrorType.DuplicateSymbol
+                };
+                return false;
+            }
+
+            _entries[name] = new ExternalSymbolEntry
+            {
+                Name = name,
+                Address = absoluteAddress,
+                ControlSectionName = controlSectionName
+            };
+            return true;
+        }
+
+        public bool TryGet(string symbol, out ExternalSymbolEntry? entry)
+        {
+            if (_entries.TryGetValue(symbol, out var resolved))
+            {
+                entry = resolved;
+                return true;
+            }
+
+            entry = null;
+            return false;
+        }
     }
 
     /// <summary>

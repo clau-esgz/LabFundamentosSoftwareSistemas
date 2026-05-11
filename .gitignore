@@ -109,6 +109,7 @@ output.csv
 !.gitkeep
 !.gitignore
 !README_PASO1.md
+!laboratorioPractica3/inputs/README.md
 !programa_ok.asm
 !programa_err.asm
 !prog_ok.asm

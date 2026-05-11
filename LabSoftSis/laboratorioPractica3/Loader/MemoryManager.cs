@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Globalization;
 
 namespace laboratorioPractica3.Loader
 {
@@ -11,7 +12,7 @@ namespace laboratorioPractica3.Loader
     /// </summary>
     public class MemoryManager
     {
-        private readonly Dictionary<int, byte> _memory = new();
+        private readonly byte[] _memory;
         private readonly Dictionary<string, ExternalSymbolEntry> _tabse = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<(int Start, int Length, string Section)> _allocatedRegions = new();
 
@@ -19,6 +20,12 @@ namespace laboratorioPractica3.Loader
         /// Inicializa gestor con tamaño máximo de memoria (por defecto 1MB).
         /// </summary>
         public int MaxMemorySize { get; } = 0x100000;
+
+        public MemoryManager(int maxMemorySize = 0x100000)
+        {
+            MaxMemorySize = maxMemorySize;
+            _memory = new byte[MaxMemorySize];
+        }
 
         /// <summary>
         /// Suma símbolo a TABSE. Valida duplicados.
@@ -100,12 +107,42 @@ namespace laboratorioPractica3.Loader
         /// <summary>
         /// Escribe bytes en memoria a partir de dirección.
         /// </summary>
-        public void WriteMemory(int address, byte[] data)
+        public bool WriteMemory(int address, byte[] data, out LoaderError? error)
         {
+            error = null;
+            if (!ValidateRange(address, data.Length, out error))
+                return false;
+
             for (int i = 0; i < data.Length; i++)
             {
                 _memory[address + i] = data[i];
             }
+
+            return true;
+        }
+
+        public bool WriteHex(int address, string hexBytes, out LoaderError? error)
+        {
+            error = null;
+            string normalized = (hexBytes ?? string.Empty).Replace(" ", string.Empty);
+            if (normalized.Length % 2 != 0)
+                normalized = "0" + normalized;
+
+            var data = new byte[normalized.Length / 2];
+            for (int i = 0; i < data.Length; i++)
+            {
+                if (!byte.TryParse(normalized.Substring(i * 2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out data[i]))
+                {
+                    error = new LoaderError
+                    {
+                        Message = $"Byte hexadecimal inválido en T record: '{normalized.Substring(i * 2, 2)}'",
+                        Type = LoaderError.ErrorType.InvalidRecord
+                    };
+                    return false;
+                }
+            }
+
+            return WriteMemory(address, data, out error);
         }
 
         /// <summary>
@@ -113,10 +150,13 @@ namespace laboratorioPractica3.Loader
         /// </summary>
         public byte[] ReadMemory(int address, int count)
         {
+            if (address < 0 || count < 0 || address + count > MaxMemorySize)
+                return Array.Empty<byte>();
+
             var result = new byte[count];
             for (int i = 0; i < count; i++)
             {
-                result[i] = _memory.TryGetValue(address + i, out var b) ? b : (byte)0;
+                result[i] = _memory[address + i];
             }
             return result;
         }
@@ -125,33 +165,86 @@ namespace laboratorioPractica3.Loader
         /// Modifica bytes en memoria (para relocalización con registros M).
         /// Suma/resta offset a bytes existentes.
         /// </summary>
-        public void ModifyMemory(int address, int halfBytesLength, char sign, int offset)
+        public bool ModifyMemory(int address, int halfBytesLength, char sign, int offset, out LoaderError? error)
         {
-            // halfBytesLength es la cantidad de medios bytes (nibbles) a modificar
-            // Ej: 0x06 = 6 nibbles = 3 bytes (dirección de 24 bits en SIC/XE)
+            error = null;
 
-            int bytesToModify = (halfBytesLength + 1) / 2; // Redondear hacia arriba
-
-            // Leer bytes actuales (big-endian para SIC/XE)
-            byte[] currentBytes = ReadMemory(address, bytesToModify);
-            int currentValue = 0;
-            foreach (byte b in currentBytes)
+            if (halfBytesLength <= 0)
             {
-                currentValue = (currentValue << 8) | b;
+                error = new LoaderError
+                {
+                    Message = "Longitud de modificación inválida (half-bytes <= 0)",
+                    Type = LoaderError.ErrorType.InvalidRecord
+                };
+                return false;
             }
 
-            // Aplicar modificación
-            int newValue = sign == '+' ? currentValue + offset : currentValue - offset;
+            int bytesToTouch = (halfBytesLength + 1) / 2;
+            if (!ValidateRange(address, bytesToTouch, out error))
+                return false;
 
-            // Escribir bytes modificados
-            byte[] modifiedBytes = new byte[bytesToModify];
-            for (int i = bytesToModify - 1; i >= 0; i--)
+            // Extraer campo de nibbles (big-endian) a valor sin signo.
+            long rawValue = 0;
+            for (int i = 0; i < halfBytesLength; i++)
             {
-                modifiedBytes[i] = (byte)(newValue & 0xFF);
-                newValue >>= 8;
+                int byteIndex = address + (i / 2);
+                byte current = _memory[byteIndex];
+                int nibble = (i % 2 == 0) ? ((current >> 4) & 0xF) : (current & 0xF);
+                rawValue = (rawValue << 4) | (uint)nibble;
             }
 
-            WriteMemory(address, modifiedBytes);
+            int bits = halfBytesLength * 4;
+            long signMask = 1L << (bits - 1);
+            long fullMask = (1L << bits) - 1;
+
+            // Interpretar como complemento a dos dentro del ancho del campo.
+            long signedValue = (rawValue & signMask) != 0 ? rawValue - (1L << bits) : rawValue;
+            long updatedValue = sign == '+' ? signedValue + offset : signedValue - offset;
+
+            long min = -(1L << (bits - 1));
+            long max = (1L << (bits - 1)) - 1;
+            if (updatedValue < min || updatedValue > max)
+            {
+                error = new LoaderError
+                {
+                    Message = $"Overflow de relocación en M record: valor={updatedValue}, rango=[{min},{max}]",
+                    Type = LoaderError.ErrorType.General
+                };
+                return false;
+            }
+
+            long encoded = updatedValue & fullMask;
+
+            // Escribir nibbles de regreso respetando nibbles no tocados del byte.
+            for (int i = halfBytesLength - 1; i >= 0; i--)
+            {
+                int nibble = (int)(encoded & 0xF);
+                encoded >>= 4;
+
+                int byteIndex = address + (i / 2);
+                if (i % 2 == 0)
+                    _memory[byteIndex] = (byte)((_memory[byteIndex] & 0x0F) | (nibble << 4));
+                else
+                    _memory[byteIndex] = (byte)((_memory[byteIndex] & 0xF0) | nibble);
+            }
+
+            return true;
+        }
+
+        private bool ValidateRange(int address, int count, out LoaderError? error)
+        {
+            error = null;
+            if (address < 0 || count < 0 || address + count > MaxMemorySize)
+            {
+                error = new LoaderError
+                {
+                    Message = $"Dirección inválida: 0x{address:X6}, tamaño=0x{count:X}",
+                    Type = LoaderError.ErrorType.MemoryConflict
+                };
+                return false;
+            }
+
+            return true;
         }
 
         /// <summary>

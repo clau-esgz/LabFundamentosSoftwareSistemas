@@ -141,19 +141,24 @@ class Program
             }
             PrintHeader();
 
-            // Obtener archivos .asm y .txt del directorio del proyecto
+            // Obtener archivos .asm/.txt de carpetas de entrada dedicadas (si existen)
             var searchDir = GetProjectDirectory();
-            var asmFiles = Directory.GetFiles(searchDir, "*.asm").Select(f => Path.GetFileName(f)).ToList();
-            var txtFiles = Directory.GetFiles(searchDir, "*.txt").Select(f => Path.GetFileName(f)).ToList();
-            var allFiles = new List<string>();
-            allFiles.AddRange(asmFiles);
-            allFiles.AddRange(txtFiles);
-            allFiles.Sort();
+            var candidateDirs = GetInputCandidateDirectories(searchDir);
+            var allFiles = candidateDirs
+                .Where(Directory.Exists)
+                .SelectMany(dir => Directory.GetFiles(dir, "*.*", SearchOption.TopDirectoryOnly)
+                    .Where(f => f.EndsWith(".asm", StringComparison.OrdinalIgnoreCase) ||
+                                f.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(f => f)
+                .ToList();
 
             if (allFiles.Count == 0)
             {
                 Console.WriteLine("No se encontraron archivos .asm o .txt en el directorio del proyecto.");
-                Console.WriteLine($"Directorio buscado: {searchDir}");
+                Console.WriteLine("Directorios buscados:");
+                foreach (var dir in candidateDirs)
+                    Console.WriteLine($"  - {dir}");
                 Console.WriteLine();
                 Console.WriteLine("Presione cualquier tecla para salir...");
                 Console.ReadKey();
@@ -161,7 +166,7 @@ class Program
             }
 
             Console.WriteLine("MENU DE SELECCION DE ARCHIVOS");
-            Console.WriteLine($"Directorio: {searchDir}");
+            Console.WriteLine("Directorios: " + string.Join(" | ", candidateDirs.Where(Directory.Exists)));
             Console.WriteLine();
             Console.WriteLine("Archivos disponibles:");
             Console.WriteLine();
@@ -169,8 +174,8 @@ class Program
             // Mostrar archivos numerados
             for (int i = 0; i < allFiles.Count; i++)
             {
-                string ext = allFiles[i].EndsWith(".asm") ? "[ASM]" : "[TXT]";
-                Console.WriteLine($"  {i + 1,2}. {ext} {allFiles[i]}");
+                string ext = allFiles[i].EndsWith(".asm", StringComparison.OrdinalIgnoreCase) ? "[ASM]" : "[TXT]";
+                Console.WriteLine($"  {i + 1,2}. {ext} {Path.GetFileName(allFiles[i])}  ({Path.GetDirectoryName(allFiles[i])})");
             }
 
             Console.WriteLine();
@@ -185,7 +190,7 @@ class Program
                 if (option >= 1 && option <= allFiles.Count)
                 {
                     // Analizar el archivo seleccionado
-                    string selectedFile = Path.Combine(searchDir, allFiles[option - 1]);
+                    string selectedFile = allFiles[option - 1];
                     Console.WriteLine();
                     AnalyzeAndShow(selectedFile);
                     
@@ -213,6 +218,21 @@ class Program
                 Console.ReadKey();
             }
         }
+    }
+
+    private static List<string> GetInputCandidateDirectories(string projectDir)
+    {
+        var dirs = new List<string>
+        {
+            Path.Combine(projectDir, "inputs"),
+            Path.Combine(projectDir, "input"),
+            Path.Combine(projectDir, "samples"),
+            projectDir
+        };
+
+        return dirs
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     /// <summary>

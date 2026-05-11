@@ -11,7 +11,9 @@ namespace laboratorioPractica3.Loader
     /// </summary>
     public class LoaderLinker
     {
-        private readonly ObjectCodeParser _parser = new();
+        private readonly ObjectProgramParser _parser = new();
+        private readonly LoaderPass1 _pass1 = new();
+        private readonly LoaderPass2 _pass2 = new();
 
         /// <summary>
         /// Punto de entrada principal: carga módulos objeto.
@@ -35,7 +37,8 @@ namespace laboratorioPractica3.Loader
                 }
 
                 // 2. Ejecutar PASS 1: construir TABSE
-                var pass1 = _parser.ExecutePass1(modules, loadAddress);
+                var tabse = new ExternalSymbolTable();
+                var pass1 = _pass1.Execute(modules, loadAddress, tabse);
                 result.Pass1 = pass1;
                 result.AllErrors.AddRange(pass1.Errors);
 
@@ -48,8 +51,7 @@ namespace laboratorioPractica3.Loader
                 // 3. Ejecutar PASS 2: cargar en memoria
                 var memoryManager = new MemoryManager();
 
-                _parser.ExecutePass2(pass1, modules, memoryManager, out int entryPoint);
-                result.ExecutionEntryPoint = entryPoint;
+                result.ExecutionEntryPoint = _pass2.Execute(pass1, modules, tabse, memoryManager, pass1.Errors);
                 foreach (var kvp in pass1.SectionLoadAddresses)
                 {
                     result.FinalSectionLoadAddresses[kvp.Key] = kvp.Value;
