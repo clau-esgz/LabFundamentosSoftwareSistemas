@@ -150,10 +150,17 @@ namespace laboratorioPractica3
             EjecutarPaso2();
         }
 
-        private void toolStripMenuItem4_Click(object sender, EventArgs e)
+        private void EnsambladoStripMenuItem4_Click(object sender, EventArgs e)
         {
             EnsamblarTodo();
         }
+
+        private void cargarToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var cargador = new CargadorL();
+            cargador.Show(this);
+        }
+
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {

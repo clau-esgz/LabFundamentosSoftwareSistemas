@@ -289,6 +289,7 @@
             cargarToolStripMenuItem.Name = "cargarToolStripMenuItem";
             cargarToolStripMenuItem.Size = new Size(67, 24);
             cargarToolStripMenuItem.Text = "Cargar";
+            cargarToolStripMenuItem.Click += cargarToolStripMenuItem_Click;
             // 
             // simularToolStripMenuItem
             // 

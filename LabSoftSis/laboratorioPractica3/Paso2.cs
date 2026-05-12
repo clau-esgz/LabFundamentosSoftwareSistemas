@@ -470,6 +470,13 @@ namespace laboratorioPractica3
             targetAddress = evalVal;
             targetType = evalType;
             
+            // VALIDACIÓN SIC/XE: Las referencias externas REQUIEREN formato 4 (o ser WORD)
+            if (evalMeta.ExternalSymbols.Count > 0)
+            {
+                string err = "Error: Referencia externa requiere formato 4 (+) o WORD";
+                return (BuildFormat3ErrorCode(infoOp.Opcode, n, i, x), err);
+            }
+
             // Si el operando resulta una constante absoluta (ej: #3, 110H).
             // En formato 3 puede codificarse directo en disp con b=p=0 si cabe en 12 bits.
             if (targetType == SymbolType.Absolute)

@@ -25,6 +25,9 @@ namespace laboratorioPractica3.Loader
         {
             MaxMemorySize = maxMemorySize;
             _memory = new byte[MaxMemorySize];
+            // Inicializar con FF como solicitó el usuario
+            for (int i = 0; i < _memory.Length; i++)
+                _memory[i] = 0xFF;
         }
 
         /// <summary>
@@ -179,17 +182,24 @@ namespace laboratorioPractica3.Loader
                 return false;
             }
 
+            // En SIC/XE, si la longitud es impar (ej: 5 para formato 4), 
+            // se asume que el campo está alineado a la derecha en los bytes que ocupa.
+            // Esto significa que si es 5, ocupa el nibble bajo del primer byte y los 2 bytes siguientes.
             int bytesToTouch = (halfBytesLength + 1) / 2;
             if (!ValidateRange(address, bytesToTouch, out error))
                 return false;
 
-            // Extraer campo de nibbles (big-endian) a valor sin signo.
+            // Determinar si empezamos en el primer o segundo nibble del primer byte
+            bool startAtSecondNibble = (halfBytesLength % 2 != 0);
+
+            // Extraer campo de nibbles (big-endian) a valor con signo.
             long rawValue = 0;
             for (int i = 0; i < halfBytesLength; i++)
             {
-                int byteIndex = address + (i / 2);
+                int currentNibbleIndex = i + (startAtSecondNibble ? 1 : 0);
+                int byteIndex = address + (currentNibbleIndex / 2);
                 byte current = _memory[byteIndex];
-                int nibble = (i % 2 == 0) ? ((current >> 4) & 0xF) : (current & 0xF);
+                int nibble = (currentNibbleIndex % 2 == 0) ? ((current >> 4) & 0xF) : (current & 0xF);
                 rawValue = (rawValue << 4) | (uint)nibble;
             }
 
@@ -197,32 +207,26 @@ namespace laboratorioPractica3.Loader
             long signMask = 1L << (bits - 1);
             long fullMask = (1L << bits) - 1;
 
-            // Interpretar como complemento a dos dentro del ancho del campo.
+            // Interpretar como valor con signo (aunque SIC/XE suele usar direcciones positivas, 
+            // el campo podría ser parte de una expresión)
             long signedValue = (rawValue & signMask) != 0 ? rawValue - (1L << bits) : rawValue;
             long updatedValue = sign == '+' ? signedValue + offset : signedValue - offset;
 
-            long min = -(1L << (bits - 1));
-            long max = (1L << (bits - 1)) - 1;
-            if (updatedValue < min || updatedValue > max)
-            {
-                error = new LoaderError
-                {
-                    Message = $"Overflow de relocación en M record: valor={updatedValue}, rango=[{min},{max}]",
-                    Type = LoaderError.ErrorType.General
-                };
-                return false;
-            }
-
+            // El valor resultante debe caber en el número de medios bytes especificado
+            // Para 5 medios bytes (20 bits), el rango es 0..0xFFFFF (o con signo)
+            // Aquí simplemente aplicamos la máscara para mantener la longitud.
             long encoded = updatedValue & fullMask;
 
-            // Escribir nibbles de regreso respetando nibbles no tocados del byte.
+            // Escribir nibbles de regreso respetando nibbles no tocados
             for (int i = halfBytesLength - 1; i >= 0; i--)
             {
                 int nibble = (int)(encoded & 0xF);
                 encoded >>= 4;
 
-                int byteIndex = address + (i / 2);
-                if (i % 2 == 0)
+                int currentNibbleIndex = i + (startAtSecondNibble ? 1 : 0);
+                int byteIndex = address + (currentNibbleIndex / 2);
+                
+                if (currentNibbleIndex % 2 == 0)
                     _memory[byteIndex] = (byte)((_memory[byteIndex] & 0x0F) | (nibble << 4));
                 else
                     _memory[byteIndex] = (byte)((_memory[byteIndex] & 0xF0) | nibble);

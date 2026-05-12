@@ -100,6 +100,9 @@ namespace laboratorioPractica3
             var emittedExtDefSymbols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var emittedExtRefSymbols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+            var defineRecord = new Records.DefineRecord();
+            var referRecord = new Records.ReferRecord();
+
             foreach (var linea in lineasSeccion)
             {
                 string op = linea.IntermLine.Operation?.Trim().ToUpperInvariant() ?? string.Empty;
@@ -108,17 +111,22 @@ namespace laboratorioPractica3
                     var symbolsInLine = ParseSymbolList(linea.IntermLine.Operand)
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList();
-                    if (symbolsInLine.Count > 0)
+                    
+                    foreach (var symbol in symbolsInLine)
                     {
-                        foreach (var symbol in symbolsInLine)
-                        {
-                            if (!emittedExtDefSymbols.Add(symbol))
-                                continue;
+                        if (!emittedExtDefSymbols.Add(symbol))
+                            continue;
 
-                            var defLine = lineasSeccion.FirstOrDefault(l =>
-                                string.Equals(l.IntermLine.Label, symbol, StringComparison.OrdinalIgnoreCase));
-                            int relAddr = defLine == null ? 0 : Math.Max(0, ObtenerDireccionEfectiva(defLine.IntermLine) - sectionStart);
-                            modulo.D.Add(new DefineRecord(symbol, relAddr));
+                        var defLine = lineasSeccion.FirstOrDefault(l =>
+                            string.Equals(l.IntermLine.Label, symbol, StringComparison.OrdinalIgnoreCase));
+                        int relAddr = defLine == null ? 0 : Math.Max(0, ObtenerDireccionEfectiva(defLine.IntermLine) - sectionStart);
+                        
+                        defineRecord.Definitions.Add((symbol, relAddr));
+                        
+                        if (defineRecord.Definitions.Count >= 6) // Limitar a 6 por registro para no exceder longitud razonable
+                        {
+                            modulo.D.Add(defineRecord);
+                            defineRecord = new Records.DefineRecord();
                         }
                     }
                 }
@@ -129,13 +137,24 @@ namespace laboratorioPractica3
                         .Where(s => emittedExtRefSymbols.Add(s))
                         .ToList();
 
-                    if (symbolsInLine.Count > 0)
+                    foreach (var symbol in symbolsInLine)
                     {
-                        foreach (var symbol in symbolsInLine)
-                            modulo.R.Add(new ReferRecord(symbol));
+                        referRecord.References.Add(symbol);
+                        
+                        if (referRecord.References.Count >= 12) // Limitar a 12 por registro
+                        {
+                            modulo.R.Add(referRecord);
+                            referRecord = new Records.ReferRecord();
+                        }
                     }
                 }
             }
+
+            if (defineRecord.Definitions.Count > 0)
+                modulo.D.Add(defineRecord);
+            
+            if (referRecord.References.Count > 0)
+                modulo.R.Add(referRecord);
         }
 
         private void AgregarRegistrosTextoYModificacion(ObjectModule modulo, IReadOnlyList<ObjectCodeLine> lineasSeccion)
@@ -143,13 +162,13 @@ namespace laboratorioPractica3
             int inicioTexto = -1;
             string codigoTexto = string.Empty;
             int conteoBytesTexto = 0;
-            var registrosModificacion = new List<RegistroModificacion>();
+            var registrosModificacion = new List<Records.ModificationRecord>();
 
             void VaciarTexto()
             {
                 if (conteoBytesTexto <= 0)
                     return;
-                modulo.T.Add(new TextRecord
+                modulo.T.Add(new Records.TextRecord
                 {
                     StartAddress = inicioTexto,
                     HexBytes = codigoTexto
@@ -169,7 +188,6 @@ namespace laboratorioPractica3
                     continue;
                 }
 
-                // Eliminar marcas de display al final para dejar solo bytes hex válidos.
                 string codigoLimpio = laboratorioPractica3.Utils.ObjectCodeUtils.StripDisplayMarks(linea.ObjectCode);
                 
                 int bytesLinea = codigoLimpio.Length / 2;
@@ -191,25 +209,20 @@ namespace laboratorioPractica3
                 int longitudHalfBytes = string.Equals(linea.IntermLine.Operation, "WORD", StringComparison.OrdinalIgnoreCase) ? 0x06 : 0x05;
 
                 var modificaciones = RecolectarModificaciones(linea);
-                if (modificaciones.Count == 0)
-                    continue;
-
                 foreach (var mod in modificaciones)
                 {
-                    registrosModificacion.Add(new RegistroModificacion(direccionMod, longitudHalfBytes, mod.Sign, mod.Symbol));
+                    registrosModificacion.Add(new Records.ModificationRecord
+                    {
+                        Address = direccionMod,
+                        HalfBytesLength = longitudHalfBytes,
+                        Sign = mod.Sign,
+                        Symbol = mod.Symbol
+                    });
                 }
             }
 
             VaciarTexto();
-
-            foreach (var registro in registrosModificacion)
-            {
-                modulo.M.Add(new ModificationRecord(
-                    registro.Direccion,
-                    registro.LongitudMediosBytes,
-                    registro.Sign,
-                    registro.Symbol));
-            }
+            modulo.M.AddRange(registrosModificacion);
         }
 
         private List<ModificationRequest> RecolectarModificaciones(ObjectCodeLine linea)

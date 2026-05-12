@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using laboratorioPractica3.Records;
 
 namespace laboratorioPractica3
 {
@@ -48,122 +49,35 @@ namespace laboratorioPractica3
         public string Name { get; set; } = "NONAME";
         public int StartAddress { get; set; }
         public int Length { get; set; }
-        public List<DefineRecord> D { get; } = new();
-        public List<ReferRecord> R { get; } = new();
-        public List<TextRecord> T { get; } = new();
-        public List<ModificationRecord> M { get; } = new();
-        public EndRecord? E { get; set; }
+        public List<Records.DefineRecord> D { get; } = new();
+        public List<Records.ReferRecord> R { get; } = new();
+        public List<Records.TextRecord> T { get; } = new();
+        public List<Records.ModificationRecord> M { get; } = new();
+        public Records.EndRecord? E { get; set; }
 
         public List<string> ToRecords(bool emitEndAddress)
         {
             var output = new List<string>();
-            output.Add(BuildHeaderRecord());
-            AddDefinitionRecords(output);
-            AddReferenceRecords(output);
-            AddTextRecords(output);
-            AddModificationRecords(output);
-            output.Add(BuildEndRecord(emitEndAddress));
+            
+            var h = new HeaderRecord { ProgramName = Name, StartAddress = StartAddress, Length = Length };
+            output.Add(h.Serialize());
+
+            foreach (var d in D) output.Add(d.Serialize());
+            foreach (var r in R) output.Add(r.Serialize());
+            foreach (var t in T) output.Add(t.Serialize());
+            foreach (var m in M) output.Add(m.Serialize());
+
+            if (E != null)
+            {
+                var e = new Records.EndRecord { ExecutionAddress = emitEndAddress ? E.ExecutionAddress : (int?)null };
+                output.Add(e.Serialize());
+            }
+            else
+            {
+                output.Add(new Records.EndRecord().Serialize());
+            }
 
             return output;
         }
-
-        private string BuildHeaderRecord()
-            => $"H{Name.PadRight(6).Substring(0, 6)}{StartAddress:X6}{Length:X6}";
-
-        private void AddDefinitionRecords(List<string> output)
-        {
-            if (D.Count == 0)
-                return;
-
-            foreach (var d in D)
-            {
-                output.Add($"D{d.Symbol.Trim().PadRight(6).Substring(0, 6)}{d.RelativeAddress:X6}");
-            }
-        }
-
-        private void AddReferenceRecords(List<string> output)
-        {
-            if (R.Count == 0)
-                return;
-
-            var chunk = new StringBuilder("R");
-            foreach (var r in R)
-                chunk.Append(r.Symbol.Trim().PadRight(6).Substring(0, 6));
-            output.Add(chunk.ToString());
-        }
-
-        private void AddTextRecords(List<string> output)
-            => output.AddRange(T.Select(t => t.ToRecord()));
-
-        private void AddModificationRecords(List<string> output)
-            => output.AddRange(M.Select(m => m.ToRecord()));
-
-        private string BuildEndRecord(bool emitEndAddress)
-        {
-            if (E != null)
-                return emitEndAddress ? $"E{E.Value.ExecutionAddress:X6}" : "E      ";
-
-            return emitEndAddress ? "E000000" : "E      ";
-        }
-    }
-
-    public readonly struct DefineRecord
-    {
-        public DefineRecord(string symbol, int relativeAddress)
-        {
-            Symbol = symbol;
-            RelativeAddress = relativeAddress;
-        }
-
-        public string Symbol { get; }
-        public int RelativeAddress { get; }
-    }
-
-    public readonly struct ReferRecord
-    {
-        public ReferRecord(string symbol)
-        {
-            Symbol = symbol;
-        }
-
-        public string Symbol { get; }
-    }
-
-    public sealed class TextRecord
-    {
-        public int StartAddress { get; set; }
-        public string HexBytes { get; set; } = string.Empty;
-
-        public int LengthInBytes => string.IsNullOrEmpty(HexBytes) ? 0 : HexBytes.Length / 2;
-
-        public string ToRecord() => $"T{StartAddress:X6}{LengthInBytes:X2}{HexBytes}";
-    }
-
-    public readonly struct ModificationRecord
-    {
-        public ModificationRecord(int address, int halfBytesLength, char sign, string symbol)
-        {
-            Address = address;
-            HalfBytesLength = halfBytesLength;
-            Sign = sign;
-            Symbol = symbol;
-        }
-
-        public int Address { get; }
-        public int HalfBytesLength { get; }
-        public char Sign { get; }
-        public string Symbol { get; }
-
-        public string ToRecord() => $"M{Address:X6}{HalfBytesLength:X2}{Sign}{Symbol.Trim().PadRight(6).Substring(0, 6)}";
-    }
-
-    public readonly struct EndRecord
-    {
-        public EndRecord(int executionAddress)
-        {
-            ExecutionAddress = executionAddress;
-        }
-
-        public int ExecutionAddress { get; }
     }
 }

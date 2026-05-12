@@ -92,26 +92,8 @@ namespace laboratorioPractica3
                 return true;
             }
 
-            // Fallback: símbolo único en cualquier sección
-            SymbolInfo? unique = null;
-            int matches = 0;
-            foreach (var table in _symbolTableBySection.Values)
-            {
-                if (table.TryGetValue(name, out var candidate))
-                {
-                    unique = candidate;
-                    matches++;
-                    if (matches > 1)
-                        return false; // ambiguo entre secciones
-                }
-            }
-
-            if (matches == 1 && unique != null)
-            {
-                info = unique;
-                return true;
-            }
-
+            // Símbolos de otras secciones NO deben ser visibles a menos que se declaren como EXTREF
+            // (lo cual los añade a la tabla de la sección actual).
             return false;
         }
 

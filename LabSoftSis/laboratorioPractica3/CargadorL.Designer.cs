@@ -29,16 +29,24 @@
         private void InitializeComponent()
         {
             groupBox1 = new GroupBox();
-            cargarProg = new Button();
-            label1 = new Label();
-            label2 = new Label();
-            DirCarga = new TextBox();
             TamProg = new TextBox();
+            DirCarga = new TextBox();
+            label2 = new Label();
+            label1 = new Label();
+            cargarProg = new Button();
             MapaMem = new GroupBox();
             dataGridView1 = new DataGridView();
+            groupBox2 = new GroupBox();
+            dataGridView2 = new DataGridView();
+            seccCont = new DataGridViewTextBoxColumn();
+            simCol = new DataGridViewTextBoxColumn();
+            dirCol = new DataGridViewTextBoxColumn();
+            longCol = new DataGridViewTextBoxColumn();
             groupBox1.SuspendLayout();
             MapaMem.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)dataGridView1).BeginInit();
+            groupBox2.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)dataGridView2).BeginInit();
             SuspendLayout();
             // 
             // groupBox1
@@ -54,23 +62,19 @@
             groupBox1.TabIndex = 0;
             groupBox1.TabStop = false;
             // 
-            // cargarProg
+            // TamProg
             // 
-            cargarProg.Location = new Point(17, 40);
-            cargarProg.Name = "cargarProg";
-            cargarProg.Size = new Size(170, 52);
-            cargarProg.TabIndex = 0;
-            cargarProg.Text = "Cargar Programa ";
-            cargarProg.UseVisualStyleBackColor = true;
+            TamProg.Location = new Point(379, 53);
+            TamProg.Name = "TamProg";
+            TamProg.Size = new Size(155, 27);
+            TamProg.TabIndex = 4;
             // 
-            // label1
+            // DirCarga
             // 
-            label1.AutoSize = true;
-            label1.Location = new Point(212, 23);
-            label1.Name = "label1";
-            label1.Size = new Size(136, 20);
-            label1.TabIndex = 1;
-            label1.Text = "Dirección de Carga";
+            DirCarga.Location = new Point(212, 53);
+            DirCarga.Name = "DirCarga";
+            DirCarga.Size = new Size(136, 27);
+            DirCarga.TabIndex = 3;
             // 
             // label2
             // 
@@ -81,19 +85,23 @@
             label2.TabIndex = 2;
             label2.Text = "Tamaño del Programa";
             // 
-            // DirCarga
+            // label1
             // 
-            DirCarga.Location = new Point(212, 53);
-            DirCarga.Name = "DirCarga";
-            DirCarga.Size = new Size(136, 27);
-            DirCarga.TabIndex = 3;
+            label1.AutoSize = true;
+            label1.Location = new Point(212, 23);
+            label1.Name = "label1";
+            label1.Size = new Size(136, 20);
+            label1.TabIndex = 1;
+            label1.Text = "Dirección de Carga";
             // 
-            // TamProg
+            // cargarProg
             // 
-            TamProg.Location = new Point(379, 53);
-            TamProg.Name = "TamProg";
-            TamProg.Size = new Size(155, 27);
-            TamProg.TabIndex = 4;
+            cargarProg.Location = new Point(17, 40);
+            cargarProg.Name = "cargarProg";
+            cargarProg.Size = new Size(170, 52);
+            cargarProg.TabIndex = 0;
+            cargarProg.Text = "Cargar Programa ";
+            cargarProg.UseVisualStyleBackColor = true;
             // 
             // MapaMem
             // 
@@ -114,11 +122,64 @@
             dataGridView1.Size = new Size(766, 456);
             dataGridView1.TabIndex = 0;
             // 
+            // groupBox2
+            // 
+            groupBox2.Controls.Add(dataGridView2);
+            groupBox2.Location = new Point(823, 12);
+            groupBox2.Name = "groupBox2";
+            groupBox2.Size = new Size(524, 431);
+            groupBox2.TabIndex = 2;
+            groupBox2.TabStop = false;
+            groupBox2.Text = "TabSE";
+            // 
+            // dataGridView2
+            // 
+            dataGridView2.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            dataGridView2.Columns.AddRange(new DataGridViewColumn[] { seccCont, simCol, dirCol, longCol });
+            dataGridView2.Location = new Point(4, 32);
+            dataGridView2.Name = "dataGridView2";
+            dataGridView2.RowHeadersWidth = 51;
+            dataGridView2.Size = new Size(501, 188);
+            dataGridView2.TabIndex = 0;
+            // 
+            // seccCont
+            // 
+            seccCont.AutoSizeMode = DataGridViewAutoSizeColumnMode.ColumnHeader;
+            seccCont.HeaderText = "Seccion de control";
+            seccCont.MinimumWidth = 6;
+            seccCont.Name = "seccCont";
+            seccCont.Width = 147;
+            // 
+            // simCol
+            // 
+            simCol.AutoSizeMode = DataGridViewAutoSizeColumnMode.ColumnHeader;
+            simCol.HeaderText = "Simbolo";
+            simCol.MinimumWidth = 6;
+            simCol.Name = "simCol";
+            simCol.Width = 94;
+            // 
+            // dirCol
+            // 
+            dirCol.AutoSizeMode = DataGridViewAutoSizeColumnMode.ColumnHeader;
+            dirCol.HeaderText = "Direccion";
+            dirCol.MinimumWidth = 6;
+            dirCol.Name = "dirCol";
+            dirCol.Width = 101;
+            // 
+            // longCol
+            // 
+            longCol.AutoSizeMode = DataGridViewAutoSizeColumnMode.ColumnHeader;
+            longCol.HeaderText = "Longitud";
+            longCol.MinimumWidth = 6;
+            longCol.Name = "longCol";
+            longCol.Width = 97;
+            // 
             // CargadorL
             // 
             AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(802, 741);
+            ClientSize = new Size(1359, 741);
+            Controls.Add(groupBox2);
             Controls.Add(MapaMem);
             Controls.Add(groupBox1);
             Name = "CargadorL";
@@ -127,6 +188,8 @@
             groupBox1.PerformLayout();
             MapaMem.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)dataGridView1).EndInit();
+            groupBox2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)dataGridView2).EndInit();
             ResumeLayout(false);
         }
 
@@ -140,5 +203,11 @@
         private Label label1;
         private GroupBox MapaMem;
         private DataGridView dataGridView1;
+        private GroupBox groupBox2;
+        private DataGridView dataGridView2;
+        private DataGridViewTextBoxColumn seccCont;
+        private DataGridViewTextBoxColumn simCol;
+        private DataGridViewTextBoxColumn dirCol;
+        private DataGridViewTextBoxColumn longCol;
     }
 }
