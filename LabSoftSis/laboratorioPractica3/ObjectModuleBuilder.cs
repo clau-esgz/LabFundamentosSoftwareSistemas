@@ -204,10 +204,39 @@ namespace laboratorioPractica3
                 codigoTexto += codigoLimpio;
                 conteoBytesTexto += bytesLinea;
 
-                int direccionMod = string.Equals(linea.IntermLine.Operation, "WORD", StringComparison.OrdinalIgnoreCase)
-                    ? lineAddress
-                    : lineAddress + 1;
-                int longitudHalfBytes = string.Equals(linea.IntermLine.Operation, "WORD", StringComparison.OrdinalIgnoreCase) ? 0x06 : 0x05;
+                // BUG FIX #1: Dirección del registro M debe ser SIEMPRE el primer byte (byte más a la izquierda)
+                // Especificación SIC/XE: "La dirección del registro M es la dirección del BYTE MÁS A LA IZQUIERDA del campo a modificar"
+                // NO debe haber desplazamiento de +1 para instrucciones que no son WORD
+                int direccionMod = lineAddress;
+
+                // BUG FIX #2: Calcular half-bytes (longitud de modificación) según tipo de instrucción
+                // - WORD: 24 bits = 6 half-bytes (0x06)
+                // - Formato 4: 20 bits = 5 half-bytes (0x05)
+                // - Formato 3: 12 bits = 3 half-bytes (0x03)
+                // - BYTE: 2 half-bytes por byte (2, 4, 6 depending on length)
+                int longitudHalfBytes;
+                if (string.Equals(linea.IntermLine.Operation, "WORD", StringComparison.OrdinalIgnoreCase))
+                {
+                    longitudHalfBytes = 0x06;  // 24-bit = 6 nibbles
+                }
+                else if (linea.IntermLine.Format == 4)
+                {
+                    longitudHalfBytes = 0x05;  // 20-bit = 5 nibbles
+                }
+                else if (linea.IntermLine.Format == 3)
+                {
+                    longitudHalfBytes = 0x03;  // 12-bit displacement = 3 nibbles
+                }
+                else if (string.Equals(linea.IntermLine.Operation, "BYTE", StringComparison.OrdinalIgnoreCase))
+                {
+                    // BYTE: 2 nibbles (half-bytes) por byte
+                    longitudHalfBytes = bytesLinea * 2;
+                }
+                else
+                {
+                    // Default a formato 4 (20 bits)
+                    longitudHalfBytes = 0x05;
+                }
 
                 var modificaciones = RecolectarModificaciones(linea);
                 foreach (var mod in modificaciones)

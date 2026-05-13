@@ -73,13 +73,25 @@ namespace laboratorioPractica3.Loader
 
         /// <summary>
         /// Intenta reservar región de memoria.
-        /// Valida: rango válido, sin solapamiento, dentro de límite.
+        /// Valida: rango válido (20-bit SIC/XE), sin solapamiento, dentro de límite.
         /// </summary>
         public bool AllocateMemory(int address, int size, string sectionName, out LoaderError? error)
         {
             error = null;
 
-            if (address < 0 || address + size > MaxMemorySize)
+            // BUG FIX #5: Validar que dirección no exceda 20-bit SIC/XE (máximo 0xFFFFF = 1,048,575)
+            const int MAX_20BIT_ADDRESS = 0xFFFFF;  // 1,048,575
+            if (address < 0 || address > MAX_20BIT_ADDRESS)
+            {
+                error = new LoaderError
+                {
+                    Message = $"Dirección fuera de rango SIC/XE (20-bit): 0x{address:X6}. Máximo permitido: 0x{MAX_20BIT_ADDRESS:X6}",
+                    Type = LoaderError.ErrorType.MemoryConflict
+                };
+                return false;
+            }
+
+            if (address + size > MaxMemorySize)
             {
                 error = new LoaderError
                 {
