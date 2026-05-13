@@ -62,6 +62,43 @@ namespace laboratorioPractica3
             return registros;
         }
 
+        public List<string> ExportarACSVPorSeccion(string outputDirectory)
+        {
+            Directory.CreateDirectory(outputDirectory);
+
+            var modulos = GenerarModulos();
+            var rutas = new List<string>();
+            var usados = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var modulo in modulos)
+            {
+                bool isPrimarySection = string.Equals(modulo.Name, _nombrePrograma, StringComparison.OrdinalIgnoreCase) ||
+                                        string.Equals(modulo.Name, "Por Omision", StringComparison.OrdinalIgnoreCase);
+
+                string baseName = SanitizeFileName(string.IsNullOrWhiteSpace(modulo.Name) ? "SECCION" : modulo.Name);
+                string fileName = baseName;
+                int suffix = 2;
+
+                while (!usados.Add(fileName))
+                {
+                    fileName = $"{baseName}_{suffix}";
+                    suffix++;
+                }
+
+                string filePath = Path.Combine(outputDirectory, $"{fileName}.csv");
+
+                using var writer = new StreamWriter(filePath, false, Encoding.UTF8);
+                foreach (var registro in modulo.ToRecords(isPrimarySection))
+                {
+                    writer.WriteLine($"\"{registro}\"");
+                }
+
+                rutas.Add(filePath);
+            }
+
+            return rutas;
+        }
+
         public List<ObjectModule> GenerarModulos()
         {
             if (_modulosPreconstruidos != null && _modulosPreconstruidos.Count > 0)
@@ -88,24 +125,19 @@ namespace laboratorioPractica3
 
         public void ExportarACSV(string filePath)
         {
-            // Exporta los registros objeto a CSV (1 registro por línea)
-            // para facilitar inspección y apertura en Excel.
-            var registros = GenerarRegistros();
-            // Aseguramos que la carpeta exista
-            var dir = Path.GetDirectoryName(filePath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-            {
-                Directory.CreateDirectory(dir);
-            }
+            var directory = Path.GetDirectoryName(filePath);
+            if (string.IsNullOrWhiteSpace(directory))
+                directory = Directory.GetCurrentDirectory();
 
-            using (var writer = new StreamWriter(filePath))
-            {
-                // Un archivo CSV con los registros, cada registro en su propia línea o celda
-                foreach (var r in registros)
-                {
-                    writer.WriteLine($"\"{r}\""); // Agregamos comillas para asegurar el parseo CSV limpio en Excel
-                }
-            }
+            ExportarACSVPorSeccion(directory);
+        }
+
+        private static string SanitizeFileName(string value)
+        {
+            foreach (char invalid in Path.GetInvalidFileNameChars())
+                value = value.Replace(invalid, '_');
+
+            return value.Trim();
         }
 
         public string ObtenerReporteConsola()

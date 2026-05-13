@@ -33,6 +33,8 @@
             DirCarga = new TextBox();
             label2 = new Label();
             label1 = new Label();
+            label3 = new Label();
+            programaInicioComboBox = new ComboBox();
             cargarProg = new Button();
             MapaMem = new GroupBox();
             dataGridView1 = new DataGridView();
@@ -55,6 +57,8 @@
             groupBox1.Controls.Add(DirCarga);
             groupBox1.Controls.Add(label2);
             groupBox1.Controls.Add(label1);
+            groupBox1.Controls.Add(label3);
+            groupBox1.Controls.Add(programaInicioComboBox);
             groupBox1.Controls.Add(cargarProg);
             groupBox1.Location = new Point(4, 2);
             groupBox1.Name = "groupBox1";
@@ -93,6 +97,24 @@
             label1.Size = new Size(136, 20);
             label1.TabIndex = 1;
             label1.Text = "Dirección de Carga";
+            // 
+            // label3
+            // 
+            label3.AutoSize = true;
+            label3.Location = new Point(545, 23);
+            label3.Name = "label3";
+            label3.Size = new Size(130, 20);
+            label3.TabIndex = 5;
+            label3.Text = "Programa inicio";
+            // 
+            // programaInicioComboBox
+            // 
+            programaInicioComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            programaInicioComboBox.FormattingEnabled = true;
+            programaInicioComboBox.Location = new Point(545, 52);
+            programaInicioComboBox.Name = "programaInicioComboBox";
+            programaInicioComboBox.Size = new Size(221, 28);
+            programaInicioComboBox.TabIndex = 6;
             // 
             // cargarProg
             // 
@@ -201,6 +223,8 @@
         private TextBox DirCarga;
         private Label label2;
         private Label label1;
+        private Label label3;
+        private ComboBox programaInicioComboBox;
         private GroupBox MapaMem;
         private DataGridView dataGridView1;
         private GroupBox groupBox2;

@@ -1,0 +1,4 @@
+ANALIZADOR LÉXICO-SINTÁCTICO
+Generado: 2026-05-12 23:44:57
+
+Linea 19, Columna 17 - [ERROR SINTACTICO]: Instruccion o directiva no valida cerca de 'TABLE'. Verifique la sintaxis de la linea.

@@ -282,7 +282,7 @@
             EnsambladoStripMenuItem4.Name = "EnsambladoStripMenuItem4";
             EnsambladoStripMenuItem4.Size = new Size(164, 26);
             EnsambladoStripMenuItem4.Text = "Ensamblar";
-            EnsambladoStripMenuItem4.Click += toolStripMenuItem4_Click;
+            EnsambladoStripMenuItem4.Click += EnsambladoStripMenuItem4_Click;
             // 
             // cargarToolStripMenuItem
             // 

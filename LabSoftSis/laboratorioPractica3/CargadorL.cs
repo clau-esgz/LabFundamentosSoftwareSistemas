@@ -18,12 +18,16 @@ namespace laboratorioPractica3
         private LoaderResult? _loaderResult;
         private readonly LoaderLinker _linker = new();
         private MemoryManager? _memoryManager;
+        private ObjectModuleParsed? _selectedStartModule;
 
         public CargadorL()
         {
             InitializeComponent();
+            if (string.IsNullOrWhiteSpace(DirCarga.Text))
+                DirCarga.Text = "0000";
             cargarProg.Click += CargarProg_Click;
             dataGridView2.SelectionChanged += DataGridView2_SelectionChanged;
+            programaInicioComboBox.SelectedIndexChanged += ProgramaInicioComboBox_SelectedIndexChanged;
         }
 
         private void CargarProg_Click(object sender, EventArgs e)
@@ -45,13 +49,15 @@ namespace laboratorioPractica3
             try
             {
                 var parser = new ObjectProgramParser();
-                _modules = parser.ParseCSV(filePath);
+                var newModules = parser.ParseCSV(filePath);
 
-                if (_modules.Count == 0)
+                if (newModules.Count == 0)
                 {
                     MessageBox.Show("No se encontraron módulos válidos en el archivo.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
+
+                _modules.AddRange(newModules);
 
                 ExecutePass1();
             }
@@ -63,11 +69,7 @@ namespace laboratorioPractica3
 
         private void ExecutePass1()
         {
-            int initialAddr = 0;
-            if (!string.IsNullOrWhiteSpace(DirCarga.Text))
-            {
-                int.TryParse(DirCarga.Text, System.Globalization.NumberStyles.HexNumber, null, out initialAddr);
-            }
+            int initialAddr = ParseHexAddress(DirCarga.Text);
 
             var tabse = new ExternalSymbolTable();
             var pass1Result = new LoaderPass1().Execute(_modules, initialAddr, tabse);
@@ -95,14 +97,49 @@ namespace laboratorioPractica3
                 }
             }
 
-            // Seleccionar por defecto la sección que tenga dirección de ejecución
-            var entryModule = _modules.FirstOrDefault(m => m.ExecutionAddress != 0) ?? _modules.FirstOrDefault();
-            if (entryModule != null)
-            {
-                MessageBox.Show($"Se ha detectado '{entryModule.Name}' como sección de inicio por defecto. Puedes seleccionar otra en la tabla.", "Cargador", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-            
+            RefrescarSelectorProgramaInicio();
             ExecutePass2();
+        }
+
+        private void RefrescarSelectorProgramaInicio()
+        {
+            var previousSelection = _selectedStartModule;
+
+            var opciones = _modules
+                .Select((module, index) => new ProgramaInicioOption(index + 1, module))
+                .ToList();
+
+            programaInicioComboBox.SelectedIndexChanged -= ProgramaInicioComboBox_SelectedIndexChanged;
+            programaInicioComboBox.DataSource = null;
+            programaInicioComboBox.DisplayMember = nameof(ProgramaInicioOption.Label);
+            programaInicioComboBox.ValueMember = nameof(ProgramaInicioOption.Module);
+            programaInicioComboBox.DataSource = opciones;
+
+            if (previousSelection != null)
+            {
+                int index = opciones.FindIndex(o => ReferenceEquals(o.Module, previousSelection));
+                if (index >= 0)
+                    programaInicioComboBox.SelectedIndex = index;
+            }
+
+            if (programaInicioComboBox.SelectedIndex < 0 && opciones.Count > 0)
+                programaInicioComboBox.SelectedIndex = 0;
+
+            programaInicioComboBox.SelectedIndexChanged += ProgramaInicioComboBox_SelectedIndexChanged;
+        }
+
+        private void ProgramaInicioComboBox_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            if (programaInicioComboBox.SelectedItem is ProgramaInicioOption option)
+            {
+                _selectedStartModule = option.Module;
+
+                if (_loaderResult != null)
+                {
+                    _loaderResult.ExecutionEntryPoint = CalcularPuntoInicio(_selectedStartModule);
+                    UpdateStatus();
+                }
+            }
         }
 
         private void DataGridView2_SelectionChanged(object sender, EventArgs e)
@@ -118,9 +155,7 @@ namespace laboratorioPractica3
                     var module = _modules.FirstOrDefault(m => m.Name == sectionName);
                     if (module != null && _loaderResult != null)
                     {
-                        int loadAddr = _loaderResult.Pass1.SectionLoadAddresses[module.Name];
-                        int entryPoint = loadAddr + module.ExecutionAddress;
-                        _loaderResult.ExecutionEntryPoint = entryPoint;
+                        SeleccionarModuloInicio(module);
                         
                         if (_memoryManager != null)
                             UpdateMemoryMap(_memoryManager);
@@ -146,8 +181,10 @@ namespace laboratorioPractica3
             var pass2 = new LoaderPass2();
             int entryPoint = pass2.Execute(_loaderResult.Pass1, _modules, tabse, _memoryManager, _loaderResult.AllErrors);
             
-            // Si el usuario no ha seleccionado manualmente, usamos el detectado
-            if (_loaderResult.ExecutionEntryPoint == 0)
+            // Si el usuario no ha seleccionado manualmente, usamos el módulo elegido o el detectado.
+            if (_selectedStartModule != null)
+                _loaderResult.ExecutionEntryPoint = CalcularPuntoInicio(_selectedStartModule);
+            else if (_loaderResult.ExecutionEntryPoint == 0)
                 _loaderResult.ExecutionEntryPoint = entryPoint;
 
             _loaderResult.IsSuccessful = _loaderResult.AllErrors.Count == 0;
@@ -216,6 +253,61 @@ namespace laboratorioPractica3
                 // Mostrar punto de ejecución actual
                 label2.Text = $"Punto de Ejecución: {_loaderResult.ExecutionEntryPoint:X6}";
             }
+        }
+
+        private void SeleccionarModuloInicio(ObjectModuleParsed module)
+        {
+            _selectedStartModule = module;
+
+            var optionIndex = programaInicioComboBox.Items
+                .Cast<object>()
+                .OfType<ProgramaInicioOption>()
+                .Select((option, index) => new { option, index })
+                .FirstOrDefault(x => ReferenceEquals(x.option.Module, module))?.index;
+
+            if (optionIndex.HasValue && programaInicioComboBox.SelectedIndex != optionIndex.Value)
+                programaInicioComboBox.SelectedIndex = optionIndex.Value;
+
+            if (_loaderResult != null)
+            {
+                _loaderResult.ExecutionEntryPoint = CalcularPuntoInicio(module);
+                UpdateStatus();
+            }
+        }
+
+        private int CalcularPuntoInicio(ObjectModuleParsed module)
+        {
+            if (_loaderResult == null)
+                return 0;
+
+            if (!_loaderResult.Pass1.SectionLoadAddresses.TryGetValue(module.Name, out int loadAddr))
+                loadAddr = ParseHexAddress(DirCarga.Text);
+
+            int offset = module.ExecutionAddress != 0 ? module.ExecutionAddress : module.StartAddress;
+            return loadAddr + offset;
+        }
+
+        private static int ParseHexAddress(string? text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return 0;
+
+            return int.TryParse(text.Trim(), System.Globalization.NumberStyles.HexNumber, null, out int value)
+                ? value
+                : 0;
+        }
+
+        private sealed class ProgramaInicioOption
+        {
+            public ProgramaInicioOption(int index, ObjectModuleParsed module)
+            {
+                Module = module;
+                Label = $"{index}. {module.Name}";
+            }
+
+            public string Label { get; }
+            public ObjectModuleParsed Module { get; }
+            public override string ToString() => Label;
         }
     }
 }
