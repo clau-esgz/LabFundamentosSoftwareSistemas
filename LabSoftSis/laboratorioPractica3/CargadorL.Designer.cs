@@ -65,6 +65,7 @@
             groupBox1.Size = new Size(784, 125);
             groupBox1.TabIndex = 0;
             groupBox1.TabStop = false;
+            groupBox1.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             // 
             // TamProg
             // 
@@ -134,6 +135,7 @@
             MapaMem.TabIndex = 1;
             MapaMem.TabStop = false;
             MapaMem.Text = "MapaMemoria";
+            MapaMem.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             // 
             // dataGridView1
             // 
@@ -143,6 +145,7 @@
             dataGridView1.RowHeadersWidth = 51;
             dataGridView1.Size = new Size(766, 456);
             dataGridView1.TabIndex = 0;
+            dataGridView1.Dock = DockStyle.Fill;
             // 
             // groupBox2
             // 
@@ -153,6 +156,7 @@
             groupBox2.TabIndex = 2;
             groupBox2.TabStop = false;
             groupBox2.Text = "TabSE";
+            groupBox2.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Right;
             // 
             // dataGridView2
             // 
@@ -163,6 +167,7 @@
             dataGridView2.RowHeadersWidth = 51;
             dataGridView2.Size = new Size(501, 188);
             dataGridView2.TabIndex = 0;
+            dataGridView2.Dock = DockStyle.Fill;
             // 
             // seccCont
             // 
@@ -206,6 +211,7 @@
             Controls.Add(groupBox1);
             Name = "CargadorL";
             Text = "Cargador";
+            AutoScroll = true;
             groupBox1.ResumeLayout(false);
             groupBox1.PerformLayout();
             MapaMem.ResumeLayout(false);
