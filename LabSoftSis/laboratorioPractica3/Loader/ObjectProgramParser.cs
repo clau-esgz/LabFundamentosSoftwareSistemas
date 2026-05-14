@@ -87,7 +87,7 @@ namespace laboratorioPractica3.Loader
                     case 'M':
                         if (currentModule != null)
                         {
-                            var m = ModificationRecord.Parse(record);
+                            var m = Records.ModificationRecord.Parse(record);
                             currentModule.ModificationRecords.Add(new Loader.ModificationRecord
                             {
                                 Address = m.Address,

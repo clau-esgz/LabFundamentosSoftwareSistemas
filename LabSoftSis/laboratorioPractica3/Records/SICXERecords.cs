@@ -69,7 +69,7 @@ namespace laboratorioPractica3.Records
             foreach (var (symbol, address) in Definitions)
             {
                 sb.Append(symbol.PadRight(6).Substring(0, 6));
-                sb.Append(address:X6);
+                sb.Append(address.ToString("X6"));
             }
             return sb.ToString();
         }

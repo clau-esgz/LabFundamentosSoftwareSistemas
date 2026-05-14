@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using laboratorioPractica3.Records;
 
 namespace laboratorioPractica3
 {
@@ -73,7 +74,7 @@ namespace laboratorioPractica3
             bool isPrimarySection = string.Equals(modulo.Name, _nombrePrograma, StringComparison.OrdinalIgnoreCase) ||
                                    string.Equals(modulo.Name, "Por Omision", StringComparison.OrdinalIgnoreCase);
             int eAddress = isPrimarySection ? _direccionEjecucion : 0;
-            modulo.E = new EndRecord(eAddress);
+            modulo.E = new EndRecord { ExecutionAddress = eAddress };
 
             return modulo;
         }
