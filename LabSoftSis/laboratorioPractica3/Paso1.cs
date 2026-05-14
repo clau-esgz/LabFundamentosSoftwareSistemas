@@ -74,35 +74,27 @@ namespace laboratorioPractica3
         private int NextControlSectionNumber = 1;
         private readonly Dictionary<string, int> CSECT_CP_BY_NAME = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["Por Omision"] = 0
         };
         private readonly Dictionary<string, int> CSECT_NUMBER_BY_NAME = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["Por Omision"] = 0
         };
         private readonly Dictionary<string, Dictionary<string, SymbolInfo>> TABSIM_BY_CSECT = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["Por Omision"] = new Dictionary<string, SymbolInfo>(StringComparer.OrdinalIgnoreCase)
         };
         private readonly Dictionary<string, List<BloqueInfo>> TABBLK_BY_CSECT = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["Por Omision"] = new List<BloqueInfo>()
         };
         private readonly Dictionary<string, HashSet<string>> TABREG_BY_CSECT = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["Por Omision"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         };
         private readonly Dictionary<string, List<string>> EXTDEF_BY_CSECT = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["Por Omision"] = new List<string>()
         };
         private readonly Dictionary<string, List<string>> EXTREF_BY_CSECT = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["Por Omision"] = new List<string>()
         };
         private readonly Dictionary<string, Dictionary<string, List<int>>> EXTDEF_DECL_LINES_BY_CSECT = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["Por Omision"] = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase)
         };
 
         private void EnsureControlSectionContainers(string sectionName)
@@ -311,9 +303,12 @@ namespace laboratorioPractica3
             FinalizeBlocksAndRelocate();
 
             var snapshot = new Dictionary<string, IReadOnlyList<BloqueInfo>>(StringComparer.OrdinalIgnoreCase);
-            foreach (var kv in TABBLK_BY_CSECT)
+            foreach (var sec in CSECT_NUMBER_BY_NAME.OrderBy(kv => kv.Value).Select(kv => kv.Key))
             {
-                var list = kv.Value
+                if (!TABBLK_BY_CSECT.TryGetValue(sec, out var blocks))
+                    continue;
+
+                snapshot[sec] = blocks
                     .OrderBy(b => b.Number)
                     .Select(b => new BloqueInfo
                     {
@@ -324,7 +319,6 @@ namespace laboratorioPractica3
                         Length = b.Length
                     })
                     .ToList();
-                snapshot[kv.Key] = list;
             }
 
             return snapshot;
@@ -776,6 +770,14 @@ namespace laboratorioPractica3
                 CurrentControlSectionNumber = CSECT_NUMBER_BY_NAME[newSectionName];
                 BLOCKS.SwitchBlock("Por Omision");
                 CONTLOC = 0;
+
+                // Registrar explícitamente el bloque por omisión de la nueva sección.
+                var defaultBlock = BLOCKS.CurrentBlock;
+                if (!TABBLK_BY_CSECT[CurrentControlSectionName].Any(b =>
+                    string.Equals(b.Name, defaultBlock.Name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    TABBLK_BY_CSECT[CurrentControlSectionName].Add(defaultBlock);
+                }
 
                 AllowExternalDeclarations = true;
 
@@ -3091,6 +3093,15 @@ namespace laboratorioPractica3
             {
                 var blocks = GetBlocksForSection(sec);
                 int sectionLength = blocks.FinalizeBlocks(0);
+
+                EnsureControlSectionContainers(sec);
+                var finalizedBlocks = blocks.GetAllBlocks()
+                    .OrderBy(b => b.Number)
+                    .ToList();
+
+                TABBLK_BY_CSECT[sec].Clear();
+                foreach (var b in finalizedBlocks)
+                    TABBLK_BY_CSECT[sec].Add(b);
 
                 if (string.Equals(sec, PROGRAM_NAME, StringComparison.OrdinalIgnoreCase) ||
                     (CSECT_NUMBER_BY_NAME.TryGetValue(sec, out int secNum) && secNum == 0))

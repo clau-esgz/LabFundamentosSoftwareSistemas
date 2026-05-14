@@ -251,11 +251,14 @@ namespace laboratorioPractica3.Records
                 throw new ArgumentException("Registro E inválido.");
 
             var rec = new EndRecord();
-            if (record.Length >= 7)
+            if (record.Length > 1)
             {
-                string addrStr = record.Substring(1, 6).Trim();
-                if (!string.IsNullOrWhiteSpace(addrStr) && addrStr != "FFFFFF")
-                    rec.ExecutionAddress = int.Parse(addrStr, NumberStyles.HexNumber);
+                string addrStr = record.Substring(1).Trim();
+                if (!string.IsNullOrWhiteSpace(addrStr) && addrStr.Length <= 6 && addrStr != "FFFFFF")
+                {
+                    if (int.TryParse(addrStr, System.Globalization.NumberStyles.HexNumber, null, out int val))
+                        rec.ExecutionAddress = val;
+                }
             }
             return rec;
         }

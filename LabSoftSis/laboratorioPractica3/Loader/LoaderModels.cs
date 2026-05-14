@@ -81,9 +81,9 @@ namespace laboratorioPractica3.Loader
         public List<ModificationRecord> ModificationRecords { get; } = new();
 
         /// <summary>
-        /// E record: dirección de ejecución (0 si no especificada).
+        /// E record: dirección de ejecución (null si no especificada).
         /// </summary>
-        public int ExecutionAddress { get; set; }
+        public int? ExecutionAddress { get; set; }
     }
 
     /// <summary>

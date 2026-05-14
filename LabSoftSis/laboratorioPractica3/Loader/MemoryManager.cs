@@ -21,6 +21,9 @@ namespace laboratorioPractica3.Loader
         /// </summary>
         public int MaxMemorySize { get; } = 0x100000;
 
+        private readonly HashSet<int> _relocatedAddresses = new();
+        private readonly HashSet<int> _writtenAddresses = new();
+
         public MemoryManager(int maxMemorySize = 0x100000)
         {
             MaxMemorySize = maxMemorySize;
@@ -29,6 +32,9 @@ namespace laboratorioPractica3.Loader
             for (int i = 0; i < _memory.Length; i++)
                 _memory[i] = 0xFF;
         }
+
+        public bool IsRelocated(int address) => _relocatedAddresses.Contains(address);
+        public bool IsWritten(int address) => _writtenAddresses.Contains(address);
 
         /// <summary>
         /// Suma símbolo a TABSE. Valida duplicados.
@@ -131,6 +137,7 @@ namespace laboratorioPractica3.Loader
             for (int i = 0; i < data.Length; i++)
             {
                 _memory[address + i] = data[i];
+                _writtenAddresses.Add(address + i);
             }
 
             return true;
@@ -242,6 +249,9 @@ namespace laboratorioPractica3.Loader
                     _memory[byteIndex] = (byte)((_memory[byteIndex] & 0x0F) | (nibble << 4));
                 else
                     _memory[byteIndex] = (byte)((_memory[byteIndex] & 0xF0) | nibble);
+
+                _relocatedAddresses.Add(byteIndex);
+                _writtenAddresses.Add(byteIndex);
             }
 
             return true;

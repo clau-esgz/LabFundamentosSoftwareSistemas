@@ -206,19 +206,67 @@ namespace laboratorioPractica3
             }
             dataGridView1.Columns.Add("ascii", "ASCII");
 
-            // Determinar rango a mostrar (de la primera dirección de carga hasta el final del programa)
-            int minAddr = _loaderResult!.Pass1.SectionLoadAddresses.Values.Min();
-            int totalLen = _modules.Sum(m => m.Length);
-            int maxAddr = minAddr + totalLen;
+            // Recolectar todas las direcciones importantes (Inicios de sección y símbolos)
+            var sectionAddresses = new HashSet<int>(_loaderResult!.Pass1.SectionLoadAddresses.Values);
+            var symbolAddresses = new HashSet<int>(_loaderResult!.Pass1.SymbolTable.Values.Select(s => s.Address));
 
-            // Redondear a múltiplo de 16
+            // Rango a mostrar
+            int minAddr = _loaderResult!.Pass1.SectionLoadAddresses.Values.Count > 0 
+                ? _loaderResult!.Pass1.SectionLoadAddresses.Values.Min() 
+                : 0;
+            
+            // La dirección final es la mayor dirección escrita o la última sección + su longitud
+            int maxWrittenAddr = 0;
+            if (_modules.Count > 0)
+            {
+                foreach(var module in _modules)
+                {
+                    if (_loaderResult.Pass1.SectionLoadAddresses.TryGetValue(module.Name, out int loadAddr))
+                    {
+                        int endAddr = loadAddr + module.Length;
+                        if (endAddr > maxWrittenAddr) maxWrittenAddr = endAddr;
+                    }
+                }
+            }
+            
             int start = (minAddr / 16) * 16;
-            int end = ((maxAddr + 15) / 16) * 16;
+            int end = ((maxWrittenAddr + 15) / 16) * 16;
 
-            // Limitar para no saturar el DataGridView si el programa es muy grande
-            // pero mostrar al menos lo cargado.
+            bool lastRowWasGap = false;
+
             for (int addr = start; addr < end && addr < memoryManager.MaxMemorySize; addr += 16)
             {
+                bool isImportantRow = false;
+                bool rowHasRelocation = false;
+                bool rowHasSectionStart = false;
+                bool rowHasSymbol = false;
+                bool rowHasData = false;
+                
+                // Verificar qué hay en este bloque de 16
+                for (int i = 0; i < 16; i++)
+                {
+                    int currentAddr = addr + i;
+                    if (sectionAddresses.Contains(currentAddr)) rowHasSectionStart = true;
+                    if (symbolAddresses.Contains(currentAddr)) rowHasSymbol = true;
+                    if (memoryManager.IsRelocated(currentAddr)) rowHasRelocation = true;
+                    if (memoryManager.IsWritten(currentAddr)) rowHasData = true;
+                }
+
+                // Una fila es importante si tiene un inicio de sección, un símbolo, una relocalización o simplemente datos cargados.
+                isImportantRow = rowHasSectionStart || rowHasSymbol || rowHasRelocation || rowHasData;
+
+                if (!isImportantRow)
+                {
+                    if (!lastRowWasGap)
+                    {
+                        int gapRowIndex = dataGridView1.Rows.Add("...", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "");
+                        dataGridView1.Rows[gapRowIndex].DefaultCellStyle.ForeColor = Color.Gray;
+                        lastRowWasGap = true;
+                    }
+                    continue;
+                }
+
+                lastRowWasGap = false;
                 var row = new object[18];
                 row[0] = addr.ToString("X6");
 
@@ -230,17 +278,38 @@ namespace laboratorioPractica3
                     byte b = bytes[i];
                     row[i + 1] = b.ToString("X2");
                     
-                    // ASCII legible
                     if (b >= 32 && b <= 126)
                         sbAscii.Append((char)b);
                     else
                         sbAscii.Append('.');
                 }
                 row[17] = sbAscii.ToString();
-                dataGridView1.Rows.Add(row);
+                
+                int rowIndex = dataGridView1.Rows.Add(row);
+                var gridRow = dataGridView1.Rows[rowIndex];
+
+                // Prioridad de colores de fondo de la FILA
+                if (rowHasSectionStart)
+                {
+                    gridRow.DefaultCellStyle.BackColor = Color.LightBlue; // Sección: Azul
+                    gridRow.Cells[0].Style.Font = new Font(dataGridView1.Font, FontStyle.Bold);
+                }
+                else if (rowHasSymbol)
+                {
+                    gridRow.DefaultCellStyle.BackColor = Color.LightCyan; // Símbolo: Cian
+                }
+
+                // Resaltar celdas individuales relocalizadas
+                for (int i = 0; i < 16; i++)
+                {
+                    if (memoryManager.IsRelocated(addr + i))
+                    {
+                        gridRow.Cells[i + 1].Style.BackColor = Color.Yellow;
+                        gridRow.Cells[i + 1].Style.ForeColor = Color.Red;
+                    }
+                }
             }
 
-            // Aplicar estilo monospaciado
             dataGridView1.DefaultCellStyle.Font = new Font("Courier New", 9);
             dataGridView1.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.AllCells;
         }
@@ -249,9 +318,16 @@ namespace laboratorioPractica3
         {
             if (_loaderResult != null)
             {
-                TamProg.Text = _modules.Sum(m => m.Length).ToString("X6");
-                // Mostrar punto de ejecución actual
-                label2.Text = $"Punto de Ejecución: {_loaderResult.ExecutionEntryPoint:X6}";
+                int totalLen = _modules.Sum(m => m.Length);
+                int startAddr = _loaderResult.Pass1.SectionLoadAddresses.Values.Count > 0 
+                    ? _loaderResult.Pass1.SectionLoadAddresses.Values.Min() 
+                    : ParseHexAddress(DirCarga.Text);
+                int finalAddr = startAddr + totalLen;
+
+                TamProg.Text = totalLen.ToString("X6");
+                
+                // Mostrar punto de ejecución y dirección final
+                label2.Text = $"Punto Ej: {_loaderResult.ExecutionEntryPoint:X6} | Final: {finalAddr:X6}";
             }
         }
 
@@ -283,7 +359,7 @@ namespace laboratorioPractica3
             if (!_loaderResult.Pass1.SectionLoadAddresses.TryGetValue(module.Name, out int loadAddr))
                 loadAddr = ParseHexAddress(DirCarga.Text);
 
-            int offset = module.ExecutionAddress != 0 ? module.ExecutionAddress : module.StartAddress;
+            int offset = module.ExecutionAddress.HasValue ? module.ExecutionAddress.Value : module.StartAddress;
             return loadAddr + offset;
         }
 

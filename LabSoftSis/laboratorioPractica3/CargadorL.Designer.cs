@@ -53,6 +53,7 @@
             // 
             // groupBox1
             // 
+            groupBox1.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             groupBox1.Controls.Add(TamProg);
             groupBox1.Controls.Add(DirCarga);
             groupBox1.Controls.Add(label2);
@@ -62,7 +63,7 @@
             groupBox1.Controls.Add(cargarProg);
             groupBox1.Location = new Point(4, 2);
             groupBox1.Name = "groupBox1";
-            groupBox1.Size = new Size(784, 125);
+            groupBox1.Size = new Size(813, 125);
             groupBox1.TabIndex = 0;
             groupBox1.TabStop = false;
             // 
@@ -70,6 +71,7 @@
             // 
             TamProg.Location = new Point(379, 53);
             TamProg.Name = "TamProg";
+            TamProg.ReadOnly = true;
             TamProg.Size = new Size(155, 27);
             TamProg.TabIndex = 4;
             // 
@@ -127,41 +129,45 @@
             // 
             // MapaMem
             // 
+            MapaMem.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             MapaMem.Controls.Add(dataGridView1);
             MapaMem.Location = new Point(12, 145);
             MapaMem.Name = "MapaMem";
-            MapaMem.Size = new Size(778, 497);
+            MapaMem.Size = new Size(805, 584);
             MapaMem.TabIndex = 1;
             MapaMem.TabStop = false;
-            MapaMem.Text = "MapaMemoria";
+            MapaMem.Text = "Mapa Memoria";
             // 
             // dataGridView1
             // 
+            dataGridView1.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             dataGridView1.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             dataGridView1.Location = new Point(6, 26);
             dataGridView1.Name = "dataGridView1";
             dataGridView1.RowHeadersWidth = 51;
-            dataGridView1.Size = new Size(766, 456);
+            dataGridView1.Size = new Size(793, 552);
             dataGridView1.TabIndex = 0;
             // 
             // groupBox2
             // 
+            groupBox2.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Right;
             groupBox2.Controls.Add(dataGridView2);
             groupBox2.Location = new Point(823, 12);
             groupBox2.Name = "groupBox2";
-            groupBox2.Size = new Size(524, 431);
+            groupBox2.Size = new Size(524, 717);
             groupBox2.TabIndex = 2;
             groupBox2.TabStop = false;
             groupBox2.Text = "TabSE";
             // 
             // dataGridView2
             // 
+            dataGridView2.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             dataGridView2.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             dataGridView2.Columns.AddRange(new DataGridViewColumn[] { seccCont, simCol, dirCol, longCol });
             dataGridView2.Location = new Point(4, 32);
             dataGridView2.Name = "dataGridView2";
             dataGridView2.RowHeadersWidth = 51;
-            dataGridView2.Size = new Size(501, 188);
+            dataGridView2.Size = new Size(514, 679);
             dataGridView2.TabIndex = 0;
             // 
             // seccCont

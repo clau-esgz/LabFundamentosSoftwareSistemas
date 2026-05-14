@@ -68,8 +68,8 @@ namespace laboratorioPractica3.Loader
                     }
                 }
 
-                if (module.ExecutionAddress != 0)
-                    executionEntryPoint = dirSc + module.ExecutionAddress;
+                if (module.ExecutionAddress.HasValue)
+                    executionEntryPoint = dirSc + module.ExecutionAddress.Value;
             }
 
             return executionEntryPoint;
