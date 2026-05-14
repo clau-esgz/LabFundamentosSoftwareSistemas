@@ -36,6 +36,7 @@
             label3 = new Label();
             programaInicioComboBox = new ComboBox();
             cargarProg = new Button();
+            btnNuevo = new Button();
             MapaMem = new GroupBox();
             dataGridView1 = new DataGridView();
             groupBox2 = new GroupBox();
@@ -61,11 +62,13 @@
             groupBox1.Controls.Add(label3);
             groupBox1.Controls.Add(programaInicioComboBox);
             groupBox1.Controls.Add(cargarProg);
+            groupBox1.Controls.Add(btnNuevo);
             groupBox1.Location = new Point(4, 2);
             groupBox1.Name = "groupBox1";
             groupBox1.Size = new Size(813, 125);
             groupBox1.TabIndex = 0;
             groupBox1.TabStop = false;
+            groupBox1.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             // 
             // TamProg
             // 
@@ -120,12 +123,21 @@
             // 
             // cargarProg
             // 
-            cargarProg.Location = new Point(17, 40);
+            cargarProg.Location = new Point(17, 23);
             cargarProg.Name = "cargarProg";
-            cargarProg.Size = new Size(170, 52);
+            cargarProg.Size = new Size(170, 42);
             cargarProg.TabIndex = 0;
             cargarProg.Text = "Cargar Programa ";
             cargarProg.UseVisualStyleBackColor = true;
+            // 
+            // btnNuevo
+            // 
+            btnNuevo.Location = new Point(17, 71);
+            btnNuevo.Name = "btnNuevo";
+            btnNuevo.Size = new Size(170, 42);
+            btnNuevo.TabIndex = 7;
+            btnNuevo.Text = "Cargar Nuevo";
+            btnNuevo.UseVisualStyleBackColor = true;
             // 
             // MapaMem
             // 
@@ -147,6 +159,7 @@
             dataGridView1.RowHeadersWidth = 51;
             dataGridView1.Size = new Size(793, 552);
             dataGridView1.TabIndex = 0;
+            dataGridView1.Dock = DockStyle.Fill;
             // 
             // groupBox2
             // 
@@ -158,6 +171,7 @@
             groupBox2.TabIndex = 2;
             groupBox2.TabStop = false;
             groupBox2.Text = "TabSE";
+            groupBox2.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Right;
             // 
             // dataGridView2
             // 
@@ -169,6 +183,7 @@
             dataGridView2.RowHeadersWidth = 51;
             dataGridView2.Size = new Size(514, 679);
             dataGridView2.TabIndex = 0;
+            dataGridView2.Dock = DockStyle.Fill;
             // 
             // seccCont
             // 
@@ -212,6 +227,7 @@
             Controls.Add(groupBox1);
             Name = "CargadorL";
             Text = "Cargador";
+            AutoScroll = true;
             groupBox1.ResumeLayout(false);
             groupBox1.PerformLayout();
             MapaMem.ResumeLayout(false);
@@ -225,6 +241,7 @@
 
         private GroupBox groupBox1;
         private Button cargarProg;
+        private Button btnNuevo;
         private TextBox TamProg;
         private TextBox DirCarga;
         private Label label2;

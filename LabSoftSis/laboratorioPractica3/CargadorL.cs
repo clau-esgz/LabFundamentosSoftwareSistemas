@@ -26,7 +26,26 @@ namespace laboratorioPractica3
             if (string.IsNullOrWhiteSpace(DirCarga.Text))
                 DirCarga.Text = "0000";
             cargarProg.Click += CargarProg_Click;
+            btnNuevo.Click += BtnNuevo_Click;
             dataGridView2.SelectionChanged += DataGridView2_SelectionChanged;
+            programaInicioComboBox.SelectedIndexChanged += ProgramaInicioComboBox_SelectedIndexChanged;
+        }
+
+        private void BtnNuevo_Click(object? sender, EventArgs e)
+        {
+            _modules.Clear();
+            _loaderResult = null;
+            _memoryManager = null;
+            _selectedStartModule = null;
+
+            dataGridView1.Rows.Clear();
+            dataGridView1.Columns.Clear();
+            dataGridView2.Rows.Clear();
+            TamProg.Clear();
+            label2.Text = "Punto Ej: 000000 | Final: 000000";
+
+            programaInicioComboBox.SelectedIndexChanged -= ProgramaInicioComboBox_SelectedIndexChanged;
+            programaInicioComboBox.DataSource = null;
             programaInicioComboBox.SelectedIndexChanged += ProgramaInicioComboBox_SelectedIndexChanged;
         }
 
