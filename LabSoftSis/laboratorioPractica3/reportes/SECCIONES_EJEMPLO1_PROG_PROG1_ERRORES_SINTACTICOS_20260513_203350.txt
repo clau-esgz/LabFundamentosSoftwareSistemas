@@ -1,0 +1,4 @@
+ANALIZADOR LÉXICO-SINTÁCTICO
+Generado: 2026-05-13 20:33:50
+
+Sin errores.

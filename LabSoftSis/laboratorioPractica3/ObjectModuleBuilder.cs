@@ -204,41 +204,23 @@ namespace laboratorioPractica3
                 codigoTexto += codigoLimpio;
                 conteoBytesTexto += bytesLinea;
 
-                // BUG FIX #1: Dirección del registro M debe ser SIEMPRE el primer byte (byte más a la izquierda)
-                // Especificación SIC/XE: "La dirección del registro M es la dirección del BYTE MÁS A LA IZQUIERDA del campo a modificar"
-                // NO debe haber desplazamiento de +1 para instrucciones que no son WORD
-                int direccionMod = lineAddress;
-
-                // BUG FIX #2: Calcular half-bytes (longitud de modificación) según tipo de instrucción
-                // - WORD: 24 bits = 6 half-bytes (0x06)
-                // - Formato 4: 20 bits = 5 half-bytes (0x05)
-                // - Formato 3: 12 bits = 3 half-bytes (0x03)
-                // - BYTE: 2 half-bytes por byte (2, 4, 6 depending on length)
-                int longitudHalfBytes;
-                if (string.Equals(linea.IntermLine.Operation, "WORD", StringComparison.OrdinalIgnoreCase))
-                {
-                    longitudHalfBytes = 0x06;  // 24-bit = 6 nibbles
-                }
-                else if (linea.IntermLine.Format == 4)
-                {
-                    longitudHalfBytes = 0x05;  // 20-bit = 5 nibbles
-                }
-                else if (linea.IntermLine.Format == 3)
-                {
-                    longitudHalfBytes = 0x03;  // 12-bit displacement = 3 nibbles
-                }
-                else if (string.Equals(linea.IntermLine.Operation, "BYTE", StringComparison.OrdinalIgnoreCase))
-                {
-                    // BYTE: 2 nibbles (half-bytes) por byte
-                    longitudHalfBytes = bytesLinea * 2;
-                }
-                else
-                {
-                    // Default a formato 4 (20 bits)
-                    longitudHalfBytes = 0x05;
-                }
-
                 var modificaciones = RecolectarModificaciones(linea);
+                if (modificaciones.Count == 0)
+                    continue;
+
+                bool esWord = string.Equals(linea.IntermLine.Operation, "WORD", StringComparison.OrdinalIgnoreCase);
+                bool esFormato4 = linea.IntermLine.Format == 4;
+
+                // SIC/XE: la dirección del campo a modificar inicia en:
+                // - WORD: byte inicial de la palabra
+                // - Formato 4: byte 2 de la instrucción (dirección de 20 bits)
+                int direccionMod = esFormato4 ? lineAddress + 1 : lineAddress;
+
+                // SIC/XE: longitud del campo de modificación
+                // - WORD: 6 half-bytes
+                // - Formato 4: 5 half-bytes
+                int longitudHalfBytes = esWord ? 0x06 : 0x05;
+
                 foreach (var mod in modificaciones)
                 {
                     registrosModificacion.Add(new Records.ModificationRecord
@@ -301,18 +283,6 @@ namespace laboratorioPractica3
                 var externalSet = new HashSet<string>(linea.ExternalReferenceSymbols, StringComparer.OrdinalIgnoreCase);
                 int pos = 0;
                 CollectExternalModificationRequests(TokenizeExpression(operand), ref pos, externalSet, result, +1);
-            }
-
-            bool isWordOrFormat4 =
-                string.Equals(linea.IntermLine.Operation, "WORD", StringComparison.OrdinalIgnoreCase) ||
-                linea.IntermLine.Format == 4;
-            if (isWordOrFormat4 && linea.RelativeModuleSign.HasValue)
-            {
-                result.Add(new ModificationRequest
-                {
-                    Symbol = string.IsNullOrWhiteSpace(linea.SectionName) ? _nombrePrograma : linea.SectionName,
-                    Sign = linea.RelativeModuleSign.Value
-                });
             }
 
             return result;

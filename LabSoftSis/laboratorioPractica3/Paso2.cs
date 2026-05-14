@@ -591,16 +591,25 @@ namespace laboratorioPractica3
 
                     operandoLimpio = StripIndexSuffix(operandoLimpio);
 
-            bool isImmediate = (n == 0 && i == 1);
-
             int effectiveAddress = GetEffectiveAddress(linea);
             var (evalVal, evalType, evalErr, evalMeta) = _tablaSimbolos.EvaluateExpressionForObject(operandoLimpio, effectiveAddress, controlSectionName: linea.ControlSectionName);
+            bool hasExternalSymbols = evalMeta.ExternalSymbols.Count > 0;
 
             // Si no se puede resolver el operando, reportar símbolo/operando inválido.
             if (evalErr != null)
             {
                 string err = "Error: Simbolo no encontrado en TABSIM u operando invalido";
                 return (BuildFormat4ErrorCode(infoOp.Opcode, n, i, x), err);
+            }
+
+            // SIC/XE (académico): para EXTREF no se debe emitir FFFFF como placeholder.
+            // El campo se deja con el valor inicial (normalmente 000000) y el loader ajusta con M.
+            if (hasExternalSymbols)
+            {
+                int firstByte = (infoOp.Opcode & 0xFC) | (n << 1) | i;
+                int xbpe = (x << 3) | 1; // b=0, p=0, e=1
+                int objCode = (firstByte << 24) | (xbpe << 20) | (evalVal & 0xFFFFF);
+                return (objCode.ToString("X8"), "");
             }
 
             // Formato 4 con valor absoluto (constante o expresión absoluta):
@@ -670,7 +679,8 @@ namespace laboratorioPractica3
             if (string.IsNullOrEmpty(operando))
                 return ("", "");
 
-            if (_tablaSimbolos.TryGetValue(operando, out _, line.ControlSectionName))
+            if (_tablaSimbolos.TryGetValue(operando, out _, line.ControlSectionName) ||
+                _tablaSimbolos.TryGetValue(operando, out _))
                 return ("", "");
 
             return ("", "Error: Simbolo no encontrado en directiva END");

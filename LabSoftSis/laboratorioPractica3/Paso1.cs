@@ -1155,12 +1155,14 @@ namespace laboratorioPractica3
                         }
 
                         if (evalMeta.ExternalSymbols.Count > 0)
+                        {
                             intermediateLine2.ExternalReferenceSymbols = evalMeta.ExternalSymbols;
                             foreach (var sym in evalMeta.ExternalSymbols)
                             {
                                 if (!TABSIM_EXT.ContainsKey(sym, CurrentControlSectionName))
                                     AddSymbolToCurrentSection(sym, -1, SymbolType.Absolute, isExternal: true);
                             }
+                        }
 
                         if (evalMeta.HasUnpairedRelative)
                             intermediateLine2.RequiresModification = true;
@@ -1197,12 +1199,14 @@ namespace laboratorioPractica3
                     }
 
                     if (evalMeta.ExternalSymbols.Count > 0)
+                    {
                         intermediateLine2.ExternalReferenceSymbols = evalMeta.ExternalSymbols;
                         foreach (var sym in evalMeta.ExternalSymbols)
                         {
                             if (!TABSIM_EXT.ContainsKey(sym, CurrentControlSectionName))
                                 AddSymbolToCurrentSection(sym, -1, SymbolType.Absolute, isExternal: true);
                         }
+                    }
 
                     if (evalMeta.ModificationRequests.Count > 0)
                     {
@@ -1237,12 +1241,14 @@ namespace laboratorioPractica3
                             intermediateLine2.SemanticValue = $"{evalVal:X4}h";
 
                         if (evalMeta.ExternalSymbols.Count > 0)
+                        {
                             intermediateLine2.ExternalReferenceSymbols = evalMeta.ExternalSymbols;
                             foreach (var sym in evalMeta.ExternalSymbols)
                             {
                                 if (!TABSIM_EXT.ContainsKey(sym, CurrentControlSectionName))
                                     AddSymbolToCurrentSection(sym, -1, SymbolType.Absolute, isExternal: true);
                             }
+                        }
 
                         if (evalMeta.ModificationRequests.Count > 0)
                             intermediateLine2.ModificationRequests = evalMeta.ModificationRequests;
@@ -1363,6 +1369,10 @@ namespace laboratorioPractica3
                             CurrentControlSectionNumber = num;
                         else
                             CurrentControlSectionNumber = 0;
+                        intermediateLine2.ControlSectionName = CurrentControlSectionName;
+                        intermediateLine2.ControlSectionNumber = CurrentControlSectionNumber;
+                        intermediateLine2.BlockName = "Por Omision";
+                        intermediateLine2.BlockNumber = 0;
                         // Asegurar que exista un CP registrado para la sección principal
                         if (!CSECT_CP_BY_NAME.ContainsKey(mainSection))
                             CSECT_CP_BY_NAME[mainSection] = 0;
