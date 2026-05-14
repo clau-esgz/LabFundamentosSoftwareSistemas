@@ -90,6 +90,7 @@ Thumbs.db
 *_reporte_*.txt
 *_reporte_*.csv
 *_PASO1_*.csv
+*.txt
 
 # Logs
 *.log
