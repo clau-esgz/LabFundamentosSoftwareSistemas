@@ -1,0 +1,3 @@
+TABLA DE BLOQUES
+Seccion	TamSeccion	NoBloque	Bloque	Longitud	DirIniRel
+PROG	1018	0	Por Omision	1018	0000

@@ -1275,8 +1275,15 @@ namespace laboratorioPractica3
 
             string reportesObj = Path.Combine(ObtenerDirectorioProyecto(), "reportes_objeto");
             Directory.CreateDirectory(reportesObj);
-            string csvObjeto = Path.Combine(reportesObj, $"{baseName}_OBJETO_{time}.csv");
-            programaObjeto.ExportarACSV(csvObjeto);
+            string csvObjetoDir = Path.Combine(reportesObj, $"{baseName}_OBJETO_{time}");
+            var archivosObjeto = programaObjeto.ExportarACSVPorSeccion(csvObjetoDir);
+
+            if (archivosObjeto.Count > 0)
+            {
+                EscribirLineaConsola($"[Objeto] CSV por sección generado en: {csvObjetoDir}");
+                foreach (var archivo in archivosObjeto)
+                    EscribirLineaConsola($"  - {archivo}");
+            }
         }
 
         private void ExportarTablaBloques(Paso1 paso1)
